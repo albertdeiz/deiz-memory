@@ -1,0 +1,20 @@
+# Stack local de desarrollo. El rpc_secret es público a propósito:
+# este Garage nunca sale de tu máquina.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "3858f62230ac3c915f300c664312c63f3858f62230ac3c915f300c664312c63f"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.localhost"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token = "dev-admin-token"

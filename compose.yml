@@ -1,0 +1,26 @@
+name: deiz-memory
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: deiz
+      POSTGRES_PASSWORD: deiz
+      POSTGRES_DB: deiz_memory
+    ports: ["5433:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deiz -d deiz_memory"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  garage:
+    image: dxflrs/garage:v1.0.1
+    ports: ["3900:3900", "3903:3903"]
+    volumes:
+      - "./garage/garage.toml:/etc/garage.toml:ro"
+      - "garagemeta:/var/lib/garage/meta"
+      - "garagedata:/var/lib/garage/data"
+volumes:
+  pgdata:
+  garagemeta:
+  garagedata:

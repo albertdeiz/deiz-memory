@@ -1,14 +1,12 @@
-import { config as loadEnv } from 'dotenv';
 import type pg from 'pg';
 import { createPool, pgDb } from '../../src/adapters/db/postgres/index.js';
 import { runMigrations } from '../../src/adapters/db/postgres/migrate.js';
 import { s3BlobStore } from '../../src/adapters/storage/s3.js';
 import { inlineIngest } from '../../src/core/ingest.js';
-import type { Clock, Deps } from '../../src/core/ports.js';
+import type { Clock, Converters, Deps } from '../../src/core/ports.js';
 import { createOwner } from '../../src/core/index.js';
-
-export const TEST_ENV_FILE = process.env.DM_ENV_FILE ?? '.env.test';
-loadEnv({ path: TEST_ENV_FILE, quiet: true });
+import { fakeConverters } from './converters.js';
+import { ensureTestDatabase, TEST_BUCKET, TEST_DATABASE_URL } from './env.js';
 
 /** Reloj fijo: sin esto, cualquier aserción sobre fechas es una carrera. */
 export const fixedClock = (iso = '2026-03-14T12:00:00.000Z'): Clock => ({ now: () => new Date(iso) });
@@ -22,20 +20,30 @@ export interface TestStack {
   close(): Promise<void>;
 }
 
-export async function startStack(clock: Clock = fixedClock()): Promise<TestStack> {
-  const pool = createPool(process.env.DATABASE_URL!);
+export async function startStack(
+  clock: Clock = fixedClock(),
+  converters: Converters = fakeConverters(),
+): Promise<TestStack> {
+  await ensureTestDatabase();
+  const pool = createPool(TEST_DATABASE_URL);
   const db = pgDb(pool);
   await runMigrations(db);
 
   const blobs = s3BlobStore({
     endpoint: process.env.S3_ENDPOINT!,
     region: process.env.S3_REGION ?? 'garage',
-    bucket: process.env.S3_BUCKET!,
+    // Bucket aparte: los tests escriben blobs de verdad y no tienen por qué
+    // dejarlos entre tus documentos.
+    bucket: TEST_BUCKET,
     accessKeyId: process.env.S3_ACCESS_KEY_ID!,
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
   });
 
-  const deps: Deps = { db, blobs, clock, ingest: inlineIngest(db) };
+  // inlineIngest en los tests, no la cola: los carriles corren dentro de
+  // capture() y una aserción justo después ve el resultado. Con pg-boss de por
+  // medio, cada test sería una espera con reintentos.
+  const deps = { db, blobs, clock, converters } as Deps;
+  deps.ingest = inlineIngest(() => deps);
 
   const stack: TestStack = {
     deps,

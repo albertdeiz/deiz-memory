@@ -3,16 +3,19 @@ import { basename } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import type pg from 'pg';
+import type PgBoss from 'pg-boss';
 import { loadConfig } from '../../config.js';
 import { createPool, pgDb } from '../db/postgres/index.js';
 import { s3BlobStore } from '../storage/s3.js';
+import { buildConverters } from '../normalize/index.js';
+import { queueIngest, runWorker, startQueue } from '../queue/pgboss.js';
 import { inlineIngest } from '../../core/ingest.js';
 import { systemClock, type Deps } from '../../core/ports.js';
-import type { Actor } from '../../core/domain/types.js';
+import type { Actor, Lane } from '../../core/domain/types.js';
 import type { Result } from '../../core/result.js';
 import {
-  capture, createOwner, fetchBlob, list, listOwners, purge,
-  resolveActor, search, setHidden, show,
+  capture, createOwner, fetchBlob, list, listOwners, purge, reprocess,
+  resolveActor, search, setHidden, show, LANES,
 } from '../../core/index.js';
 import { EXIT, exitCodeFor } from './exit.js';
 import { renderDetail, renderFailure, renderList } from './format.js';
@@ -45,19 +48,38 @@ function emit<T>(result: Result<T>, render: (v: T) => string): void {
   process.exitCode = exitCodeFor(result);
 }
 
-function buildDeps(pool: pg.Pool): Deps {
+/**
+ * `wait: true` corre los carriles acá mismo; `false` los encola. capture() no
+ * distingue: recibe un Ingest y ya. Es lo único que hay que cambiar el día que
+ * el que llame sea Telegram y no una terminal.
+ */
+function buildDeps(pool: pg.Pool, cfg: ReturnType<typeof loadConfig>, boss: PgBoss | null): Deps {
   const db = pgDb(pool);
-  const cfg = loadConfig();
-  return { db, blobs: s3BlobStore(cfg.s3), clock: systemClock, ingest: inlineIngest(db) };
+  const deps = {
+    db,
+    blobs: s3BlobStore(cfg.s3),
+    clock: systemClock,
+    converters: buildConverters(cfg.normalize),
+  } as Deps;
+  deps.ingest = boss ? queueIngest(boss) : inlineIngest(() => deps);
+  return deps;
 }
 
 /** Toda la fontanería de una invocación: config, pool, actor, render y cierre limpio. */
-async function run<T>(fn: (ctx: Ctx) => Promise<Result<T>>, render: (v: T) => string): Promise<void> {
+async function run<T>(
+  fn: (ctx: Ctx) => Promise<Result<T>>,
+  render: (v: T) => string,
+  opts: { enqueues?: boolean; wait?: boolean } = {},
+): Promise<void> {
   let pool: pg.Pool | null = null;
+  let boss: PgBoss | null = null;
   try {
     const cfg = loadConfig();
     pool = createPool(cfg.databaseUrl);
-    const deps = buildDeps(pool);
+    // Solo los comandos que encolan pagan el arranque de pg-boss. `dm ls` no
+    // tiene por qué correr las migraciones de una cola que no va a usar.
+    boss = opts.enqueues && !opts.wait ? await startQueue(cfg.databaseUrl) : null;
+    const deps = buildDeps(pool, cfg, boss);
     const actor = await resolveActor(deps.db, globals().actor ?? cfg.ownerId);
     if (!actor.ok) return emit(actor, () => '');
     emit(await fn({ deps, actor: { ownerId: actor.value } }), render);
@@ -65,6 +87,7 @@ async function run<T>(fn: (ctx: Ctx) => Promise<Result<T>>, render: (v: T) => st
     console.error(e instanceof Error ? e.message : String(e));
     process.exitCode = EXIT.error;
   } finally {
+    await boss?.stop({ wait: true }).catch(() => {});
     await pool?.end().catch(() => {});
   }
 }
@@ -109,21 +132,24 @@ program
 
 program
   .command('doctor')
-  .description('revisa config, base de datos, migraciones, bucket y dueño')
+  .description('revisa config, base de datos, migraciones, bucket, dueño y carriles')
   .action(async () => {
     let pool: pg.Pool | null = null;
-    const checks: { check: string; ok: boolean; detail: string }[] = [];
+    // `required` separa lo roto de lo simplemente no configurado. Sin esa
+    // distinción, no tener whisper instalado pintaría el sistema entero de rojo
+    // y el rojo dejaría de significar nada.
+    const checks: { check: string; ok: boolean; detail: string; required: boolean }[] = [];
     try {
       const cfg = loadConfig();
-      checks.push({ check: 'config', ok: true, detail: `bucket ${cfg.s3.bucket} @ ${cfg.s3.endpoint}` });
+      checks.push({ check: 'config', ok: true, detail: `bucket ${cfg.s3.bucket} @ ${cfg.s3.endpoint}`, required: true });
       pool = createPool(cfg.databaseUrl);
       const db = pgDb(pool);
 
       try {
         await db.query('select 1');
-        checks.push({ check: 'postgres', ok: true, detail: 'conectado' });
+        checks.push({ check: 'postgres', ok: true, detail: 'conectado', required: true });
       } catch (e) {
-        checks.push({ check: 'postgres', ok: false, detail: e instanceof Error ? e.message : String(e) });
+        checks.push({ check: 'postgres', ok: false, detail: e instanceof Error ? e.message : String(e), required: true });
       }
 
       try {
@@ -132,14 +158,15 @@ program
           check: 'migraciones',
           ok: rows.length > 0,
           detail: rows.length ? rows.map((r) => r.name).join(', ') : 'ninguna aplicada — corre npm run migrate',
+          required: true,
         });
       } catch {
-        checks.push({ check: 'migraciones', ok: false, detail: 'sin tabla schema_migrations — corre npm run migrate' });
+        checks.push({ check: 'migraciones', ok: false, detail: 'sin tabla schema_migrations — corre npm run migrate', required: true });
       }
 
       const blobs = s3BlobStore(cfg.s3);
       const healthy = await blobs.healthy();
-      checks.push({ check: 'garage', ok: healthy, detail: healthy ? 'bucket accesible' : 'bucket inaccesible' });
+      checks.push({ check: 'garage', ok: healthy, detail: healthy ? 'bucket accesible' : 'bucket inaccesible', required: true });
 
       try {
         const owners = await listOwners(db);
@@ -147,20 +174,76 @@ program
           check: 'dueño',
           ok: owners.length === 1,
           detail: owners.length === 0 ? 'ninguno — corre dm init' : owners.map((o) => `${o.id} (${o.label})`).join(', '),
+          required: true,
         });
       } catch {
-        checks.push({ check: 'dueño', ok: false, detail: 'no se pudo consultar' });
+        checks.push({ check: 'dueño', ok: false, detail: 'no se pudo consultar', required: true });
+      }
+
+      // Los tres carriles, uno por uno. Un carril caído no rompe el sistema
+      // —lo que llega se guarda igual— pero deja de ser buscable por dentro,
+      // que es justo lo que F1 vino a arreglar. Tiene que verse.
+      const converters = buildConverters(cfg.normalize);
+      const lanes: [string, string][] = [
+        ['carril doc', 'document'],
+        ['carril foto', 'vision'],
+        ['carril audio', 'audio'],
+      ];
+      for (const [label, key] of lanes) {
+        const converter = converters[key as 'document' | 'vision' | 'audio'];
+        if (!converter) {
+          checks.push({ check: label, ok: false, detail: 'sin configurar', required: false });
+          continue;
+        }
+        const state = await converter.available();
+        checks.push({ check: label, ok: state.ok, detail: state.detail, required: false });
+      }
+
+      try {
+        // Filtrado por dueño como toda consulta del sistema (regla dura 9). Sin
+        // esto, en cuanto exista una segunda persona `dm doctor` te reportaría
+        // su pila de pendientes como si fuera tuya: el `WHERE` olvidado de §14,
+        // en el comando cuyo trabajo es justamente detectar problemas.
+        const who = await resolveActor(db, globals().actor ?? cfg.ownerId);
+        if (!who.ok) {
+          // Con varios dueños y sin decir cuál, contar sería inventar: filtrar
+          // por nadie da cero, y un cero falso se lee como "está todo al día".
+          checks.push({ check: 'normalizar', ok: false, required: false,
+            detail: 'hay más de un dueño: indica cuál con --actor para ver su pendiente' });
+        } else {
+          const { rows } = await db.query<{ pendientes: string; fallidas: string }>(
+            `select count(*) filter (where blob_sha256 is not null and normalized_at is null)::text as pendientes,
+                    count(*) filter (where normalization_error is not null)::text as fallidas
+               from memories
+              where owner_id = $1`,
+            [who.value],
+          );
+          const { pendientes, fallidas } = rows[0]!;
+          const idle = pendientes === '0' && fallidas === '0';
+          checks.push({
+            check: 'normalizar',
+            ok: idle,
+            detail: idle
+              ? 'nada pendiente'
+              : `${pendientes} sin procesar, ${fallidas} con error — corre dm worker, o dm reprocess --failed`,
+            required: false,
+          });
+        }
+      } catch {
+        checks.push({ check: 'normalizar', ok: false, detail: 'no se pudo consultar — ¿falta migrar?', required: true });
       }
     } catch (e) {
-      checks.push({ check: 'config', ok: false, detail: e instanceof Error ? e.message : String(e) });
+      checks.push({ check: 'config', ok: false, detail: e instanceof Error ? e.message : String(e), required: true });
     } finally {
       await pool?.end().catch(() => {});
     }
 
-    const allOk = checks.every((c) => c.ok);
+    // El código de salida solo mira lo obligatorio: un carril apagado se ve,
+    // pero no convierte a `dm doctor` en algo que siempre falla.
+    const broken = checks.some((c) => c.required && !c.ok);
     emit({ ok: true, value: checks }, (cs) =>
-      cs.map((c) => `${c.ok ? '✓' : '✗'} ${c.check.padEnd(12)} ${c.detail}`).join('\n'));
-    if (!allOk) process.exitCode = EXIT.error;
+      cs.map((c) => `${c.ok ? '✓' : c.required ? '✗' : '·'} ${c.check.padEnd(13)} ${c.detail}`).join('\n'));
+    if (broken) process.exitCode = EXIT.error;
   });
 
 // ---------------------------------------------------------------- captura
@@ -173,12 +256,14 @@ program
   .option('--title <titulo>', 'título corto')
   .option('--occurred <fecha>', 'cuándo pasó el hecho (ej. 2026-03-14)')
   .option('--source <origen>', 'cli | telegram | email | manual', 'cli')
-  .action(async (path: string | undefined, opts: Record<string, string>) => {
-    const occurredAt = parseDate(opts.occurred);
+  .option('--wait', 'corre los carriles ahora y espera, en vez de encolar')
+  .action(async (path: string | undefined, opts: Record<string, string | boolean>) => {
+    const occurredAt = parseDate(opts.occurred as string | undefined);
     if (occurredAt === 'invalid') {
       emit({ ok: false, kind: 'invalid', message: `Fecha inválida: "${opts.occurred}".` }, () => '');
       return;
     }
+    const wait = opts.wait === true;
     let bytes: Buffer | null = null;
     let filename: string | null = null;
     if (path === '-') {
@@ -197,16 +282,18 @@ program
       ({ deps, actor }) =>
         capture(deps, actor, {
           bytes,
-          text: opts.text ?? null,
+          text: (opts.text as string) ?? null,
           filename,
-          title: opts.title ?? null,
+          title: (opts.title as string) ?? null,
           occurredAt,
           source: (opts.source ?? 'cli') as never,
         }),
       (r) =>
         `guardado ✓ ${r.shortId}` +
         (r.sha256 ? `  ${r.mediaType}` : '') +
-        (r.deduped ? '  (ya lo tenías: mismo archivo, memoria nueva)' : ''),
+        (r.deduped ? '  (ya lo tenías: mismo archivo, memoria nueva)' : '') +
+        (wait || !r.sha256 ? '' : '  · en cola para normalizar'),
+      { enqueues: true, wait },
     );
   });
 
@@ -300,6 +387,79 @@ program
     await run(
       ({ deps, actor }) => purge(deps, actor, id, { confirm: opts.yes === true }),
       (r) => `${r.shortId} purgada${r.blobDeleted ? ' (y su archivo)' : ''}`,
+    );
+  });
+
+// ---------------------------------------------------------------- normalización
+
+program
+  .command('worker')
+  .description('corre los carriles sobre lo que va llegando; se queda escuchando')
+  .action(async () => {
+    let pool: pg.Pool | null = null;
+    let boss: PgBoss | null = null;
+    try {
+      const cfg = loadConfig();
+      pool = createPool(cfg.databaseUrl);
+      boss = await startQueue(cfg.databaseUrl, { supervise: true });
+      const deps = buildDeps(pool, cfg, boss);
+      const handle = await runWorker(boss, deps);
+      console.error('escuchando. ctrl-c para salir.');
+
+      // Terminar de procesar lo que está en la mano antes de morir: si no, una
+      // memoria queda a medio normalizar y con normalized_at ya escrito.
+      await new Promise<void>((resolve) => {
+        const bye = () => { console.error('\ncerrando…'); resolve(); };
+        process.once('SIGINT', bye);
+        process.once('SIGTERM', bye);
+      });
+      await handle.stop();
+      boss = null;
+    } catch (e) {
+      console.error(e instanceof Error ? e.message : String(e));
+      process.exitCode = EXIT.error;
+    } finally {
+      await boss?.stop({ wait: true }).catch(() => {});
+      await pool?.end().catch(() => {});
+    }
+  });
+
+program
+  .command('reprocess')
+  .description('vuelve a correr los carriles desde el original (UC-15)')
+  .argument('[id]', 'una memoria concreta')
+  .option('--failed', 'las que fallaron o quedaron a medias')
+  .option('--pending', 'las que nunca pasaron por un carril')
+  .option('--all', 'todas las que tienen archivo')
+  .option('--lane <carril>', `acota a un carril: ${LANES.join(' | ')}`)
+  .option('--limit <n>', 'tope de memorias', '100')
+  .option('--wait', 'corre los carriles ahora y espera, en vez de encolar')
+  .option('--yes', 'confirmar cuando son varias')
+  .action(async (id: string | undefined, opts: Record<string, string | boolean>) => {
+    const lane = (opts.lane as string | undefined) ?? null;
+    if (lane && !LANES.includes(lane as Lane)) {
+      emit({ ok: false, kind: 'invalid', message: `Carril inválido: "${lane}". Válidos: ${LANES.join(', ')}.` }, () => '');
+      return;
+    }
+    const wait = opts.wait === true;
+    await run(
+      ({ deps, actor }) =>
+        reprocess(deps, actor, {
+          ref: id ?? null,
+          failed: opts.failed === true,
+          pending: opts.pending === true,
+          all: opts.all === true,
+          lane: lane as Lane | null,
+          limit: Number(opts.limit),
+          confirm: opts.yes === true,
+        }),
+      (r) =>
+        r.queued === 0
+          ? 'No hay nada que reprocesar.'
+          : wait
+            ? `reprocesadas ${r.queued}`
+            : `en cola ${r.queued}  (corre dm worker si no lo tienes andando)`,
+      { enqueues: true, wait },
     );
   });
 

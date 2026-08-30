@@ -6,9 +6,6 @@ import type { Deps } from '../ports.js';
 import { err, ok, type Result } from '../result.js';
 import { storageKey } from './rows.js';
 
-/** Un texto más largo que esto es un archivo, no una nota: se guarda pero no se inlinea. */
-const MAX_INLINE_TEXT = 1_000_000;
-
 export interface CaptureInput {
   bytes?: Buffer | null;
   text?: string | null;
@@ -28,9 +25,13 @@ export interface CaptureResult {
 }
 
 /**
- * Retorna apenas el blob está persistido y la memoria insertada — no espera al
- * procesamiento. En F0 procesar es trivial, pero la semántica del acuse ya es la
- * definitiva: "guardado" significa guardado, no "terminado de analizar".
+ * Retorna apenas el blob está persistido y la memoria insertada — no espera a
+ * que los carriles corran. Ese acuse ya decía lo correcto en F0 y ahora
+ * *significa* algo: detrás hay un OCR que puede tardar diez segundos.
+ *
+ * Lo que la persona escribió va a `note` y lo que se extraiga del archivo irá a
+ * `normalized_text`. Nunca al revés y nunca juntos: la nota no se regenera, y
+ * la primera transcripción se la comería (ver migración 003).
  */
 export async function capture(
   deps: Deps,
@@ -58,9 +59,6 @@ export async function capture(
   let mediaType: string | null = null;
   let sizeBytes: number | null = null;
   let deduped = false;
-  // Un archivo de texto ya viene legible: indexarlo no es normalizar, es leer.
-  // Eso es lo que hace que F0 sirva sin un solo LLM de por medio.
-  let fromFile: string | null = null;
 
   if (bytes) {
     sha256 = createHash('sha256').update(bytes).digest('hex');
@@ -86,18 +84,12 @@ export async function capture(
         [sha256, sizeBytes, mediaType, storageKey(sha256)],
       );
     }
-    if (mediaType?.startsWith('text/') && bytes.length <= MAX_INLINE_TEXT) {
-      const decoded = bytes.toString('utf8');
-      if (!decoded.includes('\uFFFD')) fromFile = decoded.trim() || null;
-    }
   }
-
-  const body = [fromFile, text].filter(Boolean).join('\n\n') || null;
 
   const { rows } = await deps.db.query<{ id: string }>(
     `insert into memories
        (owner_id, source, captured_at, occurred_at, blob_sha256,
-        original_filename, title, normalized_text, status)
+        original_filename, title, note, status)
      values ($1, $2, $3, $4, $5, $6, $7, $8, 'raw')
      returning id`,
     [
@@ -108,7 +100,7 @@ export async function capture(
       sha256,
       input.filename ?? null,
       input.title ?? null,
-      body,
+      text,
     ],
   );
 

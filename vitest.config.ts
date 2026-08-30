@@ -8,5 +8,8 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 60_000,
+    // Los tests usan los servicios del stack de siempre. Lo único que se aísla
+    // es la base y el bucket, en tests/helpers/env.ts — que es lo único que los
+    // tests destruyen.
   },
 });

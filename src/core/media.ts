@@ -19,6 +19,15 @@ const OOXML: Record<string, string> = {
   docx: BY_EXT.docx!, xlsx: BY_EXT.xlsx!, pptx: BY_EXT.pptx!,
 };
 
+/**
+ * markitdown y whisper despachan por extensión, y el blob en el storage no
+ * tiene ninguna: se guarda por sha256. Este es el camino de vuelta.
+ */
+export const extensionForMediaType = (mediaType: string): string => {
+  const hit = Object.entries(BY_EXT).find(([, m]) => m === mediaType);
+  return hit ? hit[0] : 'bin';
+};
+
 export const extensionOf = (filename?: string | null): string => {
   if (!filename) return '';
   const i = filename.lastIndexOf('.');

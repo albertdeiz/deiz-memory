@@ -1,0 +1,9 @@
+# Extras elegidos a mano, no `markitdown[all]`. `all` arrastra los SDK de Azure,
+# youtube-transcript-api y —lo peor— el carril de audio por SpeechRecognition,
+# que usa Google Web Speech: flojo en español de Chile y manda el audio a Google.
+# §8.1 lo descarta por escrito, así que no tiene por qué estar en la imagen.
+markitdown[pdf,docx,xlsx,xls,pptx,outlook]==0.1.7
+pypdfium2==4.30.0
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20

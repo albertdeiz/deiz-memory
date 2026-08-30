@@ -48,6 +48,15 @@ export function renderList(items: MemorySummary[]): string {
     .join('\n');
 }
 
+/** Cómo se leyó el archivo. Sale en dm show porque explica qué esperar del texto. */
+const LANE_LABEL: Record<string, string> = {
+  text: 'leído tal cual',
+  document: 'markitdown',
+  vision: 'transcrito de la imagen',
+  audio: 'transcrito del audio',
+  none: 'sin carril',
+};
+
 export function renderDetail(m: MemoryDetail): string {
   const lines = [
     `id         ${m.id}`,
@@ -60,7 +69,23 @@ export function renderDetail(m: MemoryDetail): string {
   if (m.originalFilename) lines.push(`archivo    ${m.originalFilename}`);
   if (m.mediaType) lines.push(`tipo       ${m.mediaType}  ${humanSize(m.sizeBytes)}`);
   if (m.sha256) lines.push(`sha256     ${m.sha256}`);
-  if (m.normalizedText) lines.push('', m.normalizedText);
+
+  if (m.lane) {
+    const how = LANE_LABEL[m.lane] ?? m.lane;
+    lines.push(`carril     ${m.lane} · ${how}  ${humanDate(m.normalizedAt)}`);
+  } else if (m.sha256) {
+    lines.push('carril     todavía sin normalizar — corre dm worker');
+  }
+
+  // El error va antes del texto y no después: si lo que sigue está incompleto,
+  // enterarse al final es enterarse tarde.
+  if (m.normalizationError) lines.push(`⚠ carril    ${m.normalizationError}`);
+
+  // Las dos fuentes se muestran separadas y etiquetadas. Mezclarlas dejaría a
+  // la persona sin saber qué escribió ella y qué leyó una máquina de un papel —
+  // que es exactamente la diferencia entre un dato y una suposición.
+  if (m.note) lines.push('', 'tu nota:', m.note);
+  if (m.normalizedText) lines.push('', 'del archivo:', m.normalizedText);
   return lines.join('\n');
 }
 

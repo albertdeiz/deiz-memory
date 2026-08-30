@@ -242,8 +242,8 @@ capacidades de Telegram, el segundo canal es un rewrite disfrazado de adapter.
 | Correo | buzón dedicado + polling IMAP | segunda vía de captura; ver §11 |
 | LLM | Claude | structured outputs; modelo chico para routing y clasificación, grande para extracción |
 | Documentos → texto | **markitdown** (Python: CLI al inicio, sidecar después) | PDF/docx/xlsx/html/csv → Markdown con estructura preservada. Ver §8.1 |
-| Imágenes y escaneos | LLM multimodal | markitdown **no hace OCR**; ver §8.1 |
-| STT | Whisper (API o local) | notas de voz. Mejor que el carril de audio de markitdown |
+| Imágenes y escaneos | **OCR (RapidOCR/PP-OCR)**, con LLM multimodal como alternativa | markitdown **no hace OCR**; ver §8.1. En impresos el OCR lee mejor los dígitos que un modelo chico, y es gratis y reproducible |
+| STT | Whisper en contenedor, API compatible con OpenAI | notas de voz. Mejor que el carril de audio de markitdown |
 | Deploy | 1 VPS o Fly.io, single-tenant | datos médicos: no los repartas |
 
 ### 8.1 Normalización: markitdown + carriles
@@ -562,6 +562,27 @@ cifrado off-site corre solo y ya lo restauraste una vez.
 para fotos y escaneos, Whisper para audio. La búsqueda del F0 ahora alcanza el
 **contenido**, no solo lo que escribiste tú.
 _Listo cuando:_ mandas la foto de una boleta y la encuentras buscando por lo que dice.
+> **Construido.** Router de carriles, cola pg-boss con `dm worker`, y `dm reprocess`
+> para UC-15. 126 tests. La migración 003 parte `note` (lo tuyo, nunca se pisa) de
+> `normalized_text` (lo derivado del blob, regenerable) — sin esa línea, la primera
+> transcripción se comía la nota.
+>
+> **Los tres carriles son servicios**, no binarios en el host: `documents`
+> (markitdown + rasterizado), `ocr` (RapidOCR) y `whisper`, cada uno en su
+> contenedor y detrás del mismo puerto `Converter`. El motor de cada carril se
+> cambia con una variable de entorno. Ver [README](./README.md).
+>
+> **Validado contra el corpus real** (173 memorias): 65 por markitdown sin un
+> solo error, 61 por OCR, 38 sin carril (CAD, zips, video) y 8 de texto. Los
+> únicos fallos fueron 2 HEIC —que el OCR no lee— y un fixture corrupto de 22
+> bytes. La migración 003 rescató las 168 notas, ninguna perdida.
+>
+> **Una corrección a §8.1:** el carril B por defecto es OCR clásico, no un LLM
+> multimodal. Para documentos impresos el OCR *gana* justo donde importa — números
+> de póliza, RUT, montos: cadenas que no se adivinan por contexto y donde los
+> modelos chicos fallan. Además es gratis y reproducible desde el blob. El carril
+> multimodal sigue disponible (`DM_VISION_BACKEND=anthropic|openai`) y es el
+> correcto para manuscrito, que es lo que el OCR no puede leer.
 
 **F2 — Dominios y clasificación.** Tabla `domains` con su CRUD desde el chat (§9), y
 clasificador que se arma en runtime desde ella: dominio, título corto y fecha del hecho.

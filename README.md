@@ -5,30 +5,45 @@ Memoria personal externa. Le mandas cualquier cosa y después le preguntas.
 El diseño completo está en [CLAUDE.md](./CLAUDE.md); los flujos, en
 [CASOS-DE-USO.md](./CASOS-DE-USO.md). Esto es lo que hace falta para correrlo.
 
-**Estado: F0.** Captura y búsqueda full-text por CLI. Sin LLM, sin canales de
-mensajería. Todo determinista y cubierto por tests.
+**Estado: F1.** Captura, normalización por carriles y búsqueda full-text por CLI.
+Lo que mandas se lee por dentro: documentos con markitdown, fotos y escaneos con
+OCR, notas de voz con Whisper. Los tres carriles son **servicios en contenedores
+propios**, así que el mismo `docker compose up` levanta esto en tu máquina, en un
+VPS o en una Raspberry Pi. Sin canales de mensajería todavía.
 
 ## Arrancar
 
 ```bash
 npm install
-npm run up          # postgres + garage, y escribe las credenciales en .env
+npm run up          # levanta todo el stack y escribe las credenciales en .env
 npm run migrate
 npm run build
 node dist/adapters/cli/index.js init "tu nombre"
+npm run worker      # en otra terminal: procesa lo que va llegando
 ```
 
+La primera vez tarda: se construyen dos imágenes y Whisper baja su modelo.
+
 `npm run up` deja el CLI listo. Para que `dm` quede en el PATH: `npm link`.
+
+`dm doctor` te dice qué carriles están vivos y cuáles no. Ninguno es obligatorio:
+lo que llegue se guarda igual, solo que sin carril no es buscable por dentro.
 
 ## Comandos
 
 ```
-dm doctor                        config, base de datos, migraciones, bucket, dueño
+dm doctor                        config, base de datos, bucket, dueño y carriles
 
 dm capture <archivo>             guarda un archivo
 dm capture --text "..."          guarda un texto suelto
 dm capture -                     guarda lo que venga por stdin
     --title <t>  --occurred <fecha>  --source <origen>
+    --wait       normaliza ahora en vez de encolar
+
+dm worker                        corre los carriles sobre lo que va llegando
+dm reprocess <id>                vuelve a leerlo desde el original
+dm reprocess --failed            los que fallaron o quedaron a medias
+    --pending  --all  --lane <carril>  --limit <n>  --wait  --yes
 
 dm ls [--limit N] [--offset N] [--hidden]
 dm search "<consulta>"           comillas para frases, - para excluir
@@ -44,11 +59,96 @@ Globales: `--json` (el dato por stdout, los fallos por stderr) y `--actor <id>`.
 **Códigos de salida:** `0` ok · `1` error · `2` requiere confirmación ·
 `3` no encontrado · `4` prohibido · `5` prefijo ambiguo.
 
-## Qué busca y qué no, en F0
+## Los tres carriles
+
+markitdown convierte PDF, docx, xlsx, html y csv a Markdown **preservando la
+estructura**: una tabla de coberturas sigue pareciendo una tabla. Es barato,
+determinista y reproducible, así que se intenta siempre primero.
+
+Pero **markitdown no hace OCR**, y eso es lo que da forma a todo el diseño. Un PDF
+escaneado devuelve vacío; una foto devuelve, como mucho, una *descripción* — y una
+descripción no sirve para encontrar el monto de una boleta. Por eso no hay una
+llamada de normalización: hay carriles, y una regla de caída entre ellos.
+
+| Entrada | Carril | Servicio |
+|---|---|---|
+| txt, md | `text` | se lee tal cual, sin salir del proceso |
+| PDF con capa de texto, docx, xlsx, pptx, html, csv | `document` | `documents` · markitdown |
+| PDF escaneado (menos de ~100 caracteres de texto) | `vision` | `ocr` · RapidOCR |
+| foto de receta, boleta, carnet, patente | `vision` | `ocr` · RapidOCR |
+| nota de voz | `audio` | `whisper` |
+
+El carril que se usó queda en la fila (`dm show` lo muestra), que es lo que
+permite reprocesar después sin adivinar qué pasó.
+
+### Por qué OCR y no un modelo de visión
+
+Para documentos **impresos** —boletas, pólizas, carnets— el OCR clásico no es un
+premio de consuelo: gana. Los modelos multimodales chicos leen bien el texto
+corrido y se equivocan justo donde no hay que equivocarse, en cadenas que no se
+pueden adivinar por contexto: un número de póliza, un RUT, un monto. Y ese es
+exactamente el dato que uno viene a buscar. Un modelo que inventa un dígito con
+seguridad viola la regla dura 2 de frente.
+
+Encima, el OCR cumple algo que la nube no puede: **es reproducible**. El mismo
+blob da el mismo texto hoy y en dos años. No cuesta nada por foto y no sale del
+host.
+
+**Lo que el OCR no puede hacer**, y por lo que el carril sigue siendo
+intercambiable: manuscrito, y describir una foto sin texto. A la foto de un
+choque el OCR no le encuentra nada; un modelo multimodal al menos dice qué se ve.
+Si guardas mucho de eso, cambia el backend.
+
+### Cambiar de motor sin tocar código
+
+El carril de visión es una variable de entorno:
+
+```bash
+DM_VISION_BACKEND=ocr        # RapidOCR local (por defecto)
+DM_VISION_BACKEND=anthropic  # Claude — el único que recibe el PDF entero
+DM_VISION_BACKEND=openai     # cualquier API compatible: Ollama, llama.cpp,
+                             # vLLM, LM Studio, OpenAI, o LiteLLM de pasarela
+DM_VISION_BACKEND=none       # apagado, y dm doctor lo dice
+```
+
+Los tres implementan el mismo puerto y comparten el mismo prompt (`prompt.ts`):
+el proveedor es intercambiable, lo que se le pide no. Whisper es igual — habla
+`POST /v1/audio/transcriptions`, así que cambiar de motor es cambiar `DM_SPEECH_URL`.
+
+**Un detalle que no es obvio:** el formato de chat de OpenAI —el que hablan
+Ollama, llama.cpp y vLLM— solo acepta imágenes, no PDF. Anthropic sí acepta el
+PDF entero. Para que un backend local funcione igual, el sidecar de documentos
+rasteriza las páginas con pypdfium. Por eso `documents` hace dos cosas.
+
+**Un carril caído no rompe nada.** El archivo se guarda igual, el error queda
+anotado en la memoria, y `dm reprocess --failed` lo retoma cuando arregles lo que
+faltaba. El original nunca se toca, así que todo lo derivado se puede volver a
+generar: es la razón por la que se puede mejorar el prompt sin miedo.
+
+## Tu nota y lo transcrito no se mezclan
+
+Lo que escribes tú vive en `note`. Lo que se extrae del archivo vive en
+`normalized_text`. Nunca en el mismo campo, y no es un detalle de esquema: si
+fueran uno solo, la primera transcripción se comería lo que escribiste al mandar
+la foto, y eso no se regenera desde ningún lado.
+
+`dm show` los muestra por separado y etiquetados. Los dos se buscan igual.
+
+De ahí salen dos reglas que el código sostiene con tests:
+
+- **La migración 003 rescata todas las notas de F0**, incluidas las de memorias
+  con archivo — en F0 ese campo era la nota, porque el contenido del archivo solo
+  se leía para blobs `text/*`.
+- **Reprocesar nunca deja las cosas peor.** Si un carril falla, o devuelve menos
+  de lo que ya había, no se toca el texto anterior ni su procedencia. Si pudiera
+  empeorar, nadie reprocesaría su histórico — y ahí "todo lo derivado es
+  regenerable" deja de ser una red.
+
+## Qué busca y qué no
 
 La búsqueda ignora tildes y aplica stemming español: `mecanico` encuentra
-*mecánico*, `recetas` encuentra *recetó*. Cubre el título, el nombre del archivo y
-el texto — incluido el contenido de los archivos de texto, que se leen tal cual.
+*mecánico*, `recetas` encuentra *recetó*. Cubre el título, tu nota, el texto
+extraído del archivo y el nombre del archivo.
 
 ## El nombre del archivo casi nunca significa algo
 
@@ -71,30 +171,75 @@ decide cómo se presenta, no qué se conserva.
 El arreglo de fondo es el título generado de F2. F0 solo puede evitar que la basura
 se presente como si fuera un título.
 
-**El contenido de un PDF o una foto todavía no es buscable.** Eso son los carriles
-de normalización de F1 (markitdown, visión, Whisper). El archivo se guarda íntegro
-desde ya; lo que falta es leerlo.
+**El contenido de un PDF o una foto ya es buscable**, apenas el worker lo procesa.
+Hasta entonces `dm show` lo dice: *todavía sin normalizar*.
+
+## Configurar
+
+`npm run up` levanta los cinco servicios y escribe las URLs en `.env`. Con eso
+los tres carriles andan sin configurar nada más.
+
+**`npm run up` reescribe `.env` entero cada vez.** Tus llaves de proveedores van
+en **`.env.local`**, que está gitignoreado, se carga primero y gana:
+
+```bash
+# .env.local
+ANTHROPIC_API_KEY=sk-ant-...        # solo si usas DM_VISION_BACKEND=anthropic
+DM_SPEECH_MODEL_NAME=small          # tiny | base | small | medium | large-v3
+```
+
+**El modelo de Whisper importa más que el motor.** En español `base` da 18.4% de
+WER y `small` 9.7%. Con 18% se destrozan justo los nombres propios y los números
+—o sea lo único que uno guarda—, así que el compose usa `small` y no el `base`
+que trae la imagen por defecto. Medido acá, dictando un teléfono de ocho dígitos:
+`tiny` se comió uno, `small` los transcribió todos.
+
+Los servicios publican en `127.0.0.1`, no en `0.0.0.0`: procesan documentos
+médicos y financieros y no tienen por qué ser alcanzables desde fuera del host
+(§14). Por eso mismo Whisper corre con la autenticación desactivada; si prefieres
+llave igual, pon `DM_SPEECH_API_KEY` en `.env.local` y la reciben los dos lados.
+
+Después, `dm doctor`: los obligatorios salen con `✓` o `✗`, y los carriles con
+`·` cuando no están disponibles. Solo lo obligatorio decide el código de salida —
+un carril apagado no es un sistema roto.
 
 ## Tests
 
 ```bash
-npm run test:up          # stack de pruebas, aislado del de desarrollo
 npm test                 # las tres capas
 npm run test:unit        # sin Docker
-npm run test:integration # core contra Postgres y Garage reales
-npm run test:cli         # levanta el binario como lo haría una persona
-npm run test:down
+npm run test:integration # core contra Postgres, Garage y los servicios reales
+npm run test:cli         # levanta el binario, y el worker, como una persona
 ```
+
+**No hay stack de pruebas aparte.** Los tests usan los mismos contenedores que
+levanta `npm run up`; lo único que se aísla es lo que destruyen: la base
+`deiz_memory_test` y el bucket `deiz-memory-test`, ambos sobre el mismo Postgres
+y el mismo Garage. Duplicar los cinco servicios significaba bajar dos veces el
+modelo de Whisper para ejercitar el mismo código.
+
+Ese aislamiento no es cosmético: `reset()` hace `truncate memories, blobs, owners
+cascade` en cada test. Apuntado a tu base, borra todo lo que has guardado — por
+eso vive en `tests/helpers/env.ts` y no en una variable suelta.
 
 ## Estructura
 
 ```
 src/core/         operaciones tipadas. No sabe que existe un CLI.
-  ops/            capture · search · list · show · lifecycle
-  ports.ts        BlobStore · Clock · Db · Ingest
-src/adapters/     cli · db/postgres · storage/s3
+  ops/            capture · search · list · show · lifecycle · reprocess
+  normalize/      lanes.ts (el router, lógica pura) · run.ts
+  ports.ts        BlobStore · Clock · Db · Ingest · Converter
+src/adapters/     cli · db/postgres · storage/s3 · normalize · queue
+services/         los carriles, como contenedores
+  documents/      markitdown + rasterizado de PDF
+  ocr/            RapidOCR
 migrations/       SQL plano, aplicado en orden
 ```
+
+Los tres carriles entran por **un solo puerto con tres ranuras** (`Converter`).
+Cuál se intenta y cuándo se cae al siguiente es del core y se prueba sin Docker,
+sin red y sin gastar tokens; que markitdown sepa leer un docx es problema de
+markitdown, y se prueba aparte contra archivos reales.
 
 El core devuelve datos y nunca texto formateado; toda operación recibe un actor; y
 las confirmaciones son datos, no diálogos — el core devuelve `requires_confirmation`

@@ -16,6 +16,8 @@ export interface Owner {
   createdAt: Date;
 }
 
+export type Lane = 'text' | 'document' | 'vision' | 'audio' | 'none';
+
 export interface MemorySummary {
   id: Uuid;
   /** Los uuid son ilegibles en terminal: se muestra y se acepta el prefijo, como git. */
@@ -36,7 +38,13 @@ export interface MemoryDetail extends MemorySummary {
   parentId: Uuid | null;
   status: Status;
   sha256: string | null;
+  /** Lo que escribió la persona. No se regenera nunca. */
+  note: string | null;
+  /** Lo que se extrajo del archivo. Regenerable desde el original (UC-15). */
   normalizedText: string | null;
+  lane: Lane | null;
+  normalizedAt: Date | null;
+  normalizationError: string | null;
 }
 
 export const shortId = (id: Uuid): string => id.replace(/-/g, '').slice(0, 8);

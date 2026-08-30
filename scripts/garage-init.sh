@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # Bootstrap idempotente de Garage: layout, bucket y key.
-# Uso:  ./scripts/garage-init.sh [test]
 set -euo pipefail
 
-MODE="${1:-dev}"
-if [ "$MODE" = "test" ]; then
-  COMPOSE="compose.test.yml"; S3_PORT=3910; PG_PORT=5434; ENVFILE=".env.test"
-else
-  COMPOSE="compose.yml";      S3_PORT=3900; PG_PORT=5433; ENVFILE=".env"
-fi
+# Un solo stack. Los tests no levantan contenedores propios: usan estos mismos
+# servicios con una base y un bucket aparte (ver tests/helpers/env.ts).
+COMPOSE="compose.yml"
+S3_PORT=3900; PG_PORT=5433; ENVFILE=".env"
+DOC_PORT=8081; SPEECH_PORT=8082; OCR_PORT=8083
 BUCKET="deiz-memory"
+TESTBUCKET="deiz-memory-test"
 KEYNAME="deiz"
 G="docker compose -f $COMPOSE exec -T garage /garage"
 
@@ -40,12 +39,21 @@ KEYINFO="$($G key info "$KEYNAME" --show-secret)"
 KEY_ID="$(echo "$KEYINFO"    | grep -i '^Key ID:'     | awk '{print $3}')"
 KEY_SECRET="$(echo "$KEYINFO"| grep -i '^Secret key:' | awk '{print $3}')"
 
-if ! $G bucket info "$BUCKET" >/dev/null 2>&1; then
-  echo "→ creando bucket '$BUCKET'"
-  $G bucket create "$BUCKET" >/dev/null
-fi
-$G bucket allow --read --write --owner "$BUCKET" --key "$KEYNAME" >/dev/null
+# Dos buckets sobre el mismo Garage: el tuyo y uno de pruebas. Los tests
+# escriben blobs de verdad —es la única forma de probar el adapter S3— y no
+# tienen por qué dejarlos tirados entre tus documentos.
+for b in "$BUCKET" "$TESTBUCKET"; do
+  if ! $G bucket info "$b" >/dev/null 2>&1; then
+    echo "→ creando bucket '$b'"
+    $G bucket create "$b" >/dev/null
+  fi
+  $G bucket allow --read --write --owner "$b" --key "$KEYNAME" >/dev/null
+done
 
+# Este archivo se reescribe entero en cada corrida, así que todo lo que el CLI
+# necesite para hablar con el compose tiene que salir de acá. Lo que NO sale de
+# acá son las llaves de proveedores externos (ANTHROPIC_API_KEY y compañía):
+# esas las pones tú y se conservan aparte, en .env.local.
 cat > "$ENVFILE" <<EOF
 DATABASE_URL=postgres://deiz:deiz@localhost:${PG_PORT}/deiz_memory
 S3_ENDPOINT=http://localhost:${S3_PORT}
@@ -53,6 +61,10 @@ S3_REGION=garage
 S3_BUCKET=${BUCKET}
 S3_ACCESS_KEY_ID=${KEY_ID}
 S3_SECRET_ACCESS_KEY=${KEY_SECRET}
+DM_DOCUMENTS_URL=http://localhost:${DOC_PORT}
+DM_SPEECH_URL=http://localhost:${SPEECH_PORT}/v1
+DM_OCR_URL=http://localhost:${OCR_PORT}
+DM_TEST_BUCKET=${TESTBUCKET}
 EOF
 
 echo "✓ Garage listo · credenciales en $ENVFILE"

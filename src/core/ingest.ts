@@ -1,18 +1,17 @@
-import type { Db, Ingest } from './ports.js';
+import { normalizeMemory } from './normalize/run.js';
+import type { Deps, Ingest } from './ports.js';
 
 /**
- * F0: procesar es marcar. No hay OCR, transcripción ni conversión todavía —
- * eso llega en F1 y va a necesitar una cola, porque tarda segundos.
- * Este puerto existe para que ese cambio no toque capture().
+ * Corre los carriles ahí mismo y no vuelve hasta terminar. Es lo que usan los
+ * tests (deterministas, sin worker de por medio) y `dm capture --wait`, para
+ * cuando estás en la terminal mirando y prefieres esperar diez segundos antes
+ * que abrir otra ventana.
+ *
+ * No es el camino normal: ese es la cola (§7, "nunca hacer esperar al usuario
+ * por un LLM").
  */
-export const inlineIngest = (db: Db): Ingest => ({
+export const inlineIngest = (deps: () => Deps): Ingest => ({
   async process(memoryId: string): Promise<void> {
-    await db.query(
-      `update memories
-          set status = case when normalized_text is not null then 'normalized' else 'raw' end,
-              updated_at = now()
-        where id = $1`,
-      [memoryId],
-    );
+    await normalizeMemory(deps(), memoryId);
   },
 });

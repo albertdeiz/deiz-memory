@@ -2,15 +2,15 @@ import { execFile } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { config as loadEnv } from 'dotenv';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPool, pgDb } from '../../src/adapters/db/postgres/index.js';
 import { runMigrations } from '../../src/adapters/db/postgres/migrate.js';
-
-loadEnv({ path: '.env.test', quiet: true });
+import { ensureTestDatabase, TEST_DATABASE_URL, TEST_ENV } from '../helpers/env.js';
 
 const BIN = 'dist/adapters/cli/index.js';
-const ENV = { ...process.env, DM_ENV_FILE: '.env.test' };
+// Tu mismo stack, pero con la base y el bucket de pruebas: el binario recibe
+// las variables por entorno en vez de leer un .env propio.
+const ENV = TEST_ENV;
 
 interface Run {
   code: number;
@@ -34,10 +34,10 @@ const dm = (args: string[], stdin?: string): Promise<Run> =>
     if (stdin !== undefined) { child.stdin?.write(stdin); child.stdin?.end(); }
   });
 
-const pool = createPool(process.env.DATABASE_URL!);
+const pool = createPool(TEST_DATABASE_URL);
 const db = pgDb(pool);
 
-beforeAll(async () => { await runMigrations(db); });
+beforeAll(async () => { await ensureTestDatabase(); await runMigrations(db); }, 60_000);
 beforeEach(async () => {
   await db.query('truncate memories, blobs, audit_log, owners restart identity cascade');
   const init = await dm(['--json', 'init', 'yo']);
@@ -54,8 +54,11 @@ describe('recorrido completo por CLI', () => {
 
     const doctor = await dm(['--json', 'doctor']);
     expect(doctor.code).toBe(0);
-    expect(doctor.json.every((c: any) => c.ok)).toBe(true);
+    // Lo obligatorio en verde. Los carriles se reportan pero no mandan sobre el
+    // código de salida: no tener whisper instalado no es un sistema roto.
+    expect(doctor.json.filter((c: any) => c.required).every((c: any) => c.ok)).toBe(true);
     expect(doctor.json.map((c: any) => c.check)).toContain('garage');
+    expect(doctor.json.map((c: any) => c.check)).toContain('carril foto');
   });
 
   it('captura texto, archivo y stdin, y los lista', async () => {

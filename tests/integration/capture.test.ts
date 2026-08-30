@@ -21,7 +21,10 @@ describe('capture', () => {
     expect(r.shortId).toHaveLength(8);
 
     const detail = unwrap<any>(await show(s.deps, actor(), r.shortId) as any);
-    expect(detail.normalizedText).toBe('el mecánico es Juan');
+    // Desde F1 lo que escribes tú vive en `note` y no en `normalized_text`:
+    // ese campo es solo para lo derivado del archivo, que sí se regenera.
+    expect(detail.note).toBe('el mecánico es Juan');
+    expect(detail.normalizedText).toBeNull();
     expect(detail.status).toBe('normalized');
   });
 

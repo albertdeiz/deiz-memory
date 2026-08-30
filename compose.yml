@@ -20,7 +20,46 @@ services:
       - "./garage/garage.toml:/etc/garage.toml:ro"
       - "garagemeta:/var/lib/garage/meta"
       - "garagedata:/var/lib/garage/data"
+  # Los tres carriles de §8.1, uno por servicio.
+  #
+  # Todos publican en 127.0.0.1 y no en 0.0.0.0: procesan documentos médicos y
+  # financieros, y no tienen por qué ser alcanzables desde fuera del host (§14).
+
+  # Carril A: convierte documentos y rasteriza PDF para el carril B.
+  documents:
+    build: ./services/documents
+    restart: unless-stopped
+    ports: ["127.0.0.1:8081:8000"]
+
+  # Carril B por defecto: OCR local, gratis, sin red y reproducible.
+  ocr:
+    build: ./services/ocr
+    restart: unless-stopped
+    ports: ["127.0.0.1:8083:8000"]
+
+  # Carril C. API nativa de OpenAI, que es lo que habla el adapter: cambiar de
+  # motor de transcripción es cambiar una URL.
+  #
+  # El modelo importa más que el motor: en español `base` da 18.4% de WER y
+  # `small` 9.7%. Con 18% se destrozan justo los nombres propios y los números,
+  # o sea lo único que uno guarda. `small` es el piso razonable, y por eso se
+  # sobreescribe el default `base` de la imagen.
+  whisper:
+    image: hwdsl2/whisper-server:latest
+    restart: unless-stopped
+    environment:
+      WHISPER_MODEL: ${DM_SPEECH_MODEL_NAME:-small}
+      WHISPER_LANGUAGE: ${DM_SPEECH_LANG:-es}
+      # Vacío desactiva la autenticación, que acá es lo correcto: el puerto solo
+      # escucha en localhost. Si prefieres llave igual, pon DM_SPEECH_API_KEY en
+      # .env.local y la reciben los dos lados, servidor y cliente.
+      WHISPER_API_KEY: ${DM_SPEECH_API_KEY:-}
+    # Escucha en 9000, no en 8000 como los sidecars propios.
+    ports: ["127.0.0.1:8082:9000"]
+    volumes: ["whispermodels:/var/lib/whisper"]
+
 volumes:
   pgdata:
   garagemeta:
   garagedata:
+  whispermodels:

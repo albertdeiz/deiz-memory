@@ -8,4 +8,7 @@ export { list, search, show, fetchBlob, type ListInput, type SearchInput, type B
 export { setHidden, purge, type HideResult, type PurgeResult } from './ops/lifecycle.js';
 export { listOwners, createOwner, resolveActor } from './ops/owners.js';
 export { resolveMemoryId } from './ops/resolve.js';
+export { reprocess, type ReprocessInput, type ReprocessResult } from './ops/reprocess.js';
+export { normalizeMemory, type NormalizeOutcome, type Attempt } from './normalize/run.js';
+export { lanesFor, isPoor, clamp, POOR_TEXT_CHARS, MAX_NORMALIZED_CHARS, LANES } from './normalize/lanes.js';
 export { storageKey } from './ops/rows.js';

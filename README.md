@@ -131,6 +131,7 @@ llamada de normalización: hay carriles, y una regla de caída entre ellos.
 | PDF con capa de texto, docx, xlsx, pptx, html, csv | `document` | `documents` · markitdown |
 | PDF escaneado (menos de ~100 caracteres de texto) | `vision` | `ocr` · RapidOCR |
 | foto de receta, boleta, carnet, patente | `vision` | `ocr` · RapidOCR |
+| foto HEIC (el default del iPhone) | `vision` | se convierte a JPEG y va al OCR |
 | nota de voz | `audio` | `whisper` |
 
 El carril que se usó queda en la fila (`dm show` lo muestra), que es lo que
@@ -148,6 +149,12 @@ seguridad viola la regla dura 2 de frente.
 Encima, el OCR cumple algo que la nube no puede: **es reproducible**. El mismo
 blob da el mismo texto hoy y en dos años. No cuesta nada por foto y no sale del
 host.
+
+**HEIC se convierte antes de leer.** Es el formato por defecto del iPhone y no
+lo acepta ni el OCR ni la API de visión, así que el sidecar lo pasa a JPEG. **El
+original no se toca** (§3.6): el blob sigue siendo el HEIC y solo cambia lo que
+se le entrega al motor, así que el día que algo lo lea nativo se reprocesa y se
+gana calidad sin haber perdido nada.
 
 **Lo que el OCR no puede hacer**, y por lo que el carril sigue siendo
 intercambiable: manuscrito, y describir una foto sin texto. A la foto de un

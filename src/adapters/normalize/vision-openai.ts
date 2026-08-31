@@ -6,6 +6,9 @@ import { IMAGE_TYPES, TRANSCRIPTION_PROMPT, unsupportedImage } from './prompt.js
 /** Rasterizar un PDF es trabajo del sidecar de documentos; acá solo se pide. */
 export type Rasterizer = (bytes: Buffer) => Promise<RasterResult>;
 
+/** Convierte una imagen que el carril no acepta a uno que sí. Ver `transcodeImage`. */
+export type Transcoder = (bytes: Buffer, filename: string | null) => Promise<{ mediaType: string; bytes: Buffer }>;
+
 export interface VisionHttpConfig {
   /** Base compatible con OpenAI. Ollama: http://ollama:11434/v1 */
   baseUrl: string;

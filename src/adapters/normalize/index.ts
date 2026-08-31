@@ -1,6 +1,6 @@
 import type { Converters } from '../../core/ports.js';
 import { claudeVisionConverter, type VisionConfig } from './claude-vision.js';
-import { documentsConverter, rasterizePdf, type DocumentsConfig } from './documents.js';
+import { documentsConverter, rasterizePdf, transcodeImage, type DocumentsConfig } from './documents.js';
 import { ocrConverter, type OcrConfig } from './ocr.js';
 import { openAiVisionConverter, type VisionHttpConfig } from './vision-openai.js';
 import { speechConverter, type SpeechConfig } from './whisper-http.js';
@@ -49,9 +49,12 @@ export function buildConverters(cfg: NormalizeConfig): Converters {
   // quien ya tiene pypdfium cargado. Anthropic es el único que no lo necesita
   // —recibe el PDF entero— y por eso ahí el rasterizador ni se inyecta.
   const rasterize = (bytes: Buffer) => rasterizePdf(cfg.documents, bytes);
+  // Mismo sidecar, misma idea: el carril no sabe convertir y no tiene por qué.
+  const transcode = (bytes: Buffer, filename: string | null) =>
+    transcodeImage(cfg.documents, bytes, filename);
 
   const vision =
-    cfg.vision.backend === 'ocr' ? ocrConverter(cfg.vision.ocr, rasterize)
+    cfg.vision.backend === 'ocr' ? ocrConverter(cfg.vision.ocr, rasterize, transcode)
     : cfg.vision.backend === 'anthropic' ? claudeVisionConverter(cfg.vision.anthropic)
     : cfg.vision.backend === 'openai' ? openAiVisionConverter(cfg.vision.openai, rasterize)
     : null;

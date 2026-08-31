@@ -1,7 +1,7 @@
 import type { Converter, ExtractInput } from '../../core/ports.js';
 import { formWithFile, postJson, probe } from './http.js';
 import { IMAGE_TYPES, unsupportedImage } from './prompt.js';
-import type { Rasterizer } from './vision-openai.js';
+import type { Rasterizer, Transcoder } from './vision-openai.js';
 
 export interface OcrConfig {
   baseUrl: string;
@@ -36,7 +36,11 @@ interface OcrResponse {
  * existiendo: manuscrito, y describir una foto sin texto. A la foto de un choque
  * el OCR no le encuentra nada; un modelo multimodal al menos dice qué se ve.
  */
-export function ocrConverter(cfg: OcrConfig = defaultOcrConfig, rasterize?: Rasterizer): Converter {
+export function ocrConverter(
+  cfg: OcrConfig = defaultOcrConfig,
+  rasterize?: Rasterizer,
+  transcode?: Transcoder,
+): Converter {
   const base = cfg.baseUrl.replace(/\/$/, '');
 
   const read = (bytes: Buffer, name: string, mediaType: string) =>
@@ -91,9 +95,16 @@ export function ocrConverter(cfg: OcrConfig = defaultOcrConfig, rasterize?: Rast
         };
       }
 
-      if (!IMAGE_TYPES.includes(mediaType)) throw unsupportedImage(mediaType);
+      let leible = { bytes, mediaType };
+      if (!IMAGE_TYPES.includes(mediaType)) {
+        // Un HEIC llega acá. Antes de darlo por perdido se intenta convertir:
+        // el original queda intacto y solo cambia lo que se le pasa al motor.
+        if (!transcode) throw unsupportedImage(mediaType);
+        const jpeg = await transcode(bytes, filename);
+        leible = { bytes: jpeg.bytes, mediaType: jpeg.mediaType };
+      }
 
-      const res = await read(bytes, filename ?? 'imagen', mediaType);
+      const res = await read(leible.bytes, filename ?? 'imagen', leible.mediaType);
       return {
         text: res.text,
         // Que el servicio diga "leí con poca confianza" y quede marcado es lo

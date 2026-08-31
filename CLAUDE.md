@@ -243,7 +243,7 @@ capacidades de Telegram, el segundo canal es un rewrite disfrazado de adapter.
 | Correo | buzón dedicado + polling IMAP | segunda vía de captura; ver §11 |
 | LLM | Claude | structured outputs; modelo chico para routing y clasificación, grande para extracción |
 | Documentos → texto | **markitdown** (Python: CLI al inicio, sidecar después) | PDF/docx/xlsx/html/csv → Markdown con estructura preservada. Ver §8.1 |
-| Imágenes y escaneos | **OCR (RapidOCR/PP-OCR)**, con LLM multimodal como alternativa | markitdown **no hace OCR**; ver §8.1. En impresos el OCR lee mejor los dígitos que un modelo chico, y es gratis y reproducible |
+| Imágenes y escaneos | **OCR (RapidOCR/PP-OCR)**, con LLM multimodal como alternativa; HEIC se convierte a JPEG antes | markitdown **no hace OCR**; ver §8.1. En impresos el OCR lee mejor los dígitos que un modelo chico, y es gratis y reproducible |
 | STT | Whisper en contenedor, API compatible con OpenAI | notas de voz. Mejor que el carril de audio de markitdown |
 | Deploy | 1 VPS o Fly.io, single-tenant | datos médicos: no los repartas |
 

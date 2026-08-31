@@ -67,6 +67,36 @@ export function documentsConverter(cfg: DocumentsConfig = defaultDocumentsConfig
   };
 }
 
+export interface Transcoded {
+  mediaType: string;
+  bytes: Buffer;
+}
+
+/**
+ * Una imagen que ningún carril sabe leer, a JPEG.
+ *
+ * Existe por el HEIC: es el formato por defecto de las fotos de iPhone y no lo
+ * acepta ni el OCR ni la API de visión. Sin esto, mandar una foto desde el
+ * teléfono la guarda muda.
+ *
+ * El original no se toca (§3.6). Esto produce bytes nuevos solo para leer; el
+ * blob sigue siendo el HEIC, así que el día que algo lo lea nativo se reprocesa
+ * y se gana calidad sin haber perdido nada.
+ */
+export async function transcodeImage(
+  cfg: DocumentsConfig,
+  bytes: Buffer,
+  filename: string | null,
+): Promise<Transcoded> {
+  const res = await postJson<{ media_type: string; data_base64: string }>({
+    service: 'documentos',
+    url: `${cfg.baseUrl}/transcode`,
+    body: formWithFile(bytes, filename ?? 'imagen', 'application/octet-stream'),
+    timeoutMs: cfg.timeoutMs,
+  });
+  return { mediaType: res.media_type, bytes: Buffer.from(res.data_base64, 'base64') };
+}
+
 /**
  * Páginas de PDF a PNG.
  *

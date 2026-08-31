@@ -18,11 +18,16 @@ import base64
 import io
 import os
 
+import pillow_heif
 import pypdfium2 as pdfium
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from markitdown import MarkItDown, StreamInfo
+from PIL import Image
 
 app = FastAPI(title="deiz-memory · documentos")
+
+# Sin esto Pillow no sabe abrir un HEIC. Se registra una vez, al importar.
+pillow_heif.register_heif_opener()
 
 # Sin plugins de terceros: lo que convierte esto tiene que ser predecible.
 _md = MarkItDown(enable_plugins=False)
@@ -62,6 +67,37 @@ async def convert(file: UploadFile = File(...)) -> dict:
         "title": result.title,
         "tool": "markitdown",
         "extension": extension,
+    }
+
+
+@app.post("/transcode")
+async def transcode(file: UploadFile = File(...)) -> dict:
+    """Convierte una imagen a JPEG.
+
+    Existe por el HEIC. Es el formato por defecto de las fotos de iPhone, y no
+    lo acepta ni el OCR ni la API de visión, así que sin esto media biblioteca
+    de fotos entra al sistema y queda muda.
+
+    El original **no se toca** (§3.6): esto devuelve bytes nuevos que el carril
+    usa para leer, y el blob guardado sigue siendo el HEIC que mandaste. Si
+    mañana algo aprende a leer HEIC nativo, se reprocesa y listo.
+    """
+    raw = await _read(file)
+    try:
+        img = Image.open(io.BytesIO(raw))
+        # JPEG no tiene canal alfa; sin esto un HEIC con transparencia revienta.
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=92)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"no pude convertir la imagen: {e}") from e
+
+    return {
+        "media_type": "image/jpeg",
+        "data_base64": base64.b64encode(buf.getvalue()).decode("ascii"),
+        "width": img.width,
+        "height": img.height,
     }
 
 

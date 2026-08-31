@@ -113,3 +113,27 @@ describe('rasterizar PDF', () => {
     expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
   }, 120_000);
 });
+
+describe('convertir lo que ningún carril sabe leer', () => {
+  it('un HEIC se convierte a JPEG para poder leerlo', async () => {
+    if (!usable) return;
+    // HEIC es el formato por defecto del iPhone y no lo acepta ni el OCR ni la
+    // API de visión. Sin esta conversión, cada foto del teléfono entra muda.
+    const { transcodeImage } = await import('../../src/adapters/normalize/documents.js');
+    const heic = await readFile('fixtures/f1/boleta-escaneada.png'); // PNG sirve: prueba el camino
+    const out = await transcodeImage(cfg, heic, 'foto.png');
+
+    expect(out.mediaType).toBe('image/jpeg');
+    // Magic bytes de JPEG: la conversión pasó de verdad.
+    expect(out.bytes.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+  }, 60_000);
+
+  it('el original no se toca: la conversión produce bytes aparte', async () => {
+    if (!usable) return;
+    const { transcodeImage } = await import('../../src/adapters/normalize/documents.js');
+    const original = await readFile('fixtures/f1/boleta-escaneada.png');
+    const antes = Buffer.from(original);
+    await transcodeImage(cfg, original, 'foto.png');
+    expect(original.equals(antes)).toBe(true);
+  }, 60_000);
+});

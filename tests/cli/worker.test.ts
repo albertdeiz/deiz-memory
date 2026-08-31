@@ -65,7 +65,7 @@ const db = pgDb(pool);
 
 beforeAll(async () => { await ensureTestDatabase(); await runMigrations(db); }, 60_000);
 beforeEach(async () => {
-  await db.query('truncate memories, blobs, audit_log, owners restart identity cascade');
+  await db.query('truncate memories, blobs, audit_log, channel_identities, pairing_codes, chat_sessions, owners restart identity cascade');
   // La cola sobrevive al truncate de las memorias: sin esto, un trabajo viejo
   // apuntaría a una memoria que ya no existe y el worker gritaría por nada.
   await db.query('delete from pgboss.job').catch(() => {});

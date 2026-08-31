@@ -5,7 +5,8 @@ Memoria personal externa. Le mandas cualquier cosa y después le preguntas.
 El diseño completo está en [CLAUDE.md](./CLAUDE.md); los flujos, en
 [CASOS-DE-USO.md](./CASOS-DE-USO.md). Esto es lo que hace falta para correrlo.
 
-**Estado: F1.** Captura, normalización por carriles y búsqueda full-text por CLI.
+**Estado: F1.5.** Captura, normalización por carriles, búsqueda full-text, y un
+**canal de chat**: Telegram, o un canal en memoria para probar sin token.
 Lo que mandas se lee por dentro: documentos con markitdown, fotos y escaneos con
 OCR, notas de voz con Whisper. Los tres carriles son **servicios en contenedores
 propios**, así que el mismo `docker compose up` levanta esto en tu máquina, en un
@@ -45,6 +46,11 @@ dm reprocess <id>                vuelve a leerlo desde el original
 dm reprocess --failed            los que fallaron o quedaron a medias
     --pending  --all  --lane <carril>  --limit <n>  --wait  --yes
 
+dm pair [--bot <usuario>]        código de un solo uso para vincular un chat
+dm identities                    qué chats están vinculados
+dm serve                         atiende el bot de Telegram
+dm chat "<mensaje>" [--file f]   conversa sin Telegram, por un canal en memoria
+
 dm ls [--limit N] [--offset N] [--hidden]
 dm search "<consulta>"           comillas para frases, - para excluir
 dm show <id>                     acepta prefijos, como git
@@ -58,6 +64,53 @@ Globales: `--json` (el dato por stdout, los fallos por stderr) y `--actor <id>`.
 
 **Códigos de salida:** `0` ok · `1` error · `2` requiere confirmación ·
 `3` no encontrado · `4` prohibido · `5` prefijo ambiguo.
+
+## El canal
+
+```bash
+# .env.local
+TELEGRAM_BOT_TOKEN=...        # te lo da @BotFather en dos minutos
+```
+
+Después `dm pair --bot tubot` imprime un link, lo abres, y estás adentro. Sin
+cuenta, sin contraseña, sin instalar nada que no tengas ya — que es el argumento
+entero de §10.
+
+**Nadie entra sin ese código.** Un mensaje de un id desconocido recibe una línea
+y nada más: no se guarda, ni siquiera para revisarlo después. A diferencia del
+correo (§11), acá no hace falta cuarentena — el `user_id` de un canal de chat no
+es falsificable, y guardar lo que manda un extraño bajo tu dueño sería peor que
+descartarlo.
+
+### El canal falso no es solo para tests
+
+`dm chat` conversa con el mismo router, por un canal en memoria que declara
+**`supportsButtons: false`**. Sirve para probar sin token, pero sobre todo es el
+**segundo canal**: si el único fuera Telegram, la rama degradada de §7.1 no la
+ejercitaría nadie y "el core no asume el canal" sería una intención escrita en
+un comentario. Así, cada corrida de los tests la comprueba.
+
+```bash
+dm chat "¿cuál es mi deducible?"
+dm chat "más"
+dm chat --file boleta.jpg "la del taller"
+```
+
+### El bot nunca te escribe primero
+
+§2 no admite matices, así que no hay ningún "ya está lista tu foto". Capturar
+responde en menos de un segundo y el texto tarda, y eso se resuelve por el otro
+lado: **cuando buscas y no hay nada, el bot distingue "no lo tengo" de "todavía
+no lo he leído"**.
+
+No es cortesía. Una búsqueda que dice "no lo tengo" mientras un OCR corre está
+mintiendo, y la tasa de "no lo tengo" honestos es la métrica estrella de §15.
+
+**Dos cosas de Telegram que conviene saber.** Un bot **no puede bajar archivos
+de más de 20 MB** y no hay forma de esquivarlo; si te topas con eso, se
+self-hostea `tdlib/telegram-bot-api` y se apunta `TELEGRAM_API_ROOT` ahí. Y los
+chats de bot **no son E2E**: Telegram puede leer lo que le mandes (§14 ya lo
+asume).
 
 ## Los tres carriles
 
@@ -229,7 +282,9 @@ src/core/         operaciones tipadas. No sabe que existe un CLI.
   ops/            capture · search · list · show · lifecycle · reprocess
   normalize/      lanes.ts (el router, lógica pura) · run.ts
   ports.ts        BlobStore · Clock · Db · Ingest · Converter
-src/adapters/     cli · db/postgres · storage/s3 · normalize · queue
+src/core/channel/ el puerto del canal: capacidades declaradas (§7.1)
+src/core/router/  los verbos de §5. intent y actions son puros
+src/adapters/     cli · db/postgres · storage/s3 · normalize · queue · chat
 services/         los carriles, como contenedores
   documents/      markitdown + rasterizado de PDF
   ocr/            RapidOCR

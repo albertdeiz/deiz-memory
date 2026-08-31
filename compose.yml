@@ -6,7 +6,16 @@ services:
       POSTGRES_USER: deiz
       POSTGRES_PASSWORD: deiz
       POSTGRES_DB: deiz_memory
-    ports: ["5433:5432"]
+    # 127.0.0.1 y no 0.0.0.0: esta base tiene fichas médicas y no tiene por qué
+    # ser alcanzable desde la red (§14).
+    #
+    # Y 5455 y no 5433 por una razón menos obvia que costó un rato encontrar: el
+    # 5433 lo tomaba otro proyecto en esta misma máquina. Docker no falló al
+    # arrancar — dejó el contenedor vivo **sin publicar el puerto**, así que
+    # `localhost:5433` seguía respondiendo... apuntando a la base equivocada. Se
+    # salvó porque la contraseña no coincidía. Un puerto poco disputado es más
+    # barato que descubrir eso corriendo una migración.
+    ports: ["127.0.0.1:5455:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U deiz -d deiz_memory"]

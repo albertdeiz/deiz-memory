@@ -82,9 +82,9 @@ describe('003 · el backfill de notas', () => {
       [owner!.id],
     );
 
-    // --- Ahora sí, 003.
+    // --- Ahora sí, 003 (y lo que venga después).
     const { applied } = await runMigrations(db, 'migrations');
-    expect(applied).toEqual(['003_normalization.sql']);
+    expect(applied).toContain('003_normalization.sql');
 
     const { rows } = await db.query<{ note: string | null; normalized_text: string | null }>(
       `select note, normalized_text from memories order by note`,

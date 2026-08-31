@@ -235,7 +235,7 @@ capacidades de Telegram, el segundo canal es un rewrite disfrazado de adapter.
 |---|---|---|
 | Canal | **Telegram Bot API** | gratis, sin aprobación, soporta fotos/audio/docs/PDF nativo. WhatsApp exige Meta Business API: costo por conversación y plantillas aprobadas |
 | Runtime | TypeScript + Node | stack que ya dominas |
-| Bot lib | grammY | mejor DX que telegraf hoy |
+| Bot lib | **grammY**, en uso | mejor DX que telegraf hoy. El adapter lo aísla: el core no lo conoce |
 | DB | Postgres + pgvector | estructurado, full-text y vectores en un solo motor. Una DB, un backup |
 | Cola | pg-boss | sin Redis extra al inicio |
 | Blobs | **Garage** self-hosted (API S3), direccionable por contenido | el original es sagrado; ver §14.1 |
@@ -534,6 +534,13 @@ falsificable.** El correo entrante no está autenticado. Tres capas:
 3. **Cuarentena** — lo que no pasa la allowlist no se descarta ni se guarda como memoria:
    queda en una bandeja aparte que apruebas desde el chat.
 
+**En chat no hay cuarentena, y es a propósito.** Las dos premisas que la justifican en
+el correo se caen: el `user_id` de un canal de chat **no es falsificable** —lo garantiza
+el canal—, y un mensaje de alguien con quien nunca te pareaste jamás es algo que quieras
+guardar. Ponerlo en cuarentena sería guardar contenido de un extraño bajo tu `owner_id`,
+en tu disco, para revisarlo después: peor que descartarlo. En chat se descarta, y el
+vínculo se hace con un código de un solo uso (§10).
+
 ### Implementación
 
 Empezar con **un buzón dedicado y polling IMAP**: cero DNS, cero MX, cero endpoint
@@ -583,6 +590,21 @@ _Listo cuando:_ mandas la foto de una boleta y la encuentras buscando por lo que
 > modelos chicos fallan. Además es gratis y reproducible desde el blob. El carril
 > multimodal sigue disponible (`DM_VISION_BACKEND=anthropic|openai`) y es el
 > correcto para manuscrito, que es lo que el OCR no puede leer.
+
+**F1.5 — Canal de chat.** Telegram, con el adapter de §7.1: capacidades declaradas,
+router de verbos en el core, emparejamiento por código de un solo uso, y paginación de
+cinco en cinco. Es la fase que el roadmap original no tenía y que §2 daba por supuesta —
+sin ella el producto es un CLI, y "solo chat" es la premisa entera.
+_Listo cuando:_ mandas la foto de una boleta desde el teléfono y la encuentras buscando
+por lo que dice. Es también la primera vez que el `time-to-capture` de §15 se puede
+medir de verdad, con el pulgar.
+> **Construido.** Puerto `Channel` con capacidades declaradas, router de verbos puro,
+> emparejamiento por código de un solo uso, paginación de cinco, y adapter de Telegram.
+> 182 tests. Dos decisiones que sostienen el diseño mejor que un comentario: el tipo
+> `Turn` cierra la respuesta al terminar el handler —así el bot no *tiene cómo* iniciar
+> conversación—, y `route()` exige un `Actor`, de modo que sin identidad vinculada no
+> existe el camino para llamar a nada (regla dura 9).
+> Pendiente del criterio de listo: probarlo con un bot real desde el teléfono.
 
 **F2 — Dominios y clasificación.** Tabla `domains` con su CRUD desde el chat (§9), y
 clasificador que se arma en runtime desde ella: dominio, título corto y fecha del hecho.
@@ -764,25 +786,40 @@ Como el bot **solo responde y nunca inicia conversación**, la ventana de 24h de
 Business API de WhatsApp no lo limita: siempre le hablas tú primero. Eso deja la
 comparación en estos términos:
 
-| | Telegram | WhatsApp |
+| | Telegram | WhatsApp (API oficial) |
 |---|---|---|
-| Costo | gratis | por conversación |
-| Fricción de setup | nula | Meta Business API, verificación, plantillas |
-| Archivos y audio | excelente, nativo | funciona, con más límites |
+| Costo | gratis | **gratis para este bot** — ver abajo |
+| Fricción de setup | nula, dos minutos con BotFather | Meta Business, verificación, 3–10 días hábiles |
+| Número | el que sea | uno **aparte**: uno ya registrado en WhatsApp normal no sirve |
+| Archivos y audio | nativo, pero **el bot no baja más de 20 MB** | límites más holgados |
 | **Que tu mamá ya lo tenga** | improbable | **prácticamente seguro** |
 
-Esa última fila es la que decide. En Chile, WhatsApp es el canal por defecto; pedirle a
-tus papás que instalen Telegram contradice de frente el principio de "ninguna app
-nueva" (§2).
+**Corrección de la fila de costo, que antes decía "por conversación".** Desde el 1 de
+julio de 2025 Meta cobra por *plantilla*, y los mensajes que no son plantilla son
+gratis. Como este bot **solo responde** —siempre le hablas tú primero, y eso abre una
+ventana de 24 h—, nunca manda una plantilla: paga **$0** y no necesita que le aprueben
+ninguna. El costo de WhatsApp no es plata, es tiempo de trámite.
 
-**Decisión: Telegram.** Es gratis, no bloquea nada y permite avanzar hoy. Pero el
-adapter de canal se trata como **código de primera clase desde F0**, con capacidades
-declaradas y no asumidas (§7.1).
+**Decisión: Telegram primero, WhatsApp en paralelo.** Telegram permite usar el sistema
+hoy y no bloquea nada. Pero ahora que el costo de WhatsApp resultó ser cero, la fila
+que decide vuelve a ser la última: pedirle a tus papás que instalen Telegram contradice
+de frente el principio de "ninguna app nueva" (§2). Así que el trámite con Meta se
+empieza de inmediato —tarda días de todos modos— y WhatsApp entra cuando salga.
 
-Lo que fuerza la decisión de agregar WhatsApp es **F5**: si los espacios compartidos son
-con gente que no usa Telegram, el adapter deja de ser una previsión y pasa a ser el
-camino crítico. Vale la pena preguntarle a las dos o tres personas con las que
-realmente vas a compartir qué usan, antes de llegar a F5.
+El adapter de canal se trata como **código de primera clase**, con capacidades
+declaradas y no asumidas (§7.1). Se escribe una vez y sirve para los dos.
+
+**Dos riesgos aceptados, y conviene tenerlos escritos:**
+
+- **La cláusula de Meta del 15 de enero de 2026** prohíbe "asistentes de IA de propósito
+  general" en la plataforma. Esto no es eso —§2: no da consejo médico ni legal, devuelve
+  lo que tú guardaste— y hasta ahora se aplicó a proveedores grandes, no a personas.
+  Pero es un riesgo, no una ausencia de riesgo.
+- **Nada de clientes no oficiales de WhatsApp.** `wa-automate`, `whatsapp-web.js` y
+  Baileys violan los términos, y el baneo es permanente y sin apelación; sus propios
+  mantenedores dicen que para salud y finanzas hay que usar la API oficial. Un número
+  baneado además **no puede registrarse después en la Cloud API**: cierra la puerta de
+  salida.
 
 ## 17. Glosario
 

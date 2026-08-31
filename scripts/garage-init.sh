@@ -5,7 +5,7 @@ set -euo pipefail
 # Un solo stack. Los tests no levantan contenedores propios: usan estos mismos
 # servicios con una base y un bucket aparte (ver tests/helpers/env.ts).
 COMPOSE="compose.yml"
-S3_PORT=3900; PG_PORT=5433; ENVFILE=".env"
+S3_PORT=3900; PG_PORT=5455; ENVFILE=".env"
 DOC_PORT=8081; SPEECH_PORT=8082; OCR_PORT=8083
 BUCKET="deiz-memory"
 TESTBUCKET="deiz-memory-test"

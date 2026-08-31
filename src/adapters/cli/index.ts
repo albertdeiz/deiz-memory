@@ -9,13 +9,17 @@ import { createPool, pgDb } from '../db/postgres/index.js';
 import { s3BlobStore } from '../storage/s3.js';
 import { buildConverters } from '../normalize/index.js';
 import { queueIngest, runWorker, startQueue } from '../queue/pgboss.js';
+import { fakeChannel, fileAttachment } from '../chat/fake.js';
+import { serveChannel } from '../chat/serve.js';
+import { telegramChannel } from '../chat/telegram/index.js';
+import type { Reply } from '../../core/channel/types.js';
 import { inlineIngest } from '../../core/ingest.js';
 import { systemClock, type Deps } from '../../core/ports.js';
 import type { Actor, Lane } from '../../core/domain/types.js';
 import type { Result } from '../../core/result.js';
 import {
-  capture, createOwner, fetchBlob, list, listOwners, purge, reprocess,
-  resolveActor, search, setHidden, show, LANES,
+  capture, createOwner, fetchBlob, list, listIdentities, listOwners, mintPairingCode,
+  purge, reprocess, resolveActor, search, setHidden, show, LANES,
 } from '../../core/index.js';
 import { EXIT, exitCodeFor } from './exit.js';
 import { renderDetail, renderFailure, renderList } from './format.js';
@@ -91,6 +95,16 @@ async function run<T>(
     await pool?.end().catch(() => {});
   }
 }
+
+/** Lo que el canal devolvió, en la terminal. Un archivo se anuncia, no se vuelca. */
+const renderReplies = (replies: Reply[]): string =>
+  replies
+    .map((r) =>
+      r.kind === 'text'
+        ? r.body
+        : `[archivo: ${r.filename} · ${r.mediaType} · ${r.bytes.length} bytes]`,
+    )
+    .join('\n\n');
 
 const readStdin = async (): Promise<Buffer> => {
   const chunks: Buffer[] = [];
@@ -197,6 +211,22 @@ program
         }
         const state = await converter.available();
         checks.push({ check: label, ok: state.ok, detail: state.detail, required: false });
+      }
+
+      // El canal, si hay token. Sin token no está roto: está sin configurar.
+      if (!cfg.telegram) {
+        checks.push({ check: 'canal', ok: false, required: false, detail: 'sin TELEGRAM_BOT_TOKEN' });
+      } else {
+        const estado = await telegramChannel(cfg.telegram).healthy();
+        const vinculados = await listIdentities(db).catch(() => []);
+        checks.push({
+          check: 'canal',
+          ok: estado.ok,
+          required: false,
+          detail: estado.ok
+            ? `${estado.detail} · ${vinculados.length} chat(s) vinculado(s)`
+            : estado.detail,
+        });
       }
 
       try {
@@ -388,6 +418,121 @@ program
       ({ deps, actor }) => purge(deps, actor, id, { confirm: opts.yes === true }),
       (r) => `${r.shortId} purgada${r.blobDeleted ? ' (y su archivo)' : ''}`,
     );
+  });
+
+// ---------------------------------------------------------------- canal
+
+program
+  .command('pair')
+  .description('acuña un código de un solo uso para vincular un chat a tu cuenta')
+  .option('--bot <usuario>', 'usuario del bot, para imprimir el link directo')
+  .action(async (opts: Record<string, string>) => {
+    await run(
+      async ({ deps, actor }) => mintPairingCode(deps.db, actor.ownerId, deps.clock.now()),
+      (c) => {
+        const minutos = Math.round((c.expiresAt.getTime() - Date.now()) / 60000);
+        const bot = opts.bot?.replace(/^@/, '');
+        // El link es el punto entero de §10: tu mamá lo abre y está adentro. Sin
+        // cuenta, sin contraseña, sin instalar nada que no tenga ya.
+        const link = bot ? `\n\nhttps://t.me/${bot}?start=${c.code}` : '';
+        return `código  ${c.code}   (vence en ${minutos} min, un solo uso)${link}`;
+      },
+    );
+  });
+
+program
+  .command('identities')
+  .description('lista los chats vinculados a tu cuenta')
+  .action(async () => {
+    await run(
+      async ({ deps, actor }) => ({ ok: true as const, value: await listIdentities(deps.db, actor.ownerId) }),
+      (ids) =>
+        ids.length === 0
+          ? 'Ningún chat vinculado. Corre "dm pair" para empezar.'
+          : ids.map((i) => `${i.channel.padEnd(10)} ${i.externalUserId.padEnd(16)} ${i.displayName ?? ''}`).join('\n'),
+    );
+  });
+
+program
+  .command('chat')
+  .description('conversa con el bot sin Telegram, por un canal en memoria')
+  .argument('[mensaje]', 'lo que le dirías al bot')
+  .option('--file <archivo>', 'adjuntar un archivo, como una foto en el chat')
+  .option('--as <id>', 'hablar como otra identidad, para probar aislamiento')
+  .action(async (mensaje: string | undefined, opts: Record<string, string>) => {
+    let pool: pg.Pool | null = null;
+    let boss: PgBoss | null = null;
+    try {
+      const cfg = loadConfig();
+      pool = createPool(cfg.databaseUrl);
+      boss = await startQueue(cfg.databaseUrl);
+      const deps = buildDeps(pool, cfg, boss);
+
+      // supportsButtons: false a propósito. Este canal es el que mantiene
+      // honesta la degradación de §7.1 — si solo existiera Telegram, la rama
+      // sin botones no la ejercitaría nunca nadie.
+      const channel = fakeChannel(opts.as ? { externalUserId: opts.as } : {});
+      await serveChannel(channel, deps);
+
+      const replies: Reply[] = opts.file
+        ? await channel.send({ text: mensaje ?? null, attachment: await fileAttachment(opts.file) })
+        : await channel.send({ text: mensaje ?? null });
+
+      console.log(renderReplies(replies));
+    } catch (e) {
+      console.error(e instanceof Error ? e.message : String(e));
+      process.exitCode = EXIT.error;
+    } finally {
+      await boss?.stop({ wait: true }).catch(() => {});
+      await pool?.end().catch(() => {});
+    }
+  });
+
+program
+  .command('serve')
+  .description('atiende el bot de Telegram; se queda escuchando')
+  .action(async () => {
+    let pool: pg.Pool | null = null;
+    let boss: PgBoss | null = null;
+    let handle: { stop(): Promise<void> } | null = null;
+    try {
+      const cfg = loadConfig();
+      if (!cfg.telegram) {
+        console.error('Falta TELEGRAM_BOT_TOKEN. Pídeselo a @BotFather y ponlo en .env.local.');
+        process.exitCode = EXIT.error;
+        return;
+      }
+      pool = createPool(cfg.databaseUrl);
+      // Encola, no corre inline: si el acuse esperara al OCR se rompería el
+      // contrato de menos de un segundo (§7). Implica que el worker tiene que
+      // estar corriendo, y por eso la respuesta de búsqueda dice qué falta leer.
+      boss = await startQueue(cfg.databaseUrl);
+      const deps = buildDeps(pool, cfg, boss);
+
+      const channel = telegramChannel(cfg.telegram);
+      const quien = await channel.healthy();
+      if (!quien.ok) {
+        console.error(`No pude hablar con Telegram: ${quien.detail}`);
+        process.exitCode = EXIT.error;
+        return;
+      }
+
+      handle = await serveChannel(channel, deps, { onEvent: (l) => console.log(l) });
+      console.error(`escuchando como ${quien.detail}. ctrl-c para salir.`);
+
+      await new Promise<void>((resolve) => {
+        const bye = () => { console.error('\ncerrando…'); resolve(); };
+        process.once('SIGINT', bye);
+        process.once('SIGTERM', bye);
+      });
+    } catch (e) {
+      console.error(e instanceof Error ? e.message : String(e));
+      process.exitCode = EXIT.error;
+    } finally {
+      await handle?.stop().catch(() => {});
+      await boss?.stop({ wait: true }).catch(() => {});
+      await pool?.end().catch(() => {});
+    }
   });
 
 // ---------------------------------------------------------------- normalización

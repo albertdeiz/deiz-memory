@@ -7,6 +7,10 @@ export { capture, type CaptureInput, type CaptureResult } from './ops/capture.js
 export { list, search, show, fetchBlob, type ListInput, type SearchInput, type BlobPayload } from './ops/query.js';
 export { setHidden, purge, type HideResult, type PurgeResult } from './ops/lifecycle.js';
 export { listOwners, createOwner, resolveActor } from './ops/owners.js';
+export {
+  mintPairingCode, redeemPairingCode, identityOwner, touchIdentity, listIdentities,
+  PAIRING_TTL_MS, type PairingCode, type Identity, type LinkedIdentity,
+} from './ops/identity.js';
 export { resolveMemoryId } from './ops/resolve.js';
 export { reprocess, type ReprocessInput, type ReprocessResult } from './ops/reprocess.js';
 export { normalizeMemory, type NormalizeOutcome, type Attempt } from './normalize/run.js';

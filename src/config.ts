@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { config as loadEnv } from 'dotenv';
 import type { S3Config } from './adapters/storage/s3.js';
 import type { NormalizeConfig, VisionBackend } from './adapters/normalize/index.js';
+import type { TelegramConfig } from './adapters/chat/telegram/index.js';
 import {
   defaultDocumentsConfig, defaultOcrConfig, defaultSpeechConfig,
   defaultVisionConfig, defaultVisionHttpConfig, VISION_BACKENDS,
@@ -12,6 +13,7 @@ export interface Config {
   s3: S3Config;
   ownerId: string | null;
   normalize: NormalizeConfig;
+  telegram: TelegramConfig | null;
 }
 
 type VisionEffort = 'low' | 'medium' | 'high';
@@ -74,6 +76,17 @@ export function loadConfig(): Config {
       secretAccessKey: need('S3_SECRET_ACCESS_KEY'),
     },
     ownerId: process.env.DM_OWNER_ID ?? null,
+    // `null` cuando no hay token, y eso es un estado legítimo: el sistema
+    // funciona por CLI sin canal. `dm doctor` lo reporta como no configurado,
+    // no como roto.
+    telegram: process.env.TELEGRAM_BOT_TOKEN
+      ? {
+          token: process.env.TELEGRAM_BOT_TOKEN,
+          apiRoot: process.env.TELEGRAM_API_ROOT,
+          // Con un servidor Bot API local el techo de 20 MB desaparece.
+          maxDownloadBytes: positive(process.env.DM_TELEGRAM_MAX_DOWNLOAD, 20 * 1024 * 1024),
+        }
+      : null,
     normalize: {
       documents: {
         baseUrl: process.env.DM_DOCUMENTS_URL ?? defaultDocumentsConfig.baseUrl,

@@ -1,0 +1,137 @@
+import { describe, expect, it } from 'vitest';
+import { present } from '../../src/adapters/chat/present.js';
+import type { Capabilities, Reply } from '../../src/core/channel/types.js';
+import type { Outcome } from '../../src/core/router/route.js';
+import type { MemorySummary } from '../../src/core/domain/types.js';
+import { ok } from '../../src/core/result.js';
+
+const CAPS: Capabilities = {
+  maxUploadBytes: 50 * 1024 * 1024,
+  maxDownloadBytes: 20 * 1024 * 1024,
+  supportsButtons: true,
+  supportsRichFormatting: true,
+  canInitiate: false,
+};
+
+const conBotones: Capabilities = { ...CAPS, supportsButtons: true };
+const sinBotones: Capabilities = { ...CAPS, supportsButtons: false };
+
+const item = (n: number): MemorySummary => ({
+  id: `00000000-0000-0000-0000-00000000000${n}`,
+  shortId: `id${n}`,
+  title: `Póliza ${n}`,
+  source: 'telegram',
+  capturedAt: new Date('2026-03-14T12:00:00Z'),
+  occurredAt: null,
+  originalFilename: null,
+  mediaType: 'application/pdf',
+  sizeBytes: 1000,
+  hidden: false,
+  excerpt: null,
+});
+
+const resultados = (n: number, hayMas: boolean): Outcome => ({
+  kind: 'resultados',
+  consulta: 'poliza',
+  items: Array.from({ length: n }, (_, i) => item(i + 1)),
+  offset: 0,
+  hayMas,
+  pendientes: 0,
+  ofreceGuardar: null,
+  agotado: false,
+});
+
+const actionsOf = (rs: Reply[]): string[] =>
+  rs.flatMap((r) => (r.kind === 'text' ? (r.options ?? []).map((o) => o.action) : []));
+
+const bodyOf = (rs: Reply[]): string =>
+  rs.map((r) => (r.kind === 'text' ? r.body : '')).join('\n');
+
+/**
+ * El test que sostiene §7.1.
+ *
+ * Si un canal sin botones ofreciera menos que uno con botones, "el core degrada
+ * solo" sería una intención escrita en un comentario. Acá se comprueba que las
+ * dos formas ofrecen exactamente lo mismo, y que la versión sin botones además
+ * dice en el cuerpo qué escribir.
+ */
+describe('degradación · las mismas acciones con y sin botones', () => {
+  it('una página de resultados ofrece lo mismo por los dos caminos', () => {
+    const out = resultados(5, true);
+    const conB = present(ok(out), conBotones);
+    const sinB = present(ok(out), sinBotones);
+
+    expect(actionsOf(conB)).toEqual(actionsOf(sinB));
+    expect(actionsOf(conB)).toEqual(['ver:1', 'ver:2', 'ver:3', 'ver:4', 'ver:5', 'mas']);
+  });
+
+  it('sin botones, el cuerpo dice qué escribir', () => {
+    // De nada sirve ofrecer una acción que la persona no puede ver.
+    const sinB = present(ok(resultados(2, true)), sinBotones);
+    const body = bodyOf(sinB);
+    expect(body).toContain('ver:1');
+    expect(body).toContain('mas');
+  });
+
+  it('con botones, el cuerpo no se ensucia con la lista de comandos', () => {
+    const conB = present(ok(resultados(2, true)), conBotones);
+    expect(bodyOf(conB)).not.toContain('ver:1');
+  });
+
+  it('sin resultados no se ofrece "más"', () => {
+    const vacio: Outcome = { ...resultados(0, false), ofreceGuardar: 'garantia refrigerador' };
+    for (const caps of [conBotones, sinBotones]) {
+      expect(actionsOf(present(ok(vacio), caps))).toEqual(['guardar']);
+    }
+  });
+
+  it('una confirmación ofrece sí y no por los dos caminos', () => {
+    const necesitaConfirmar = {
+      ok: false as const,
+      kind: 'requires_confirmation' as const,
+      message: 'Purgar borra esto para siempre.',
+      affects: [{ kind: 'memory', id: 'abc', label: 'Póliza 2026' }],
+    };
+    const conB = present(necesitaConfirmar, conBotones);
+    const sinB = present(necesitaConfirmar, sinBotones);
+
+    expect(actionsOf(conB)).toEqual(['si', 'no']);
+    expect(actionsOf(sinB)).toEqual(['si', 'no']);
+    // Y en los dos casos se nombra lo afectado, no se pide un sí a ciegas.
+    expect(bodyOf(conB)).toContain('Póliza 2026');
+    expect(bodyOf(sinB)).toContain('Póliza 2026');
+  });
+});
+
+describe('lo que dice el acuse', () => {
+  it('un archivo avisa que se está leyendo; un texto no', () => {
+    const base = { id: 'x', shortId: 'ab12cd34', deduped: false, mediaType: null, sizeBytes: null };
+    const conArchivo = present(
+      ok({ kind: 'guardado', capture: { ...base, sha256: 'abc' }, enCola: true }),
+      conBotones,
+    );
+    const soloTexto = present(
+      ok({ kind: 'guardado', capture: { ...base, sha256: null }, enCola: false }),
+      conBotones,
+    );
+    expect(bodyOf(conArchivo)).toContain('Lo estoy leyendo');
+    expect(bodyOf(soloTexto)).not.toContain('Lo estoy leyendo');
+    expect(bodyOf(soloTexto)).toContain('ab12cd34');
+  });
+});
+
+describe('honestidad del "no lo tengo"', () => {
+  it('dice cuánto falta por leer cuando hay cosas en cola', () => {
+    const conPendientes: Outcome = { ...resultados(0, false), pendientes: 2 };
+    expect(bodyOf(present(ok(conPendientes), conBotones))).toMatch(/2 cosas.*por leer/);
+  });
+
+  it('no agrega ruido cuando no falta nada', () => {
+    expect(bodyOf(present(ok(resultados(0, false)), conBotones))).toBe('No lo tengo.');
+  });
+
+  it('distingue el final de una lista de no tener el dato', () => {
+    const agotado: Outcome = { ...resultados(0, false), offset: 5, agotado: true };
+    expect(bodyOf(present(ok(agotado), conBotones))).toBe('No hay más.');
+  });
+});

@@ -605,7 +605,10 @@ medir de verdad, con el pulgar.
 > `Turn` cierra la respuesta al terminar el handler —así el bot no *tiene cómo* iniciar
 > conversación—, y `route()` exige un `Actor`, de modo que sin identidad vinculada no
 > existe el camino para llamar a nada (regla dura 9).
-> Pendiente del criterio de listo: probarlo con un bot real desde el teléfono.
+> **Criterio cumplido.** Foto mandada desde el teléfono a @DeizMemoryBot: guardada,
+> leída por OCR en 2 segundos y encontrada buscando por lo que dice. Telegram entrega
+> las fotos **sin nombre de archivo**, así que hasta F2 el título de una foto del
+> teléfono es el volcado del OCR — que es justo el problema que F2 nombra.
 
 **F1.6 — Bandeja de revisión.** La deuda que dejó F1: los carriles ya marcan cosas
 —OCR de baja confianza, transcripción cortada, un formato que no se pudo leer— y no hay

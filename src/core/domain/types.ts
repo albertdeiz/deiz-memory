@@ -31,6 +31,8 @@ export interface MemorySummary {
   sizeBytes: number | null;
   hidden: boolean;
   excerpt: string | null;
+  domainId: Uuid | null;
+  tags: string[];
 }
 
 export interface MemoryDetail extends MemorySummary {

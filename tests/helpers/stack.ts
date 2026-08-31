@@ -51,7 +51,7 @@ export async function startStack(
     ownerId: '',
     otherOwnerId: '',
     async reset() {
-      await db.query('truncate memories, blobs, audit_log, channel_identities, pairing_codes, chat_sessions, owners restart identity cascade');
+      await db.query('truncate memories, blobs, audit_log, channel_identities, pairing_codes, chat_sessions, domains, owners restart identity cascade');
       const mine = await createOwner(db, 'yo');
       const other = await createOwner(db, 'alguien más');
       if (!mine.ok || !other.ok) throw new Error('no se pudieron crear los dueños de prueba');

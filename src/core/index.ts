@@ -14,6 +14,11 @@ export {
 export { resolveMemoryId } from './ops/resolve.js';
 export { reprocess, type ReprocessInput, type ReprocessResult } from './ops/reprocess.js';
 export {
+  listDomains, activeDomains, findDomain, createDomain, editDomain,
+  archiveDomain, mergeDomains, seedDomains, slugify, SEED_DOMAINS,
+  type Domain, type CreateDomainInput, type MergeResult,
+} from './ops/domains.js';
+export {
   listReview, countReview, type ReviewItem, type ReviewInput, type ReviewCounts,
 } from './ops/review.js';
 export { normalizeMemory, type NormalizeOutcome, type Attempt } from './normalize/run.js';

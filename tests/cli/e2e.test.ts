@@ -39,7 +39,7 @@ const db = pgDb(pool);
 
 beforeAll(async () => { await ensureTestDatabase(); await runMigrations(db); }, 60_000);
 beforeEach(async () => {
-  await db.query('truncate memories, blobs, audit_log, channel_identities, pairing_codes, chat_sessions, owners restart identity cascade');
+  await db.query('truncate memories, blobs, audit_log, channel_identities, pairing_codes, chat_sessions, domains, owners restart identity cascade');
   const init = await dm(['--json', 'init', 'yo']);
   expect(init.code).toBe(0);
 });

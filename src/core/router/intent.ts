@@ -16,6 +16,8 @@ export type Intent =
   | { verb: 'parear'; code: string }
   | { verb: 'pendientes' }
   | { verb: 'revisar' }
+  | { verb: 'dominios' }
+  | { verb: 'enDominio'; ref: string }
   | { verb: 'ayuda' };
 // 'aclarar' (§5) todavía no existe: no hay clasificador que dude. Llega en F2.
 
@@ -102,6 +104,11 @@ export function classify(msg: Incoming, session: Session | null): Intent {
     if (cmd === 'exportar') return { verb: 'accion', action: { kind: 'exportar' } };
     if (cmd === 'mas') return { verb: 'accion', action: { kind: 'mas' } };
     if (cmd === 'ayuda' || cmd === 'help') return { verb: 'ayuda' };
+    if (cmd === 'dominios' || cmd === 'categorias') return { verb: 'dominios' };
+    // Cualquier otro /slug es "muéstrame lo de esa categoría" (§9). Se resuelve
+    // contra la tabla, no contra una lista en el código — que es el punto
+    // entero de que los dominios sean data.
+    if (/^[a-z0-9-]{2,32}$/.test(cmd)) return { verb: 'enDominio', ref: cmd };
     return { verb: 'ayuda' };
   }
 

@@ -18,8 +18,9 @@ import { systemClock, type Deps } from '../../core/ports.js';
 import type { Actor, Lane } from '../../core/domain/types.js';
 import type { Result } from '../../core/result.js';
 import {
-  capture, countReview, createOwner, fetchBlob, list, listIdentities, listOwners,
-  listReview, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
+  archiveDomain, capture, countReview, createDomain, createOwner, editDomain,
+  fetchBlob, findDomain, list, listDomains, listIdentities, listOwners, listReview,
+  mergeDomains, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
   show, LANES,
 } from '../../core/index.js';
 import { EXIT, exitCodeFor } from './exit.js';
@@ -543,6 +544,104 @@ program
   });
 
 // ---------------------------------------------------------------- normalización
+
+// ---------------------------------------------------------------- dominios
+
+const domains = program.command('domains').description('tus categorías (§9)');
+
+domains
+  .command('list', { isDefault: true })
+  .description('las activas, con cuántas memorias tiene cada una')
+  .option('--all', 'incluir las archivadas')
+  .action(async (opts: Record<string, boolean>) => {
+    await run(
+      async ({ deps, actor }) => ({
+        ok: true as const,
+        value: await listDomains(deps.db, actor, { includeArchived: opts.all === true }),
+      }),
+      (ds) =>
+        ds.length === 0
+          ? 'No hay dominios.'
+          : ds.map((d) =>
+              `${(d.active ? '' : '· ') + '/' + d.slug}`.padEnd(16) +
+              `${String(d.count ?? 0).padStart(4)}  ${d.label}` +
+              (d.active ? '' : '  [archivado]'),
+            ).join('\n'),
+    );
+  });
+
+domains
+  .command('create')
+  .description('crea una categoría nueva')
+  .argument('<nombre>')
+  .requiredOption('--desc <descripcion>', 'una línea; es lo que usa el clasificador')
+  .option('--alias <a...>', 'otros nombres por los que la reconoces')
+  .option('--yes', 'crear aunque se parezca a una existente')
+  .action(async (nombre: string, opts: Record<string, unknown>) => {
+    await run(
+      ({ deps, actor }) =>
+        createDomain(deps.db, actor, {
+          label: nombre,
+          description: String(opts.desc),
+          aliases: (opts.alias as string[]) ?? [],
+          confirm: opts.yes === true,
+        }),
+      (d) => `/${d.slug}  ${d.label}`,
+    );
+  });
+
+domains
+  .command('edit')
+  .description('cambia nombre, descripción o alias; no toca las memorias')
+  .argument('<dominio>')
+  .option('--label <nombre>')
+  .option('--desc <descripcion>')
+  .option('--alias <a...>')
+  .action(async (ref: string, opts: Record<string, unknown>) => {
+    await run(
+      ({ deps, actor }) =>
+        editDomain(deps.db, actor, ref, {
+          ...(opts.label ? { label: String(opts.label) } : {}),
+          ...(opts.desc ? { description: String(opts.desc) } : {}),
+          ...(opts.alias ? { aliases: opts.alias as string[] } : {}),
+        }),
+      (d) => `/${d.slug}  ${d.label} — ${d.description}`,
+    );
+  });
+
+domains
+  .command('archive')
+  .description('deja de proponerse al clasificar; sus memorias siguen ahí')
+  .argument('<dominio>')
+  .action(async (ref: string) => {
+    await run(({ deps, actor }) => archiveDomain(deps.db, actor, ref), (d) => `/${d.slug} archivado`);
+  });
+
+domains
+  .command('merge')
+  .description('mueve las memorias de una categoría a otra y archiva la primera')
+  .argument('<desde>')
+  .argument('<hacia>')
+  .option('--yes', 'confirmar')
+  .action(async (from: string, into: string, opts: Record<string, boolean>) => {
+    await run(
+      ({ deps, actor }) => mergeDomains(deps, actor, from, into, { confirm: opts.yes === true }),
+      (r) => `${r.moved} memoria(s) de /${r.from.slug} → /${r.into.slug}; /${r.from.slug} archivado`,
+    );
+  });
+
+program
+  .command('in')
+  .description('lista lo de una categoría, por fecha del hecho')
+  .argument('<dominio>')
+  .option('--limit <n>', 'cuántas mostrar', '20')
+  .action(async (ref: string, opts: Record<string, string>) => {
+    await run(async ({ deps, actor }) => {
+      const d = await findDomain(deps.db, actor, ref);
+      if (!d) return { ok: false as const, kind: 'not_found' as const, message: `No existe el dominio "${ref}".` };
+      return list(deps, actor, { domainId: d.id, limit: Number(opts.limit) });
+    }, renderList);
+  });
 
 program
   .command('review')

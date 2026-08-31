@@ -5,7 +5,7 @@ Memoria personal externa. Le mandas cualquier cosa y después le preguntas.
 El diseño completo está en [CLAUDE.md](./CLAUDE.md); los flujos, en
 [CASOS-DE-USO.md](./CASOS-DE-USO.md). Esto es lo que hace falta para correrlo.
 
-**Estado: F1.6.** Captura, normalización por carriles, búsqueda full-text, y un
+**Estado: F2 (a medias).** Captura, normalización por carriles, búsqueda full-text, y un
 **canal de chat**: Telegram, o un canal en memoria para probar sin token.
 Lo que mandas se lee por dentro: documentos con markitdown, fotos y escaneos con
 OCR, notas de voz con Whisper. Los tres carriles son **servicios en contenedores
@@ -52,6 +52,11 @@ dm serve                         atiende el bot de Telegram
 dm chat "<mensaje>" [--file f]   conversa sin Telegram, por un canal en memoria
 
 dm review                        lo que quedó dudoso, y qué hacer con cada cosa
+
+dm domains                       tus categorías, con cuántas tiene cada una
+dm domains create <n> --desc ""  crea una; la descripción ES el prompt
+dm domains edit|archive|merge    renombrar · sacar de circulación · fusionar
+dm in <categoría>                lo de esa categoría, por fecha del hecho
 
 dm ls [--limit N] [--offset N] [--hidden]
 dm search "<consulta>"           comillas para frases, - para excluir

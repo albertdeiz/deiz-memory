@@ -63,6 +63,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
           '/buscar <algo>   busca en todo lo que guardaste',
           '/pendientes      qué me falta por leer',
           '/revisar         lo que quedó dudoso',
+          '/dominios        tus categorías, y /<categoría> para ver una',
           '/ayuda           esto',
         ].join('\n'),
       }];
@@ -134,6 +135,28 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
         })
         .join('\n\n');
       return [{ kind: 'text', body: `Esto quedó dudoso:\n\n${cuerpo}` }];
+    }
+
+    case 'dominios': {
+      const cuerpo = v.items
+        .map((d) => `/${d.slug}  ${d.label}${d.count ? `  (${d.count})` : ''}`)
+        .join('\n');
+      return [{ kind: 'text', body: `Tus categorías:\n\n${cuerpo}` }];
+    }
+
+    case 'enDominio': {
+      if (v.items.length === 0) {
+        return [{ kind: 'text', body: `No hay nada en ${v.domain.label} todavía.` }];
+      }
+      // Ordenado por cuándo PASÓ, no por cuándo lo guardaste (§3.3).
+      const cuerpo = v.items
+        .map((m, i) => `${i + 1}. ${label(m)}\n   ${day(m.occurredAt ?? m.capturedAt)} · ${m.shortId}`)
+        .join('\n');
+      const options: Option[] = v.items.map((_, i) => ({
+        label: `ver ${i + 1}`,
+        action: encodeAction({ kind: 'ver', n: i + 1 }),
+      }));
+      return [withOptions(`${v.domain.label}:\n\n${cuerpo}`, options, caps)];
     }
 
     case 'resultados':

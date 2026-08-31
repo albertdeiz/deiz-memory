@@ -6,6 +6,8 @@ import { capture, type CaptureResult } from '../ops/capture.js';
 import { fetchBlob, search, show, type BlobPayload } from '../ops/query.js';
 import { redeemPairingCode } from '../ops/identity.js';
 import { listReview, type ReviewItem } from '../ops/review.js';
+import { findDomain, listDomains, type Domain } from '../ops/domains.js';
+import { list } from '../ops/query.js';
 import type { Intent } from './intent.js';
 import {
   confirmIsFresh, pendingCount, readSession, writeSession,
@@ -39,6 +41,8 @@ export type Outcome =
   | { kind: 'archivo'; blob: BlobPayload }
   | { kind: 'pendientes'; sinLeer: number }
   | { kind: 'revisar'; items: ReviewItem[] }
+  | { kind: 'dominios'; items: Domain[] }
+  | { kind: 'enDominio'; domain: Domain; items: MemorySummary[] }
   | { kind: 'ayuda' };
 
 export interface RouteInput {
@@ -74,6 +78,16 @@ export async function route(
 
     case 'pendientes':
       return ok({ kind: 'pendientes', sinLeer: await pendingCount(deps.db, actor.ownerId) });
+
+    case 'dominios':
+      return ok({ kind: 'dominios', items: await listDomains(deps.db, actor) });
+
+    case 'enDominio': {
+      const d = await findDomain(deps.db, actor, intent.ref);
+      if (!d) return err('not_found', `No tengo una categoría "${intent.ref}". Mira /dominios.`);
+      const r = await list(deps, actor, { domainId: d.id, limit: PAGE });
+      return r.ok ? ok({ kind: 'enDominio', domain: d, items: r.value }) : r;
+    }
 
     case 'revisar': {
       const r = await listReview(deps, actor, { limit: PAGE });

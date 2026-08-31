@@ -5,7 +5,7 @@ export const MEMORY_COLUMNS = `
   m.id, m.owner_id, m.parent_id, m.source, m.captured_at, m.occurred_at,
   m.original_filename, m.title, m.note, m.normalized_text, m.status, m.hidden,
   m.normalization_lane, m.normalized_at, m.normalization_error,
-  m.blob_sha256, b.media_type, b.size_bytes`;
+  m.blob_sha256, m.domain_id, m.tags, m.domain_confidence, b.media_type, b.size_bytes`;
 
 export const MEMORY_FROM = `from memories m left join blobs b on b.sha256 = m.blob_sha256`;
 
@@ -26,6 +26,9 @@ export interface MemoryRow {
   status: string;
   hidden: boolean;
   blob_sha256: string | null;
+  domain_id: string | null;
+  tags: string[] | null;
+  domain_confidence: number | null;
   media_type: string | null;
   size_bytes: string | number | null;
 }
@@ -44,6 +47,8 @@ export const toSummary = (r: MemoryRow): MemorySummary => ({
   // Tus palabras antes que las de la máquina: si escribiste una nota al mandar
   // la foto, eso es lo que reconoces en una lista, no el OCR del papel.
   excerpt: excerptOf(r.note ?? r.normalized_text),
+  domainId: r.domain_id,
+  tags: r.tags ?? [],
 });
 
 export const toDetail = (r: MemoryRow): MemoryDetail => ({

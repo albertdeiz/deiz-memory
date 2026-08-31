@@ -1,6 +1,7 @@
 import type { Owner, Uuid } from '../domain/types.js';
 import type { Db } from '../ports.js';
 import { err, ok, type Result } from '../result.js';
+import { seedDomains } from './domains.js';
 
 const toOwner = (r: { id: string; label: string; created_at: Date }): Owner => ({
   id: r.id,
@@ -22,7 +23,11 @@ export async function createOwner(db: Db, label: string): Promise<Result<Owner>>
     `insert into owners (label) values ($1) returning id, label, created_at`,
     [clean],
   );
-  return ok(toOwner(rows[0]!));
+  const owner = toOwner(rows[0]!);
+  // Nace con las categorías de §9. Sin esto el clasificador no tendría contra
+  // qué clasificar, y la primera experiencia sería una lista vacía.
+  await seedDomains(db, owner.id);
+  return ok(owner);
 }
 
 /**

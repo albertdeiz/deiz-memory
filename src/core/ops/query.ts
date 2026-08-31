@@ -8,6 +8,8 @@ export interface ListInput {
   limit?: number;
   offset?: number;
   includeHidden?: boolean;
+  /** Id de dominio. `list` ordena entonces por fecha del HECHO, no de captura. */
+  domainId?: string | null;
 }
 
 export interface SearchInput extends ListInput {
@@ -22,12 +24,21 @@ export async function list(
   actor: Actor,
   input: ListInput = {},
 ): Promise<Result<MemorySummary[]>> {
+  // Dentro de un dominio se ordena por cuándo PASÓ, no por cuándo lo guardaste
+  // (§3.3, y es el criterio de listo de F2). Fuera de un dominio manda la
+  // captura: sin fecha del hecho inferida, ordenar por ella sería ordenar por
+  // nulls.
+  const porDominio = input.domainId != null;
   const { rows } = await deps.db.query<MemoryRow>(
     `select ${MEMORY_COLUMNS} ${MEMORY_FROM}
       where m.owner_id = $1 and ($2 or not m.hidden)
-      order by m.captured_at desc, m.id desc
+        and ($5::uuid is null or m.domain_id = $5)
+      order by ${porDominio
+        ? 'coalesce(m.occurred_at, m.captured_at) desc'
+        : 'm.captured_at desc'}, m.id desc
       limit $3 offset $4`,
-    [actor.ownerId, input.includeHidden ?? false, clampLimit(input.limit), clampOffset(input.offset)],
+    [actor.ownerId, input.includeHidden ?? false, clampLimit(input.limit), clampOffset(input.offset),
+     input.domainId ?? null],
   );
   return ok(rows.map(toSummary));
 }

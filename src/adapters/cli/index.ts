@@ -8,6 +8,7 @@ import { loadConfig } from '../../config.js';
 import { createPool, pgDb } from '../db/postgres/index.js';
 import { s3BlobStore } from '../storage/s3.js';
 import { buildConverters } from '../normalize/index.js';
+import { ollamaClassifier } from '../classify/ollama.js';
 import { queueIngest, runWorker, startQueue } from '../queue/pgboss.js';
 import { fakeChannel, fileAttachment } from '../chat/fake.js';
 import { serveChannel } from '../chat/serve.js';
@@ -18,10 +19,10 @@ import { systemClock, type Deps } from '../../core/ports.js';
 import type { Actor, Lane } from '../../core/domain/types.js';
 import type { Result } from '../../core/result.js';
 import {
-  archiveDomain, capture, countReview, createDomain, createOwner, editDomain,
+  archiveDomain, capture, classifyMemory, countReview, createDomain, createOwner, editDomain,
   fetchBlob, findDomain, list, listDomains, listIdentities, listOwners, listReview,
   mergeDomains, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
-  show, LANES,
+  resolveMemoryId, show, LANES,
 } from '../../core/index.js';
 import { EXIT, exitCodeFor } from './exit.js';
 import { renderDetail, renderFailure, renderList, renderReview } from './format.js';
@@ -66,6 +67,7 @@ function buildDeps(pool: pg.Pool, cfg: ReturnType<typeof loadConfig>, boss: PgBo
     blobs: s3BlobStore(cfg.s3),
     clock: systemClock,
     converters: buildConverters(cfg.normalize),
+    classifier: ollamaClassifier(cfg.classify),
   } as Deps;
   deps.ingest = boss ? queueIngest(boss) : inlineIngest(() => deps);
   return deps;
@@ -641,6 +643,46 @@ program
       if (!d) return { ok: false as const, kind: 'not_found' as const, message: `No existe el dominio "${ref}".` };
       return list(deps, actor, { domainId: d.id, limit: Number(opts.limit) });
     }, renderList);
+  });
+
+program
+  .command('classify')
+  .description('pone dominio, título y fecha del hecho con el modelo local')
+  .argument('[id]', 'una memoria; sin id, las que no tengan dominio')
+  .option('--limit <n>', 'cuántas', '20')
+  .action(async (id: string | undefined, opts: Record<string, string>) => {
+    await run(async ({ deps, actor }) => {
+      let ids: string[] = [];
+      if (id) {
+        const r = await resolveMemoryId(deps.db, actor, id);
+        if (!r.ok) return r;
+        ids = [r.value];
+      } else {
+        const { rows } = await deps.db.query<{ id: string }>(
+          `select id from memories
+            where owner_id = $1 and domain_id is null and not hidden
+              and (normalized_text is not null or note is not null)
+            order by captured_at desc limit $2`,
+          [actor.ownerId, Number(opts.limit)],
+        );
+        ids = rows.map((r) => r.id);
+      }
+
+      const hechas: string[] = [];
+      for (const memId of ids) {
+        const r = await classifyMemory(deps, actor, memId);
+        // Un fallo no detiene el lote: se anota y se sigue. Reventar a la
+        // mitad dejaría medio corpus clasificado y medio no, sin decir dónde.
+        hechas.push(
+          r.ok
+            ? `✓ ${r.value.id.slice(0, 8)}  ${r.value.domain ?? '—'}  ${r.value.title}` +
+              (r.value.occurredAt ? `  (${r.value.occurredAt})` : '') +
+              `  ${r.value.confidence.toFixed(2)}`
+            : `✗ ${memId.slice(0, 8)}  ${r.message}`,
+        );
+      }
+      return { ok: true as const, value: hechas };
+    }, (ls) => (ls.length === 0 ? 'Nada que clasificar.' : ls.join('\n')));
   });
 
 program

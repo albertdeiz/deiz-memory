@@ -1,4 +1,5 @@
 import type { Actor, MemoryDetail, MemorySummary } from '../domain/types.js';
+import { extensionForMediaType, extensionOf } from '../media.js';
 import type { Deps } from '../ports.js';
 import { err, ok, type Result } from '../result.js';
 import { resolveMemoryId } from './resolve.js';
@@ -103,10 +104,16 @@ export async function fetchBlob(deps: Deps, actor: Actor, ref: string): Promise<
   if (rows.length === 0) return err('not_found', `El blob ${m.sha256} no está registrado.`);
 
   const bytes = await deps.blobs.get(rows[0]!.storage_key);
-  return ok({
-    bytes,
-    filename: m.originalFilename ?? `${m.shortId}.bin`,
-    mediaType: rows[0]!.media_type,
-    sha256: m.sha256,
-  });
+  const mediaType = rows[0]!.media_type;
+
+  // Telegram entrega las fotos SIN nombre de archivo, así que sin esto el
+  // original volvía como `a1b2c3d4.bin` y ningún visor lo abría. El media type
+  // se detectó por magic bytes al capturar, o sea que es mejor dato que
+  // cualquier nombre — derivar la extensión de ahí es lo correcto, no un
+  // parche.
+  const name = m.originalFilename && extensionOf(m.originalFilename)
+    ? m.originalFilename
+    : `${m.shortId}.${extensionForMediaType(mediaType)}`;
+
+  return ok({ bytes, filename: name, mediaType, sha256: m.sha256 });
 }

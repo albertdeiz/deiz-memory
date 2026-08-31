@@ -42,7 +42,7 @@ export async function startStack(
   // inlineIngest en los tests, no la cola: los carriles corren dentro de
   // capture() y una aserción justo después ve el resultado. Con pg-boss de por
   // medio, cada test sería una espera con reintentos.
-  const deps = { db, blobs, clock, converters } as Deps;
+  const deps = { db, blobs, clock, converters, classifier: null } as Deps;
   deps.ingest = inlineIngest(() => deps);
 
   const stack: TestStack = {

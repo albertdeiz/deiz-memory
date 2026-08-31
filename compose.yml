@@ -67,8 +67,21 @@ services:
     ports: ["127.0.0.1:8082:9000"]
     volumes: ["whispermodels:/var/lib/whisper"]
 
+  # El clasificador de F2. Local por decisión: clasificar es elegir entre ocho
+  # categorías y escribir un título de cinco palabras, y para eso un modelo
+  # chico rinde bien — a diferencia del OCR, donde fallaba justo en los dígitos.
+  #
+  # Nada sale del host, no cuesta por documento, y §14 deja de exigir verificar
+  # la retención de un tercero antes de mandarle una receta.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports: ["127.0.0.1:11434:11434"]
+    volumes: ["ollamamodels:/root/.ollama"]
+
 volumes:
   pgdata:
   garagemeta:
   garagedata:
   whispermodels:
+  ollamamodels:

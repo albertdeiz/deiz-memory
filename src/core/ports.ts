@@ -83,10 +83,24 @@ export interface Converters {
 
 export const noConverters: Converters = { document: null, vision: null, audio: null };
 
+/**
+ * Quien decide dominio, título y fecha del hecho.
+ *
+ * Un puerto y no un cliente concreto por el mismo motivo que los carriles: el
+ * modelo es intercambiable y el core no tiene por qué saber si corre en tu
+ * máquina o en la nube. `null` es un estado legítimo — el sistema funciona sin
+ * clasificar, solo que las categorías se llenan a mano.
+ */
+export interface Classifier {
+  classify(prompt: { system: string; user: string }): Promise<unknown>;
+  available(): Promise<{ ok: boolean; detail: string }>;
+}
+
 export interface Deps {
   db: Db;
   blobs: BlobStore;
   clock: Clock;
   ingest: Ingest;
   converters: Converters;
+  classifier?: Classifier | null;
 }

@@ -3,6 +3,8 @@ import { config as loadEnv } from 'dotenv';
 import type { S3Config } from './adapters/storage/s3.js';
 import type { NormalizeConfig, VisionBackend } from './adapters/normalize/index.js';
 import type { TelegramConfig } from './adapters/chat/telegram/index.js';
+import type { ClassifyConfig } from './adapters/classify/ollama.js';
+import { defaultClassifyConfig } from './adapters/classify/ollama.js';
 import {
   defaultDocumentsConfig, defaultOcrConfig, defaultSpeechConfig,
   defaultVisionConfig, defaultVisionHttpConfig, VISION_BACKENDS,
@@ -14,6 +16,7 @@ export interface Config {
   ownerId: string | null;
   normalize: NormalizeConfig;
   telegram: TelegramConfig | null;
+  classify: ClassifyConfig;
 }
 
 type VisionEffort = 'low' | 'medium' | 'high';
@@ -87,6 +90,12 @@ export function loadConfig(): Config {
           maxDownloadBytes: positive(process.env.DM_TELEGRAM_MAX_DOWNLOAD, 20 * 1024 * 1024),
         }
       : null,
+    classify: {
+      baseUrl: process.env.DM_CLASSIFY_URL ?? defaultClassifyConfig.baseUrl,
+      model: process.env.DM_CLASSIFY_MODEL ?? defaultClassifyConfig.model,
+      apiKey: process.env.DM_CLASSIFY_API_KEY ?? null,
+      timeoutMs: positive(process.env.DM_CLASSIFY_TIMEOUT_MS, defaultClassifyConfig.timeoutMs),
+    },
     normalize: {
       documents: {
         baseUrl: process.env.DM_DOCUMENTS_URL ?? defaultDocumentsConfig.baseUrl,

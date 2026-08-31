@@ -643,6 +643,14 @@ exista un título, media biblioteca no tiene cómo nombrarse.
 Todavía sin schemas tipados. Comando `/<slug>` para listar.
 _Listo cuando:_ creas un dominio nuevo desde el chat, mandas algo y cae ahí — y `/salud`
 te lista tus consultas ordenadas por fecha real, no por fecha de captura.
+> **Construido.** Tabla `domains` con CRUD (crear avisa si se solapa, no hay borrado
+> duro: archivar y fusionar), `/<slug>` resuelto contra la tabla, y clasificador con
+> **IA local** (Ollama, `qwen2.5:3b`) que arma su prompt en runtime desde las
+> descripciones. Lo que devuelve se valida: un dominio inventado se descarta, una fecha
+> del futuro también. Lo que puso la persona nunca se pisa. 219 tests.
+>
+> El modelo es local aquí y no en el carril de visión a propósito: elegir entre ocho
+> categorías le sale bien a un modelo chico; leer un RUT sin equivocarse, no.
 
 **F3 — Preguntas en lenguaje natural.** Recuperación híbrida (filtro por dominio y fecha
 + semántica) con cita obligatoria a la fuente.

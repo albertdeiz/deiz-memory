@@ -5,7 +5,7 @@ Memoria personal externa. Le mandas cualquier cosa y después le preguntas.
 El diseño completo está en [CLAUDE.md](./CLAUDE.md); los flujos, en
 [CASOS-DE-USO.md](./CASOS-DE-USO.md). Esto es lo que hace falta para correrlo.
 
-**Estado: F2 (a medias).** Captura, normalización por carriles, búsqueda full-text, y un
+**Estado: F2.** Captura, normalización por carriles, búsqueda full-text, y un
 **canal de chat**: Telegram, o un canal en memoria para probar sin token.
 Lo que mandas se lee por dentro: documentos con markitdown, fotos y escaneos con
 OCR, notas de voz con Whisper. Los tres carriles son **servicios en contenedores
@@ -57,6 +57,7 @@ dm domains                       tus categorías, con cuántas tiene cada una
 dm domains create <n> --desc ""  crea una; la descripción ES el prompt
 dm domains edit|archive|merge    renombrar · sacar de circulación · fusionar
 dm in <categoría>                lo de esa categoría, por fecha del hecho
+dm classify [id]                 dominio, título y fecha del hecho, con IA local
 
 dm ls [--limit N] [--offset N] [--hidden]
 dm search "<consulta>"           comillas para frases, - para excluir
@@ -118,6 +119,36 @@ de más de 20 MB** y no hay forma de esquivarlo; si te topas con eso, se
 self-hostea `tdlib/telegram-bot-api` y se apunta `TELEGRAM_API_ROOT` ahí. Y los
 chats de bot **no son E2E**: Telegram puede leer lo que le mandes (§14 ya lo
 asume).
+
+## El clasificador es local
+
+Dominio, título corto y fecha del hecho los pone un modelo que corre en el mismo
+compose (Ollama, `qwen2.5:3b`). Nada sale del host y no cuesta por documento.
+
+**Es la decisión opuesta a la del carril de visión, y a propósito.** Clasificar
+es elegir entre ocho categorías y escribir un título de cinco palabras: un
+modelo chico rinde bien. Leer un número de póliza no: ahí los modelos chicos
+fallan justo en los dígitos, y por eso el OCR clásico se quedó con ese carril.
+
+El prompt **se arma en runtime desde la tabla `domains`** — no hay una lista de
+categorías escrita en el código, en ningún lado. Por eso la `description` de un
+dominio no es documentación: es literalmente lo que el modelo lee para decidir.
+
+Lo que devuelve se valida contra la realidad antes de guardarlo: un dominio que
+no existe se descarta en vez de crearse, y una fecha del futuro o con formato
+inventado se cae a null. Regla dura 2: no inventar.
+
+**Lo que tú pusiste gana.** Si escribiste un título o una fecha al capturar, el
+clasificador no los toca — rellena huecos, no corrige decisiones. Y si queda con
+poca confianza, la memoria pasa a la bandeja de `dm review`.
+
+```bash
+DM_CLASSIFY_URL=http://localhost:11434/v1   # cualquier API compatible con OpenAI
+DM_CLASSIFY_MODEL=qwen2.5:3b
+```
+
+En Docker sobre macOS esto corre en CPU (~12 s por documento). Si quieres que
+vuele en tu Mac, Ollama nativo usa Metal: apunta `DM_CLASSIFY_URL` al host.
 
 ## Los tres carriles
 

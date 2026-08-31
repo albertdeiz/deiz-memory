@@ -21,6 +21,8 @@ export {
 export {
   listReview, countReview, type ReviewItem, type ReviewInput, type ReviewCounts,
 } from './ops/review.js';
+export { classifyMemory, LOW_CONFIDENCE, type ClassifyOutcome } from './classify/run.js';
+export { buildPrompt, validate, classifySchema, type Classification } from './classify/prompt.js';
 export { normalizeMemory, type NormalizeOutcome, type Attempt } from './normalize/run.js';
 export { lanesFor, isPoor, clamp, POOR_TEXT_CHARS, MAX_NORMALIZED_CHARS, LANES } from './normalize/lanes.js';
 export { storageKey } from './ops/rows.js';

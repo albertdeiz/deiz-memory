@@ -203,6 +203,42 @@ La búsqueda ignora tildes y aplica stemming español: `mecanico` encuentra
 *mecánico*, `recetas` encuentra *recetó*. Cubre el título, tu nota, el texto
 extraído del archivo y el nombre del archivo.
 
+### El stemming a veces trae un primo lejano
+
+El mismo mecanismo que hace que `recetas` encuentre *recetó* corta las palabras
+hasta su raíz, y esa raíz a veces la comparten palabras que no tienen nada que
+ver. Caso real de este corpus:
+
+| Palabra | Raíz |
+|---|---|
+| `deducible` (lo que buscas) | `deduc` |
+| `deducida`, `deducir` (lo que hay en un poder notarial) | `deduc` |
+
+Buscar el deducible del seguro trae también un mandato judicial, porque en
+español jurídico chileno **"deducir una acción" es presentar una demanda**. El
+stemmer corta terminaciones; no sabe de sentidos.
+
+No es un bug que convenga arreglar bajando el stemming: perderías mucho más de
+lo que ganas. Si molesta, las comillas piden la palabra exacta:
+
+```bash
+dm search '"deducible"'          # sin stemming, frase literal
+```
+
+El arreglo de fondo llega con **F2**: un poder notarial no cae en el dominio
+*seguros*, así que filtrar por dominio deja fuera al primo sin tocar la búsqueda.
+
+### Si algo no aparece, puede que aún no lo haya leído
+
+Buscar solo alcanza el contenido de un archivo **después** de que un carril lo
+procesó, y eso lo hace `dm worker`. Sin el worker corriendo, lo que capturas se
+guarda entero pero es invisible por dentro.
+
+No hay que adivinarlo. `dm show` lo dice —*carril: todavía sin normalizar*—, el
+bot lo agrega a cualquier búsqueda —*(falta 1 cosa por leer)*—, y `dm doctor` lo
+cuenta. Es a propósito: una búsqueda que responde "no lo tengo" mientras un OCR
+corre está mintiendo.
+
 ## El nombre del archivo casi nunca significa algo
 
 `IMG_20260114_093312.jpg`, `WhatsApp Document 2026-01-14 at 09.33.12.pdf`,

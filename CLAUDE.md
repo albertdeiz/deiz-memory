@@ -301,7 +301,11 @@ active        true | false
 created_at
 ```
 
-**`description` no es documentación: es el prompt.** El clasificador se arma en runtime
+**`description` no es documentación: es el prompt.** Y está medido: sobre 170
+documentos reales, con la descripción de "Hogar" hablando solo de garantías y gastos
+comunes, el manual de la alarma del departamento quedó **sin dominio y con 0,95 de
+confianza** — el modelo tenía razón, no calzaba. Ampliar la descripción lo movió a
+`hogar` con 0,9, sin tocar una línea de código. El clasificador se arma en runtime
 concatenando las descripciones de los dominios activos. Un dominio con descripción vaga
 clasifica mal. Por eso al crear uno, el bot pide o propone una descripción de una línea:
 es el único campo que de verdad mueve la precisión.

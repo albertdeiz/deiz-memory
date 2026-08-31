@@ -134,6 +134,16 @@ El prompt **se arma en runtime desde la tabla `domains`** — no hay una lista d
 categorías escrita en el código, en ningún lado. Por eso la `description` de un
 dominio no es documentación: es literalmente lo que el modelo lee para decidir.
 
+**Y eso se nota.** En la primera pasada sobre 170 documentos, 73 quedaron sin
+dominio — entre ellos el manual de la alarma del depto, con 0,95 de confianza.
+No era un fallo del modelo: la descripción de *Hogar* hablaba de garantías,
+técnicos y gastos comunes, y un manual de alarma no está ahí. Ampliar la
+descripción —**editar datos, sin tocar código ni desplegar**— lo movió a `hogar`
+con 0,9.
+
+Si una categoría te queda vacía o se llena de cosas raras, el arreglo casi
+siempre es `dm domains edit <slug> --desc "..."` y volver a clasificar.
+
 Lo que devuelve se valida contra la realidad antes de guardarlo: un dominio que
 no existe se descarta en vez de crearse, y una fecha del futuro o con formato
 inventado se cae a null. Regla dura 2: no inventar.

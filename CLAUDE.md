@@ -49,6 +49,8 @@ Restricciones duras, no aspiraciones:
    vencido, o no se responde.
 4. **Confirmación diferida.** Si el sistema duda, guarda igual y deja la duda en una
    bandeja de revisión. Nunca bloquea la captura con preguntas.
+   _(La mitad de esto ya funciona: nada bloquea la captura y las dudas quedan marcadas
+   en la fila. La bandeja donde verlas se construye en **F1.6**.)_
 5. **Respuesta útil > respuesta completa.** El dato y su fuente, no un resumen de 400
    palabras.
 6. **El original es sagrado.** El blob crudo nunca se borra ni se sobreescribe. Todo lo
@@ -605,6 +607,27 @@ medir de verdad, con el pulgar.
 > conversación—, y `route()` exige un `Actor`, de modo que sin identidad vinculada no
 > existe el camino para llamar a nada (regla dura 9).
 > Pendiente del criterio de listo: probarlo con un bot real desde el teléfono.
+
+**F1.6 — Bandeja de revisión.** La deuda que dejó F1: los carriles ya marcan cosas
+—OCR de baja confianza, transcripción cortada, un formato que no se pudo leer— y no hay
+dónde verlas. §3.4 promete la bandeja, §7 la dibuja, §17 la define y el modelo de datos
+tiene `needs_review`; ninguna fase la construía. Hoy revisar es escribir SQL.
+
+Tres cosas concretas que hay que arreglar juntas, porque son la misma:
+
+- **`status` miente.** `needs_review` no se escribe nunca —solo existe en el CHECK de la
+  001— y peor: una memoria que falló queda como `normalized`, porque una corrida con
+  error no toca el estado y F0 la había marcado así cuando su nota vivía en
+  `normalized_text`. El estado tiene que reflejar la realidad o no sirve de señal.
+- **Reintentar no siempre puede ayudar.** `dm reprocess --failed` sirve cuando la causa
+  fue transitoria (la API caída, un servicio apagado). Para un HEIC que el carril no
+  sabe leer, reintentar es un botón que no hace nada. Hay que distinguir el fallo que se
+  arregla solo del que necesita código.
+- **La confirmación no nombra lo afectado.** `purge` dice qué va a borrar; `reprocess`
+  dice "3 memorias" y ya. `Affected[]` existe justo para eso.
+
+_Listo cuando:_ `dm review` te muestra qué quedó dudoso y por qué, y puedes decidir sobre
+cada cosa sin abrir `psql`.
 
 **F2 — Dominios y clasificación.** Tabla `domains` con su CRUD desde el chat (§9), y
 clasificador que se arma en runtime desde ella: dominio, título corto y fecha del hecho.

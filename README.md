@@ -10,7 +10,7 @@ El diseño completo está en [CLAUDE.md](./CLAUDE.md); los flujos, en
 Lo que mandas se lee por dentro: documentos con markitdown, fotos y escaneos con
 OCR, notas de voz con Whisper. Los tres carriles son **servicios en contenedores
 propios**, así que el mismo `docker compose up` levanta esto en tu máquina, en un
-VPS o en una Raspberry Pi. Sin canales de mensajería todavía.
+VPS o en una Raspberry Pi.
 
 ## Arrancar
 
@@ -227,6 +227,29 @@ dm search '"deducible"'          # sin stemming, frase literal
 
 El arreglo de fondo llega con **F2**: un poder notarial no cae en el dominio
 *seguros*, así que filtrar por dominio deja fuera al primo sin tocar la búsqueda.
+
+### Lo que quedó dudoso: cómo revisarlo hoy
+
+Cuando un carril no puede o sale con poca confianza, la memoria se guarda igual
+y la duda queda anotada en la fila. Eso es §3.4 funcionando — la captura nunca
+se bloquea con preguntas.
+
+Lo que **todavía no existe** es la bandeja donde verlas. `dm doctor` te da el
+número y `dm reprocess --failed` las reintenta a ciegas; para saber qué pasó hay
+que ir a la base:
+
+```sql
+select left(id::text,8), coalesce(title, original_filename),
+       normalization_lane, normalization_error
+  from memories where normalization_error is not null;
+```
+
+Y ojo con reintentar: sirve cuando la causa fue transitoria —un servicio
+apagado, la API caída—. Si el carril no sabe leer el formato, reprocesar no va a
+cambiar nada hasta que cambie el código.
+
+`dm review` llega en **F1.6**, junto con arreglar que `status` refleje la
+realidad: hoy una memoria que falló puede figurar como `normalized`.
 
 ### Si algo no aparece, puede que aún no lo haya leído
 

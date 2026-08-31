@@ -1,4 +1,5 @@
 import type { MemoryDetail, MemorySummary } from '../../core/domain/types.js';
+import type { ReviewItem } from '../../core/ops/review.js';
 import type { Result } from '../../core/result.js';
 import { meaningfulName } from '../../core/filenames.js';
 
@@ -87,6 +88,48 @@ export function renderDetail(m: MemoryDetail): string {
   if (m.note) lines.push('', 'tu nota:', m.note);
   if (m.normalizedText) lines.push('', 'del archivo:', m.normalizedText);
   return lines.join('\n');
+}
+
+/**
+ * La bandeja de revisión.
+ *
+ * Lo que importa acá no es la lista: es que cada línea diga **qué hacer**. Una
+ * bandeja que enumera problemas sin decir cuál se arregla reintentando y cuál
+ * necesita otra cosa te deja igual que antes, mirando psql.
+ */
+export function renderReview(items: ReviewItem[]): string {
+  if (items.length === 0) return 'Nada que revisar.';
+
+  const lines = items.map((m) => {
+    const que = m.title ?? meaningfulName(m.originalFilename) ?? `(${kindOf(m.mediaType)} sin nombre)`;
+    const salvado = m.chars > 0 ? `  · quedaron ${m.chars} caracteres` : '  · sin texto';
+    const accion =
+      m.retryable === true ? 'reintentar sirve  → dm reprocess ' + m.shortId
+      : m.retryable === false ? 'reintentar NO sirve: necesita otro carril o convertir el archivo'
+      : 'no se sabe si sirve reintentar (falló antes de que el sistema distinguiera)';
+    return [
+      `${m.shortId}  ${humanDate(m.capturedAt)}  ${que}${salvado}`,
+      `           ${m.error}`,
+      `           ${accion}`,
+    ].join('\n');
+  });
+
+  const reintentables = items.filter((m) => m.retryable === true).length;
+  const sinClasificar = items.filter((m) => m.retryable === null).length;
+
+  // Decir "ninguna se arregla reintentando" cuando en realidad no se sabe sería
+  // exactamente la clase de afirmación falsa que esta bandeja existe para
+  // evitar. Sin dato, se dice que no hay dato.
+  const cola =
+    reintentables > 0
+      ? `\n\n${reintentables} de ${items.length} se pueden reintentar: dm reprocess --failed`
+      : sinClasificar === items.length
+        ? '\n\nTodavía no sé cuáles se arreglan reintentando; corre dm reprocess --failed --yes una vez y lo sabré.'
+        : sinClasificar > 0
+          ? `\n\nNinguna de las clasificadas se arregla reintentando (${sinClasificar} sin clasificar).`
+          : '\n\nNinguna se arregla reintentando.';
+
+  return lines.join('\n\n') + cola;
 }
 
 /** Errores y confirmaciones: qué pasó y qué hacer, sin disculpas ni vaguedad. */

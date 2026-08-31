@@ -2,7 +2,7 @@ import type { Uuid } from '../domain/types.js';
 import { shortId } from '../domain/types.js';
 import { looksLikeText } from '../media.js';
 import type { Converter, Deps, ExtractInput } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
+import { err, isPermanent, ok, type Result } from '../result.js';
 import { canonical, clamp, isPoor, lanesFor, type Lane } from './lanes.js';
 
 /** Qué se intentó y cómo salió. Es lo que hace legible un reproceso a los 6 meses. */
@@ -112,12 +112,22 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
   const attempts: Attempt[] = [];
   let best: { text: string; lane: Lane; detail: Record<string, unknown>; incomplete?: string } | null = null;
   let unfinished: string | null = null;
+  // Arranca en `true` y solo baja: si CUALQUIER carril falló por algo
+  // transitorio, reintentar puede servir. Se necesita que todos los caminos
+  // estén cerrados para decir que no.
+  let retryable = false;
+  let anyFailure = false;
 
   for (const lane of candidates) {
     const converter = converterFor(deps, lane);
     if (!converter) {
       attempts.push({ lane, ok: false, detail: 'carril no configurado' });
       unfinished ??= `el carril "${lane}" no está configurado`;
+      anyFailure = true;
+      // Configurar un carril es cambiar el entorno, no volver a intentar. Pero
+      // una vez configurado el reproceso sí sirve, así que cuenta como algo que
+      // se arregla sin tocar código.
+      retryable = true;
       continue;
     }
     try {
@@ -141,6 +151,8 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
     } catch (e) {
       attempts.push({ lane, ok: false, detail: message(e) });
       unfinished ??= `el carril "${lane}" falló: ${message(e)}`;
+      anyFailure = true;
+      if (!isPermanent(e)) retryable = true;
     }
   }
 
@@ -161,6 +173,10 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
     text: finalText,
     lane: best?.lane ?? 'none',
     error,
+    // Un texto incompleto o de poca confianza no falló: el carril hizo lo que
+    // podía. Reintentarlo daría exactamente lo mismo, así que tampoco es
+    // reintentable — lo que necesita es otro carril, u ojos.
+    retryable: error === null ? null : anyFailure ? retryable : false,
     detail: { ...(best?.detail ?? {}), attempts, ...(clamped.truncated ? { truncated: true } : {}) },
   });
 
@@ -178,6 +194,8 @@ interface Saved {
   text: string | null;
   lane: Lane;
   error: string | null;
+  /** `null` cuando no hubo error; si no, si `dm reprocess` puede ayudar. */
+  retryable?: boolean | null;
   detail: Record<string, unknown>;
 }
 
@@ -210,9 +228,14 @@ async function save(deps: Deps, id: Uuid, s: Saved): Promise<void> {
             normalization_detail = case when ${keep} then normalization_detail else $5::jsonb end,
             normalized_at        = case when ${keep} then normalized_at        else $6       end,
             normalization_error  = $4,
-            status               = case when $4::text is null then 'normalized' else status end,
+            normalization_retryable = $7,
+            -- El estado dice la verdad: lo que necesita una mirada humana
+            -- queda en needs_review. Antes una corrida con error dejaba el
+            -- estado anterior, y una memoria sin una sola letra extraida podia
+            -- figurar como normalizada.
+            status               = case when $4::text is null then 'normalized' else 'needs_review' end,
             updated_at           = now()
       where id = $1`,
-    [id, s.text, s.lane, s.error, JSON.stringify(s.detail), deps.clock.now()],
+    [id, s.text, s.lane, s.error, JSON.stringify(s.detail), deps.clock.now(), s.retryable ?? null],
   );
 }

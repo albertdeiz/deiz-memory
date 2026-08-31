@@ -46,6 +46,7 @@ export async function reprocess(
   input: ReprocessInput,
 ): Promise<Result<ReprocessResult>> {
   let ids: Uuid[];
+  let labels = new Map<string, string | null>();
 
   if (input.ref) {
     const resolved = await resolveMemoryId(deps.db, actor, input.ref);
@@ -83,23 +84,38 @@ export async function reprocess(
     }
 
     params.push(clampLimit(input.limit));
-    const { rows } = await deps.db.query<{ id: string }>(
-      `select m.id from memories m
+    // Se trae también con qué nombrarlas: una confirmación que dice "3
+    // memorias" no te deja decidir nada. `Affected[]` existe para esto y purge
+    // ya lo usa así.
+    const { rows } = await deps.db.query<{ id: string; label: string | null }>(
+      `select m.id, coalesce(m.title, m.original_filename) as label
+         from memories m
         where ${where.join(' and ')}
         order by m.captured_at desc
         limit $${params.length}`,
       params,
     );
     ids = rows.map((r) => r.id);
+    labels = new Map(rows.map((r) => [r.id, r.label]));
   }
 
   if (ids.length === 0) return ok({ queued: 0, ids: [], shortIds: [] });
 
   if (ids.length > 1 && !input.confirm) {
+    // Se nombran hasta diez: más que eso es un muro y deja de informar.
+    const shown = ids.slice(0, 10);
+    const affects = shown.map((id) => ({
+      kind: 'memory',
+      id,
+      label: labels.get(id) ?? shortId(id),
+    }));
+    if (ids.length > shown.length) {
+      affects.push({ kind: 'more', id: 'resto', label: `…y ${ids.length - shown.length} más` });
+    }
     return needsConfirmation(
       `Reprocesar ${ids.length} memorias vuelve a correr los carriles sobre cada original. ` +
         'No se pierde nada —el archivo no se toca— pero el carril de visión se paga por token.',
-      [{ kind: 'memories', id: `${ids.length}`, label: `${ids.length} memorias` }],
+      affects,
     );
   }
 

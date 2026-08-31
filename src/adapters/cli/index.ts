@@ -18,11 +18,12 @@ import { systemClock, type Deps } from '../../core/ports.js';
 import type { Actor, Lane } from '../../core/domain/types.js';
 import type { Result } from '../../core/result.js';
 import {
-  capture, createOwner, fetchBlob, list, listIdentities, listOwners, mintPairingCode,
-  purge, reprocess, resolveActor, search, setHidden, show, LANES,
+  capture, countReview, createOwner, fetchBlob, list, listIdentities, listOwners,
+  listReview, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
+  show, LANES,
 } from '../../core/index.js';
 import { EXIT, exitCodeFor } from './exit.js';
-import { renderDetail, renderFailure, renderList } from './format.js';
+import { renderDetail, renderFailure, renderList, renderReview } from './format.js';
 
 const program = new Command();
 program
@@ -248,14 +249,20 @@ program
               where owner_id = $1`,
             [who.value],
           );
-          const { pendientes, fallidas } = rows[0]!;
-          const idle = pendientes === '0' && fallidas === '0';
+          const { pendientes } = rows[0]!;
+          const bandeja = await countReview(db, { ownerId: who.value });
+          const idle = pendientes === '0' && bandeja.total === 0;
+          // Se distingue lo que un reproceso arregla de lo que no: mandar a
+          // reintentar algo que no puede mejorar enseña a desconfiar del consejo.
+          const consejo = bandeja.reintentables > 0 ? ' — dm reprocess --failed' : ' — dm review';
           checks.push({
             check: 'normalizar',
             ok: idle,
             detail: idle
               ? 'nada pendiente'
-              : `${pendientes} sin procesar, ${fallidas} con error — corre dm worker, o dm reprocess --failed`,
+              : `${pendientes} sin procesar, ${bandeja.total} por revisar` +
+                (bandeja.total > 0 ? ` (${bandeja.reintentables} reintentables)` : '') +
+                consejo,
             required: false,
           });
         }
@@ -536,6 +543,17 @@ program
   });
 
 // ---------------------------------------------------------------- normalización
+
+program
+  .command('review')
+  .description('lo que quedó dudoso y qué hacer con cada cosa')
+  .option('--limit <n>', 'cuántas mostrar', '20')
+  .action(async (opts: Record<string, string>) => {
+    await run(
+      ({ deps, actor }) => listReview(deps, actor, { limit: Number(opts.limit) }),
+      renderReview,
+    );
+  });
 
 program
   .command('worker')

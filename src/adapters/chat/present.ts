@@ -62,6 +62,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
           '',
           '/buscar <algo>   busca en todo lo que guardaste',
           '/pendientes      qué me falta por leer',
+          '/revisar         lo que quedó dudoso',
           '/ayuda           esto',
         ].join('\n'),
       }];
@@ -117,6 +118,23 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
         mediaType: v.blob.mediaType,
         bytes: v.blob.bytes,
       }];
+
+    case 'revisar': {
+      if (v.items.length === 0) return [{ kind: 'text', body: 'No hay nada que revisar.' }];
+      // Cada línea dice qué hacer, no solo qué pasó: una bandeja que enumera
+      // problemas sin salida te deja igual que antes.
+      const cuerpo = v.items
+        .map((m) => {
+          const que = m.title ?? meaningfulName(m.originalFilename) ?? `(${kindOf(m.mediaType)} sin nombre)`;
+          const salida =
+            m.retryable === true ? 'puedo reintentarlo'
+            : m.retryable === false ? 'reintentar no ayuda: hay que convertir el archivo o cambiar de carril'
+            : 'todavía no sé si reintentar ayuda';
+          return `· ${que}\n  ${m.error}\n  ${salida}`;
+        })
+        .join('\n\n');
+      return [{ kind: 'text', body: `Esto quedó dudoso:\n\n${cuerpo}` }];
+    }
 
     case 'resultados':
       return resultados(v, caps);

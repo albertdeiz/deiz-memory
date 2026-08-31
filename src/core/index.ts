@@ -13,6 +13,9 @@ export {
 } from './ops/identity.js';
 export { resolveMemoryId } from './ops/resolve.js';
 export { reprocess, type ReprocessInput, type ReprocessResult } from './ops/reprocess.js';
+export {
+  listReview, countReview, type ReviewItem, type ReviewInput, type ReviewCounts,
+} from './ops/review.js';
 export { normalizeMemory, type NormalizeOutcome, type Attempt } from './normalize/run.js';
 export { lanesFor, isPoor, clamp, POOR_TEXT_CHARS, MAX_NORMALIZED_CHARS, LANES } from './normalize/lanes.js';
 export { storageKey } from './ops/rows.js';

@@ -49,8 +49,7 @@ Restricciones duras, no aspiraciones:
    vencido, o no se responde.
 4. **Confirmación diferida.** Si el sistema duda, guarda igual y deja la duda en una
    bandeja de revisión. Nunca bloquea la captura con preguntas.
-   _(La mitad de esto ya funciona: nada bloquea la captura y las dudas quedan marcadas
-   en la fila. La bandeja donde verlas se construye en **F1.6**.)_
+   _(Construido en F1.6: `dm review` y `/revisar`.)_
 5. **Respuesta útil > respuesta completa.** El dato y su fuente, no un resumen de 400
    palabras.
 6. **El original es sagrado.** El blob crudo nunca se borra ni se sobreescribe. Todo lo
@@ -628,6 +627,10 @@ Tres cosas concretas que hay que arreglar juntas, porque son la misma:
 
 _Listo cuando:_ `dm review` te muestra qué quedó dudoso y por qué, y puedes decidir sobre
 cada cosa sin abrir `psql`.
+> **Construido.** `dm review` y `/revisar` en el chat, `status` que dice la verdad
+> (`needs_review`), y `PermanentError` para que sea el carril que falla —y no una regex
+> sobre el mensaje— quien declare si reintentar puede ayudar. La confirmación de
+> `reprocess` ahora nombra lo afectado, como `purge`. 193 tests.
 
 **F2 — Dominios y clasificación.** Tabla `domains` con su CRUD desde el chat (§9), y
 clasificador que se arma en runtime desde ella: dominio, título corto y fecha del hecho.

@@ -31,3 +31,27 @@ export const needsConfirmation = (message: string, affects: Affected[]): NeedsCo
 });
 
 export const isOk = <T>(r: Result<T>): r is Ok<T> => r.ok;
+
+/**
+ * Un fallo que reintentar no va a arreglar.
+ *
+ * La distinción no es cosmética: `dm reprocess --failed` sirve cuando la causa
+ * fue transitoria —un servicio apagado, la API limitando el ritmo, un timeout—
+ * y no sirve para nada cuando el carril simplemente no sabe leer ese formato.
+ * Ofrecer el mismo botón para los dos casos es ofrecer un botón que a veces no
+ * hace nada, y eso enseña a desconfiar del botón.
+ *
+ * Lo declara quien falla, que es el único que sabe. Todo lo demás se asume
+ * transitorio: equivocarse hacia "reintenta" solo cuesta una corrida; hacia
+ * "no insistas" esconde una memoria para siempre.
+ */
+export class PermanentError extends Error {
+  readonly permanent = true;
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermanentError';
+  }
+}
+
+export const isPermanent = (e: unknown): boolean =>
+  e instanceof PermanentError || (e as { permanent?: boolean })?.permanent === true;

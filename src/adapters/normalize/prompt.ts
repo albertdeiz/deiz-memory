@@ -23,11 +23,16 @@ export const TRANSCRIPTION_PROMPT = `Transcribe fielmente el contenido de este d
 - No agregues comentarios, encabezados ni "Aquí está la transcripción". Solo el contenido.
 - Si no hay texto, describe en una sola línea qué se ve.`;
 
+import { PermanentError } from '../../core/result.js';
+
 /** Los únicos formatos que aceptan tanto la API de Anthropic como las compatibles con OpenAI. */
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 export const unsupportedImage = (mediaType: string): Error =>
-  new Error(
+  // Permanente: el mismo archivo por el mismo carril va a fallar igual mañana.
+  // Se arregla convirtiendo el archivo o enseñándole el formato al carril, no
+  // reintentando.
+  new PermanentError(
     `la API no acepta ${mediaType} como imagen (solo ${IMAGE_TYPES.join(', ')} y PDF). ` +
       'Conviértelo antes de guardarlo, o vuelve a mandarlo como JPEG.',
   );

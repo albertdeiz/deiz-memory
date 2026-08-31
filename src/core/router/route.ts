@@ -5,6 +5,7 @@ import { err, ok, type Result } from '../result.js';
 import { capture, type CaptureResult } from '../ops/capture.js';
 import { fetchBlob, search, show, type BlobPayload } from '../ops/query.js';
 import { redeemPairingCode } from '../ops/identity.js';
+import { listReview, type ReviewItem } from '../ops/review.js';
 import type { Intent } from './intent.js';
 import {
   confirmIsFresh, pendingCount, readSession, writeSession,
@@ -37,6 +38,7 @@ export type Outcome =
   | { kind: 'detalle'; memory: MemoryDetail }
   | { kind: 'archivo'; blob: BlobPayload }
   | { kind: 'pendientes'; sinLeer: number }
+  | { kind: 'revisar'; items: ReviewItem[] }
   | { kind: 'ayuda' };
 
 export interface RouteInput {
@@ -72,6 +74,11 @@ export async function route(
 
     case 'pendientes':
       return ok({ kind: 'pendientes', sinLeer: await pendingCount(deps.db, actor.ownerId) });
+
+    case 'revisar': {
+      const r = await listReview(deps, actor, { limit: PAGE });
+      return r.ok ? ok({ kind: 'revisar', items: r.value }) : r;
+    }
 
     case 'capturar':
       return doCapture(deps, actor, input, null);

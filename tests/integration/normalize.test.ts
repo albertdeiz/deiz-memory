@@ -102,8 +102,10 @@ describe('carriles', () => {
     if (!detail.ok) throw new Error('no mostró');
     expect(detail.value.normalizationError).toContain('vision');
     expect(detail.value.normalizedText).toBe('vacío');
-    // El estado no avanza a normalized: esto todavía no está listo.
-    expect(detail.value.status).toBe('raw');
+    // needs_review y no normalized: el estado tiene que decir que esto necesita
+    // una mirada. Antes de la 005 se quedaba con el estado anterior y una
+    // memoria sin texto podía figurar como normalizada.
+    expect(detail.value.status).toBe('needs_review');
   });
 
   it('anota el fallo del carril sin reventar la captura', async () => {

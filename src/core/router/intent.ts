@@ -15,6 +15,7 @@ export type Intent =
   | { verb: 'accion'; action: Action }
   | { verb: 'parear'; code: string }
   | { verb: 'pendientes' }
+  | { verb: 'revisar' }
   | { verb: 'ayuda' };
 // 'aclarar' (§5) todavía no existe: no hay clasificador que dude. Llega en F2.
 
@@ -97,6 +98,7 @@ export function classify(msg: Incoming, session: Session | null): Intent {
     if (cmd === 'start' || cmd === 'empezar') return { verb: 'parear', code: arg };
     if (cmd === 'buscar' || cmd === 'busca') return { verb: 'recordar', query: arg, adivinado: false };
     if (cmd === 'pendientes') return { verb: 'pendientes' };
+    if (cmd === 'revisar' || cmd === 'revision') return { verb: 'revisar' };
     if (cmd === 'exportar') return { verb: 'accion', action: { kind: 'exportar' } };
     if (cmd === 'mas') return { verb: 'accion', action: { kind: 'mas' } };
     if (cmd === 'ayuda' || cmd === 'help') return { verb: 'ayuda' };

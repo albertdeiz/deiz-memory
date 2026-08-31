@@ -5,7 +5,7 @@ Memoria personal externa. Le mandas cualquier cosa y después le preguntas.
 El diseño completo está en [CLAUDE.md](./CLAUDE.md); los flujos, en
 [CASOS-DE-USO.md](./CASOS-DE-USO.md). Esto es lo que hace falta para correrlo.
 
-**Estado: F1.5.** Captura, normalización por carriles, búsqueda full-text, y un
+**Estado: F1.6.** Captura, normalización por carriles, búsqueda full-text, y un
 **canal de chat**: Telegram, o un canal en memoria para probar sin token.
 Lo que mandas se lee por dentro: documentos con markitdown, fotos y escaneos con
 OCR, notas de voz con Whisper. Los tres carriles son **servicios en contenedores
@@ -50,6 +50,8 @@ dm pair [--bot <usuario>]        código de un solo uso para vincular un chat
 dm identities                    qué chats están vinculados
 dm serve                         atiende el bot de Telegram
 dm chat "<mensaje>" [--file f]   conversa sin Telegram, por un canal en memoria
+
+dm review                        lo que quedó dudoso, y qué hacer con cada cosa
 
 dm ls [--limit N] [--offset N] [--hidden]
 dm search "<consulta>"           comillas para frases, - para excluir
@@ -228,28 +230,36 @@ dm search '"deducible"'          # sin stemming, frase literal
 El arreglo de fondo llega con **F2**: un poder notarial no cae en el dominio
 *seguros*, así que filtrar por dominio deja fuera al primo sin tocar la búsqueda.
 
-### Lo que quedó dudoso: cómo revisarlo hoy
+### Lo que quedó dudoso: `dm review`
 
 Cuando un carril no puede o sale con poca confianza, la memoria se guarda igual
-y la duda queda anotada en la fila. Eso es §3.4 funcionando — la captura nunca
-se bloquea con preguntas.
+y la duda queda anotada. Eso es §3.4: la captura nunca se bloquea con preguntas.
+Para verlas:
 
-Lo que **todavía no existe** es la bandeja donde verlas. `dm doctor` te da el
-número y `dm reprocess --failed` las reintenta a ciegas; para saber qué pasó hay
-que ir a la base:
-
-```sql
-select left(id::text,8), coalesce(title, original_filename),
-       normalization_lane, normalization_error
-  from memories where normalization_error is not null;
+```
+dm review          # y en el chat: /revisar
 ```
 
-Y ojo con reintentar: sirve cuando la causa fue transitoria —un servicio
-apagado, la API caída—. Si el carril no sabe leer el formato, reprocesar no va a
-cambiar nada hasta que cambie el código.
+Cada línea dice **qué hacer**, no solo qué pasó — una bandeja que enumera
+problemas sin salida te deja igual que abriendo `psql`:
 
-`dm review` llega en **F1.6**, junto con arreglar que `status` refleje la
-realidad: hoy una memoria que falló puede figurar como `normalized`.
+```
+3f842110  2026-08-30 03:34  Foto IMG_0840  · sin texto
+          el carril "vision" falló: la API no acepta image/heic como imagen…
+          reintentar NO sirve: necesita otro carril o convertir el archivo
+```
+
+**La distinción importa.** `dm reprocess --failed` arregla lo transitorio —un
+servicio apagado, la API limitando el ritmo—. Para un HEIC que ningún carril
+sabe leer es un botón que no hace nada, y ofrecerlo igual enseña a desconfiar
+del consejo. Lo declara quien falla, no una regex sobre el mensaje: los adapters
+lanzan un error marcado como permanente cuando saben que reintentar no cambiaría
+nada. Todo lo demás se asume transitorio — equivocarse hacia "reintenta" cuesta
+una corrida, hacia "no insistas" esconde una memoria para siempre.
+
+Lo que falló queda en `status = needs_review`. Antes se quedaba con el estado
+anterior, así que una memoria sin una sola letra extraída podía figurar como
+`normalized`.
 
 ### Si algo no aparece, puede que aún no lo haya leído
 

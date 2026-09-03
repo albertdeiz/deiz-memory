@@ -7,7 +7,6 @@ gobiernan.
 | ID | Caso de uso | Actor | Disparador | Resultado | Fase |
 |---|---|---|---|---|---|
 | UC-01 | [Capturar desde el chat](#uc-01--capturar-desde-el-chat) | Dueño | Manda texto, foto, audio o PDF | Memory con su blob y su texto | F0–F1 |
-| UC-02 | [Capturar por correo](#uc-02--capturar-por-correo) | Dueño | Reenvía un mail al buzón secreto | Memory padre + hijos por adjunto | F4 |
 | UC-03 | [Aclarar y revisar](#uc-03--aclarar-y-revisar) | Bot → Dueño | Extracción de baja confianza | Memory verificada o en bandeja | F1–F2 |
 | UC-04 | [Explorar y exportar](#uc-04--explorar-y-exportar) | Dueño | `/buscar` o listar categoría | Página de 5, o un PDF al chat | F0 |
 | UC-05 | [Preguntar en lenguaje natural](#uc-05--preguntar-en-lenguaje-natural) | Dueño | Pregunta libre | Dato + cita, o "no lo tengo" | F3 |
@@ -49,29 +48,6 @@ markitdown primero —barato y determinista— y solo cae a visión si el result
 pobre. El carril usado queda registrado en la Memory para poder reprocesar (UC-15).
 
 > Reglas: **4** máximo una pregunta por captura.
-
----
-
-## UC-02 · Capturar por correo
-**Actor:** el dueño · **Disparador:** reenvía un mail al buzón secreto · **Fase:** F4
-
-```mermaid
-flowchart LR
-  E["Correo a dirección secreta"] --> G{"¿remitente en allowlist?"}
-  G -->|sí| P["Memory padre<br/>remitente, asunto, cuerpo"]
-  G -->|no| Q["Cuarentena<br/>no es una memoria"]
-  P --> H1["hijo · adjunto"]
-  P --> H2["hijo · adjunto"]
-  Q --> AP["Apruebas desde el chat"]
-  AP --> P
-```
-
-**El correo entrante no está autenticado y el remitente es falsificable.** Cualquiera que
-sepa la dirección podría inyectar memorias, así que nada entra directo: lo que no pasa la
-allowlist queda en cuarentena. A cambio, el remitente es la mejor señal de clasificación
-que existe — mejor que cualquier OCR.
-
-> Reglas: **13** correo fuera de la allowlist va a cuarentena, nunca directo a memorias.
 
 ---
 

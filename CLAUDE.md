@@ -68,8 +68,7 @@ el MVP.**
 ```
 id
 owner_id          la persona dueña. Permanente, nunca cambia. En TODA fila, desde F0
-parent_id         para adjuntos de correo: hijo del email que los trajo
-source            telegram | email | manual
+source            telegram | cli | manual
 captured_at       cuándo entró al sistema
 occurred_at       cuándo pasó el hecho (≠ captured_at; se infiere después)
 raw               blob original (foto, audio, pdf, texto)
@@ -167,9 +166,8 @@ web, se resuelve dentro del chat:
 Monolito. Nada de microservicios para un sistema de un usuario.
 
 ```
-Telegram ──┐
-           ├──> Channel Adapter ──> Ingest Queue (ack inmediato)
-Correo ────┘   (identidad + espacio)
+Telegram ──> Channel Adapter ──> Ingest Queue (ack inmediato)
+             (identidad + espacio)
                                       │
                           ┌───────────┴───────────┐
                           ▼                       ▼
@@ -189,8 +187,8 @@ Correo ────┘   (identidad + espacio)
 ```
 
 **Puntos no negociables:**
-- El adapter de canal está detrás de una interfaz. Telegram y correo hoy, WhatsApp
-  después, sin tocar el core.
+- El adapter de canal está detrás de una interfaz. Telegram hoy, WhatsApp después,
+  sin tocar el core.
 - **`owner_id` en todas las tablas desde F0**, aunque los espacios compartidos lleguen
   mucho después. Meter tenancy a posteriori es una migración brutal; meterla ahora es
   una columna.
@@ -240,7 +238,6 @@ capacidades de Telegram, el segundo canal es un rewrite disfrazado de adapter.
 | DB | Postgres + pgvector | estructurado, full-text y vectores en un solo motor. Una DB, un backup |
 | Cola | pg-boss | sin Redis extra al inicio |
 | Blobs | **Garage** self-hosted (API S3), direccionable por contenido | el original es sagrado; ver §14.1 |
-| Correo | buzón dedicado + polling IMAP | segunda vía de captura; ver §11 |
 | LLM | Claude | structured outputs; modelo chico para routing y clasificación, grande para extracción |
 | Documentos → texto | **markitdown** (Python: CLI al inicio, sidecar después) | PDF/docx/xlsx/html/csv → Markdown con estructura preservada. Ver §8.1 |
 | Imágenes y escaneos | **OCR (RapidOCR/PP-OCR)**, con LLM multimodal como alternativa; HEIC se convierte a JPEG antes | markitdown **no hace OCR**; ver §8.1. En impresos el OCR lee mejor los dígitos que un modelo chico, y es gratis y reproducible |
@@ -510,49 +507,6 @@ Se mitiga por diseño, no por cuidado del usuario:
   a quién se lo vas a mostrar**.
 - Dejar de compartir es inmediato, y **siempre se avisa** al espacio (ver abajo).
 
-## 11. Correo como vía de captura
-
-Muchas de las cosas que vale la pena guardar **ya llegan por correo**: pólizas, boletas,
-reservas, resultados de exámenes. Y llegan mejor descritas que una foto: remitente,
-asunto, fecha y adjunto, todo estructurado y sin OCR de por medio.
-
-### Cómo se modela
-
-Un correo entrante genera un **Memory padre** (el mensaje: remitente, asunto, cuerpo) y
-un **Memory hijo por adjunto**, unidos por `parent_id`. Así el PDF de la póliza es
-buscable por sí mismo, pero conserva el contexto de quién lo mandó y cuándo.
-
-El **remitente es la mejor señal de clasificación que vas a tener** — mejor que
-cualquier OCR. Un correo de una aseguradora se clasifica bien antes de leer el cuerpo, y
-más adelante alimenta directo la resolución de `Entity`.
-
-### El agujero de seguridad, que es real
-
-**Cualquiera que conozca la dirección puede inyectar memorias, y el remitente es
-falsificable.** El correo entrante no está autenticado. Tres capas:
-
-1. **Dirección secreta por persona** — parte local aleatoria y larga, no `memoria@`.
-   Lo que entra por ahí queda a tu nombre, como cualquier otra captura; compartirlo es
-   un paso aparte.
-2. **Allowlist de remitentes** — tus propias direcciones. Como el flujo real es
-   *reenviar*, el remitente del sobre eres tú, y la allowlist funciona bien.
-3. **Cuarentena** — lo que no pasa la allowlist no se descarta ni se guarda como memoria:
-   queda en una bandeja aparte que apruebas desde el chat.
-
-**En chat no hay cuarentena, y es a propósito.** Las dos premisas que la justifican en
-el correo se caen: el `user_id` de un canal de chat **no es falsificable** —lo garantiza
-el canal—, y un mensaje de alguien con quien nunca te pareaste jamás es algo que quieras
-guardar. Ponerlo en cuarentena sería guardar contenido de un extraño bajo tu `owner_id`,
-en tu disco, para revisarlo después: peor que descartarlo. En chat se descarta, y el
-vínculo se hace con un código de un solo uso (§10).
-
-### Implementación
-
-Empezar con **un buzón dedicado y polling IMAP**: cero DNS, cero MX, cero endpoint
-público expuesto, cero superficie de spam. La ingesta ya es asíncrona, así que unos
-minutos de latencia no le importan a nadie. Si algún día molesta, se pasa a un webhook
-de correo entrante (Cloudflare Email Routing → Worker, o Postmark inbound).
-
 ## 12. Roadmap
 
 Pasos chicos y estables. Cada fase tiene que ser útil sola y quedar en verde antes de
@@ -660,12 +614,6 @@ te lista tus consultas ordenadas por fecha real, no por fecha de captura.
 + semántica) con cita obligatoria a la fuente.
 _Listo cuando:_ confías en la respuesta sin ir a abrir el PDF.
 
-**F4 — Correo como segunda vía.** Buzón por persona, polling IMAP, allowlist y
-cuarentena (§11). Padre + hijos por adjunto.
-_Listo cuando:_ reenvías la póliza que te llegó por mail y queda guardada y clasificada
-sin que hagas nada más.
-_Puede adelantarse antes de F3 si la captura resulta ser el cuello de botella._
-
 **F5 — Espacios compartidos.** Tabla `memory_space`, participantes, `/invitar` con link
 de un solo uso, categorías del espacio por unanimidad, confirmación al compartir (§10).
 El `owner_id` ya existe desde F0; acá se agrega la relación encima.
@@ -702,7 +650,6 @@ Invariantes del producto:
 11. Nadie tiene autoridad sobre memorias ajenas: ni para verlas, ni para dejar de
     compartirlas, ni para borrarlas. Los espacios no tienen administrador.
 12. Todo retiro de contenido compartido se avisa al espacio. Nada desaparece en silencio.
-13. Correo fuera de la allowlist va a cuarentena. Nunca directo a memorias.
 
 ## 14. Privacidad y seguridad
 
@@ -716,8 +663,6 @@ Esto guarda datos médicos y financieros. El modelo de amenaza, honesto:
 - **Aislamiento por dueño y por membresía.** Toda query lleva ese filtro. Es la
   superficie de fuga más peligrosa del sistema una vez que hay más de una persona: un
   `WHERE` olvidado no es un bug, es filtrar la ficha médica de alguien.
-- **Correo entrante no está autenticado** y el remitente es falsificable: dirección
-  secreta + allowlist + cuarentena (§11).
 - **Nivel sensible:** ciertos datos (bancarios, diagnósticos, claves de acceso) exigen
   PIN antes de mostrarse. Protege el caso "me robaron el teléfono desbloqueado".
 - Contraseñas: **no se guardan**. Eso vive en un gestor de contraseñas real; acá solo
@@ -816,8 +761,6 @@ De uso, no de sistema:
 - **Consultas que igual terminaron en el documento original** — si es alto, el recall
   no está sirviendo, por más que haya respondido algo.
 - **Tasa de "no lo tengo"** — sana si es honesta, alarmante si el dato sí estaba.
-- **Capturas por correo vs por chat** — si el correo domina, la fricción del chat es más
-  alta de lo que crees.
 - **Miembros activos en espacios compartidos** — un espacio donde solo escribe una
   persona no es compartir, es ruido.
 
@@ -867,7 +810,6 @@ declaradas y no asumidas (§7.1). Se escribe una vez y sirve para los dos.
 - **Memory** — captura cruda inmutable. La unidad del sistema.
 - **Domain** — categoría editable en runtime; su `description` alimenta el clasificador.
 - **Space** — relación de compartición entre personas. No es dueño de las memorias.
-- **Cuarentena** — correo entrante que no pasó la allowlist; espera aprobación.
 - **Purgar** — la única forma de borrar de verdad: explícita, confirmada y auditada.
 - **Carril** — ruta de normalización según el tipo de entrada (§8.1).
 - **Fact** — dato tipado extraído, con vigencia. Fase tardía.

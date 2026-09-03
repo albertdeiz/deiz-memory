@@ -54,9 +54,10 @@ export async function serveChannel(
     const who = await identityOwner(deps.db, msg.conversation.channel, msg.externalUserId);
 
     if (!who) {
-      // Sin identidad no hay Actor, y sin Actor no hay operación posible. Nada
-      // de cuarentena: guardar lo que manda un extraño bajo tu owner_id sería
-      // peor que descartarlo (§11 resuelve otro problema, el del correo).
+      // Sin identidad no hay Actor, y sin Actor no hay operación posible.
+      // Tampoco se guarda para revisar después: el user id de un canal de chat
+      // no es falsificable, y archivar lo que manda un extraño bajo tu owner_id
+      // sería peor que descartarlo.
       const code = onlyPairingCode(msg);
       if (code) {
         const res = await pair(deps, msg.conversation, msg.externalUserId, code, now, msg.displayName);

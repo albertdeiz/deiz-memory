@@ -19,10 +19,10 @@ import { systemClock, type Deps } from '../../core/ports.js';
 import type { Actor, Lane } from '../../core/domain/types.js';
 import type { Result } from '../../core/result.js';
 import {
-  archiveDomain, capture, classifyMemory, countReview, createDomain, createOwner, editDomain,
+  acceptProposal, archiveDomain, capture, classifyMemory, countReview, createDomain, createOwner, editDomain,
   fetchBlob, findDomain, list, listDomains, listIdentities, listOwners, listReview,
   mergeDomains, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
-  resolveMemoryId, show, LANES,
+  proposeDomains, resolveMemoryId, show, LANES,
 } from '../../core/index.js';
 import { EXIT, exitCodeFor } from './exit.js';
 import { renderDetail, renderFailure, renderList, renderReview } from './format.js';
@@ -295,7 +295,7 @@ program
   .option('--text <texto>', 'texto suelto o pie del archivo')
   .option('--title <titulo>', 'título corto')
   .option('--occurred <fecha>', 'cuándo pasó el hecho (ej. 2026-03-14)')
-  .option('--source <origen>', 'cli | telegram | email | manual', 'cli')
+  .option('--source <origen>', 'cli | telegram | manual', 'cli')
   .option('--wait', 'corre los carriles ahora y espera, en vez de encolar')
   .action(async (path: string | undefined, opts: Record<string, string | boolean>) => {
     const occurredAt = parseDate(opts.occurred as string | undefined);
@@ -617,6 +617,45 @@ domains
   .argument('<dominio>')
   .action(async (ref: string) => {
     await run(({ deps, actor }) => archiveDomain(deps.db, actor, ref), (d) => `/${d.slug} archivado`);
+  });
+
+domains
+  .command('propose')
+  .description('busca categorías que te faltan entre lo que quedó sin clasificar')
+  .option('--accept <palabra>', 'acepta una propuesta y mueve sus memorias')
+  .option('--label <nombre>', 'nombre distinto al propuesto')
+  .option('--desc <descripcion>', 'descripción distinta a la propuesta')
+  .action(async (opts: Record<string, string>) => {
+    await run(async ({ deps, actor }) => {
+      const r = await proposeDomains(deps, actor);
+      if (!r.ok) return r;
+
+      if (!opts.accept) {
+        return { ok: true as const, value: r.value.map((p) =>
+          [
+            `${p.memoryIds.length} cosas parecen "${p.label}" (/${p.slug})`,
+            `   descripción sugerida: ${p.description}`,
+            ...p.examples.map((e) => `   · ${e}`),
+            `   aceptar: dm domains propose --accept ${p.slug}`,
+          ].join('\n')) };
+      }
+
+      // Se compara contra el slug y no contra la palabra: una etiqueta como
+      // "fondo de pantalla" trae espacios y no se puede escribir como argumento.
+      const buscado = String(opts.accept).toLowerCase();
+      const elegida = r.value.find((p) => p.keyword === buscado || p.slug === buscado);
+      if (!elegida) {
+        return { ok: false as const, kind: 'not_found' as const,
+                 message: `No hay una propuesta "${opts.accept}". Corre dm domains propose.` };
+      }
+      const done = await acceptProposal(deps, actor, {
+        label: opts.label ?? elegida.label,
+        description: opts.desc ?? elegida.description,
+        memoryIds: elegida.memoryIds,
+      });
+      if (!done.ok) return done;
+      return { ok: true as const, value: [`/${done.value.domain.slug}  ${done.value.moved} memoria(s) movidas`] };
+    }, (ls) => (ls.length === 0 ? 'No veo categorías que te falten.' : ls.join('\n\n')));
   });
 
 domains

@@ -41,7 +41,7 @@ describe('quién puede hablarle', () => {
     const out = await ch.send({ text: 'guárdame esto' });
     expect(text(out)).toBe('No te conozco.');
 
-    // Nada de cuarentena: no se guarda contenido de un extraño ni para revisar.
+    // No se guarda contenido de un extraño, ni siquiera para revisarlo después.
     const { rows } = await s.deps.db.query<{ n: string }>('select count(*)::text n from memories');
     expect(rows[0]!.n).toBe('0');
   });

@@ -64,6 +64,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
           '/pendientes      qué me falta por leer',
           '/revisar         lo que quedó dudoso',
           '/dominios        tus categorías, y /<categoría> para ver una',
+          '/proponer        categorías que te faltan, según lo que guardaste',
           '/ayuda           esto',
         ].join('\n'),
       }];
@@ -142,6 +143,24 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
         .map((d) => `/${d.slug}  ${d.label}${d.count ? `  (${d.count})` : ''}`)
         .join('\n');
       return [{ kind: 'text', body: `Tus categorías:\n\n${cuerpo}` }];
+    }
+
+    case 'propuestas': {
+      if (v.items.length === 0) return [{ kind: 'text', body: 'No veo categorías que te falten.' }];
+      // Se muestran los ejemplos para que puedas decidir mirando, no a ciegas.
+      // Y se propone: crear lo decides tú, desde la terminal (§9).
+      const cuerpo = v.items
+        .map((p) => [
+          `${p.memoryIds.length} cosas parecen "${p.label}"`,
+          `  ${p.description}`,
+          ...p.examples.map((e) => `  · ${e}`),
+        ].join('\n'))
+        .join('\n\n');
+      return [{
+        kind: 'text',
+        body: `Esto es lo que veo que te falta:\n\n${cuerpo}\n\n` +
+          'Si alguna te sirve: dm domains propose --accept <slug>',
+      }];
     }
 
     case 'enDominio': {

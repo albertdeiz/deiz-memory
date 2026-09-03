@@ -58,6 +58,8 @@ dm domains create <n> --desc ""  crea una; la descripción ES el prompt
 dm domains edit|archive|merge    renombrar · sacar de circulación · fusionar
 dm in <categoría>                lo de esa categoría, por fecha del hecho
 dm classify [id]                 dominio, título y fecha del hecho, con IA local
+dm domains propose               categorías que te faltan, deducidas de tus datos
+    --accept <slug> [--label --desc]
 
 dm ls [--limit N] [--offset N] [--hidden]
 dm search "<consulta>"           comillas para frases, - para excluir
@@ -85,10 +87,9 @@ cuenta, sin contraseña, sin instalar nada que no tengas ya — que es el argume
 entero de §10.
 
 **Nadie entra sin ese código.** Un mensaje de un id desconocido recibe una línea
-y nada más: no se guarda, ni siquiera para revisarlo después. A diferencia del
-correo (§11), acá no hace falta cuarentena — el `user_id` de un canal de chat no
-es falsificable, y guardar lo que manda un extraño bajo tu dueño sería peor que
-descartarlo.
+y nada más: no se guarda, ni siquiera para revisarlo después. El `user_id` de un
+canal de chat no es falsificable, así que no hay nada que verificar — y archivar
+lo que manda un extraño bajo tu dueño sería peor que descartarlo.
 
 ### El canal falso no es solo para tests
 
@@ -143,6 +144,30 @@ con 0,9.
 
 Si una categoría te queda vacía o se llena de cosas raras, el arreglo casi
 siempre es `dm domains edit <slug> --desc "..."` y volver a clasificar.
+
+### Las categorías que te faltan las encuentra solo
+
+No tienes que anticipar tus propias categorías: hoy no sabes qué vas a guardar
+en dos años. `dm domains propose` mira lo que quedó sin clasificar y busca
+racimos entre las etiquetas que el clasificador ya puso.
+
+```
+11 cosas parecen "Webdox" (/webdox)
+   descripción sugerida: webdox: corporativo, wallpaper, marca, fondo
+   · Wallpaper Webdox 04
+   · Banner de LinkedIn — rebrand Webdox
+   aceptar: dm domains propose --accept webdox
+```
+
+**Propone, nunca crea solo.** Que proponer y aceptar sean dos comandos distintos
+es la regla escrita en la forma del código: proponer no escribe nada. Y puedes
+cambiar el nombre y la descripción antes de aceptar —`--label`, `--desc`—
+porque esa descripción va a ser el prompt del clasificador.
+
+Usa las etiquetas que ya existen en vez de preguntarle otra vez al modelo: si
+diez documentos coinciden en "webdox", ese acuerdo es mejor señal que una
+segunda opinión. Descarta las palabras que ya cubre un dominio activo, para no
+proponerte lo que ya tienes.
 
 Lo que devuelve se valida contra la realidad antes de guardarlo: un dominio que
 no existe se descarta en vez de crearse, y una fecha del futuro o con formato

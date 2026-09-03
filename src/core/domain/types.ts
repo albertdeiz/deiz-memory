@@ -1,9 +1,9 @@
 export type Uuid = string;
 
-export type Source = 'cli' | 'telegram' | 'email' | 'manual';
+export type Source = 'cli' | 'telegram' | 'manual';
 export type Status = 'raw' | 'normalized' | 'classified' | 'needs_review' | 'verified';
 
-export const SOURCES: readonly Source[] = ['cli', 'telegram', 'email', 'manual'];
+export const SOURCES: readonly Source[] = ['cli', 'telegram', 'manual'];
 
 /** Quién ejecuta la operación. Va en TODA llamada al core (regla dura 9). */
 export interface Actor {
@@ -37,7 +37,6 @@ export interface MemorySummary {
 
 export interface MemoryDetail extends MemorySummary {
   ownerId: Uuid;
-  parentId: Uuid | null;
   status: Status;
   sha256: string | null;
   /** Lo que escribió la persona. No se regenera nunca. */

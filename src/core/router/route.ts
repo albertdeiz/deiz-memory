@@ -7,6 +7,7 @@ import { fetchBlob, search, show, type BlobPayload } from '../ops/query.js';
 import { redeemPairingCode } from '../ops/identity.js';
 import { listReview, type ReviewItem } from '../ops/review.js';
 import { findDomain, listDomains, type Domain } from '../ops/domains.js';
+import { proposeDomains, type Proposal } from '../classify/emergent.js';
 import { list } from '../ops/query.js';
 import type { Intent } from './intent.js';
 import {
@@ -42,6 +43,7 @@ export type Outcome =
   | { kind: 'pendientes'; sinLeer: number }
   | { kind: 'revisar'; items: ReviewItem[] }
   | { kind: 'dominios'; items: Domain[] }
+  | { kind: 'propuestas'; items: Proposal[] }
   | { kind: 'enDominio'; domain: Domain; items: MemorySummary[] }
   | { kind: 'ayuda' };
 
@@ -81,6 +83,11 @@ export async function route(
 
     case 'dominios':
       return ok({ kind: 'dominios', items: await listDomains(deps.db, actor) });
+
+    case 'proponer': {
+      const r = await proposeDomains(deps, actor);
+      return r.ok ? ok({ kind: 'propuestas', items: r.value }) : r;
+    }
 
     case 'enDominio': {
       const d = await findDomain(deps.db, actor, intent.ref);

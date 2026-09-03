@@ -2,7 +2,7 @@ import type { Lane, MemoryDetail, MemorySummary, Source, Status } from '../domai
 import { excerptOf, shortId } from '../domain/types.js';
 
 export const MEMORY_COLUMNS = `
-  m.id, m.owner_id, m.parent_id, m.source, m.captured_at, m.occurred_at,
+  m.id, m.owner_id, m.source, m.captured_at, m.occurred_at,
   m.original_filename, m.title, m.note, m.normalized_text, m.status, m.hidden,
   m.normalization_lane, m.normalized_at, m.normalization_error,
   m.blob_sha256, m.domain_id, m.tags, m.domain_confidence, b.media_type, b.size_bytes`;
@@ -12,7 +12,6 @@ export const MEMORY_FROM = `from memories m left join blobs b on b.sha256 = m.bl
 export interface MemoryRow {
   id: string;
   owner_id: string;
-  parent_id: string | null;
   source: string;
   captured_at: Date;
   occurred_at: Date | null;
@@ -54,7 +53,6 @@ export const toSummary = (r: MemoryRow): MemorySummary => ({
 export const toDetail = (r: MemoryRow): MemoryDetail => ({
   ...toSummary(r),
   ownerId: r.owner_id,
-  parentId: r.parent_id,
   status: r.status as Status,
   sha256: r.blob_sha256,
   note: r.note,

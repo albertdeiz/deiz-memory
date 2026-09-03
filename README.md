@@ -5,12 +5,22 @@ Memoria personal externa. Le mandas cualquier cosa y después le preguntas.
 El diseño completo está en [CLAUDE.md](./CLAUDE.md); los flujos, en
 [CASOS-DE-USO.md](./CASOS-DE-USO.md). Esto es lo que hace falta para correrlo.
 
-**Estado: F3.** Captura, normalización por carriles, búsqueda full-text, y un
+**Estado: F3, y arrancando de cero.** El 3 de septiembre de 2026 se vació entero
+—base, blobs e identidades vinculadas— para empezar a poblarlo desde el primer
+documento. El código está completo hasta F3; lo que no hay es data. Si vienes de
+antes: hay que **volver a vincular el chat** con `dm pair`.
+
+Lo que ya funciona: captura, normalización por carriles, búsqueda full-text,
+clasificación con IA local, preguntas en lenguaje natural con cita, y un
 **canal de chat**: Telegram, o un canal en memoria para probar sin token.
 Lo que mandas se lee por dentro: documentos con markitdown, fotos y escaneos con
 OCR, notas de voz con Whisper. Los tres carriles son **servicios en contenedores
 propios**, así que el mismo `docker compose up` levanta esto en tu máquina, en un
 VPS o en una Raspberry Pi.
+
+Lo único de F0 que sigue pendiente es el **backup cifrado off-site** (§14.2), y es
+el único riesgo irreversible que queda: los blobs viven en un solo host, y un blob
+perdido no se reprocesa desde nada.
 
 ## Arrancar
 
@@ -115,14 +125,25 @@ Una **pregunta** se responde con cita; una **búsqueda** (`/buscar`) lista. El
 clasificador de intención decide cuál es, y respeta lo explícito.
 
 ```
-/buscar <algo>   lista lo que coincide, de a cinco
-/dominios        tus categorías · /<categoría> para ver una
-/proponer        categorías que te faltan
-/revisar         lo que quedó dudoso
-/pendientes      qué falta por leer
-ver:N · abrir:N  el detalle, o el archivo original
-ocultar:N        sacar de resultados, sin borrar
+/buscar <algo>       lista lo que coincide, de a cinco
+/dominios            tus categorías · /<categoría> para ver una
+/crear <n>: <desc>   crea una categoría; la descripción ES el prompt
+/describir <n>: <d>  cambia la descripción · /renombrar <n>: <nuevo>
+/archivar <n>        la saca de circulación, sin tocar sus memorias
+/fusionar <a>: <b>   mueve todo de A a B y archiva A
+/proponer            categorías que te faltan
+/revisar             lo que quedó dudoso
+/pendientes          qué falta por leer
+ver:N · abrir:N      el detalle, o el archivo original
+ocultar:N            sacar de resultados, sin borrar
 ```
+
+El separador es `:` y no un espacio porque tanto el nombre como la descripción
+llevan espacios adentro.
+
+**Preguntar no necesita comando.** Si escribes algo que parece pregunta —empieza
+con `¿`, o con `cuál`, `qué`, `cuándo`— se responde citando la fuente. `/buscar`
+está para cuando quieres la lista y no la respuesta.
 
 Lo que **no** está en el chat es deliberado:
 
@@ -130,8 +151,6 @@ Lo que **no** está en el chat es deliberado:
   El chat solo oculta.
 - **`classify`, `index`, `reprocess`, `worker`, `serve`** — mantención, no
   conversación.
-- **crear y fusionar categorías** — §9 las quiere en el chat y todavía no están;
-  por ahora `dm domains`.
 
 ### El bot nunca te escribe primero
 

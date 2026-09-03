@@ -523,6 +523,12 @@ _Listo cuando:_ lo usas una semana y no vuelves a las notas del teléfono, y el 
 cifrado off-site corre solo y ya lo restauraste una vez.
 > **Construido.** Core + CLI, Postgres y Garage, 55 tests. Ver [README](./README.md).
 > Pendiente del criterio de listo: el backup off-site y la semana de uso real.
+>
+> **El 3 de septiembre de 2026 el sistema se vació entero** —base, blobs, identidades
+> vinculadas— para empezar a poblarlo de cero. Eso reinicia el reloj de la semana de uso
+> real, y deja el **backup off-site** (§14.2) como lo único de F0 que sigue sin
+> construirse. Es el único riesgo irreversible que queda: los blobs viven en un solo
+> host, y un blob perdido no se reprocesa desde nada.
 
 **F1 — Texto de todo.** Los tres carriles de §8.1: markitdown para documentos, visión
 para fotos y escaneos, Whisper para audio. La búsqueda del F0 ahora alcanza el
@@ -538,7 +544,8 @@ _Listo cuando:_ mandas la foto de una boleta y la encuentras buscando por lo que
 > contenedor y detrás del mismo puerto `Converter`. El motor de cada carril se
 > cambia con una variable de entorno. Ver [README](./README.md).
 >
-> **Validado contra el corpus real** (173 memorias): 65 por markitdown sin un
+> **Validado contra el corpus real** de entonces (173 memorias, borrado en el reinicio
+> del 3-sep): 65 por markitdown sin un
 > solo error, 61 por OCR, 38 sin carril (CAD, zips, video) y 8 de texto. Los
 > únicos fallos fueron 2 HEIC —que el OCR no lee— y un fixture corrupto de 22
 > bytes. La migración 003 rescató las 168 notas, ninguna perdida.
@@ -605,7 +612,14 @@ te lista tus consultas ordenadas por fecha real, no por fecha de captura.
 > duro: archivar y fusionar), `/<slug>` resuelto contra la tabla, y clasificador con
 > **IA local** (Ollama, `qwen2.5:3b`) que arma su prompt en runtime desde las
 > descripciones. Lo que devuelve se valida: un dominio inventado se descarta, una fecha
-> del futuro también. Lo que puso la persona nunca se pisa. 219 tests.
+> del futuro también. Lo que puso la persona nunca se pisa.
+>
+> **Y el CRUD vive en el chat, no solo en la terminal:** `/crear`, `/describir`,
+> `/renombrar`, `/archivar` y `/fusionar`, que es donde §9 siempre lo quiso —"agregar un
+> dominio no puede requerir un deploy" tampoco debería requerir un teclado. Eso obligó a
+> construir la ida y vuelta de confirmación que faltaba: el pendiente guarda la operación
+> y sus argumentos, así un `sí` reejecuta exactamente la misma llamada y no hay un segundo
+> camino que pueda divergir del primero. 257 tests.
 >
 > El modelo es local aquí y no en el carril de visión a propósito: elegir entre ocho
 > categorías le sale bien a un modelo chico; leer un RUT sin equivocarse, no.

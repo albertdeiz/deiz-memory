@@ -43,7 +43,7 @@ export interface MemoryDetail extends MemorySummary {
   sha256: string | null;
   /** Lo que escribió la persona. No se regenera nunca. */
   note: string | null;
-  /** Lo que se extrajo del archivo. Regenerable desde el original (UC-15). */
+  /** Lo que se extrajo del archivo. Regenerable desde el original (§3.6). */
   normalizedText: string | null;
   lane: Lane | null;
   normalizedAt: Date | null;

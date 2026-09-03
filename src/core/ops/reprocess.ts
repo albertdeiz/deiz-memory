@@ -33,7 +33,7 @@ const clampLimit = (n: number | undefined) =>
   !n || !Number.isFinite(n) ? 100 : Math.min(Math.max(Math.trunc(n), 1), 5_000);
 
 /**
- * UC-15. Todo lo derivado es regenerable desde el blob, y esta es la puerta:
+ * Todo lo derivado es regenerable desde el blob, y esta es la puerta:
  * mejoras el prompt del carril de visión y vuelves a pasar el histórico entero.
  *
  * No es destructivo —el original no se toca y por eso se puede— pero sí cuesta

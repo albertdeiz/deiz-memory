@@ -858,7 +858,7 @@ program
 
 program
   .command('reprocess')
-  .description('vuelve a correr los carriles desde el original (UC-15)')
+  .description('vuelve a correr los carriles desde el original')
   .argument('[id]', 'una memoria concreta')
   .option('--failed', 'las que fallaron o quedaron a medias')
   .option('--pending', 'las que nunca pasaron por un carril')

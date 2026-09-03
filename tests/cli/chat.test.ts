@@ -69,7 +69,7 @@ describe('conversación completa por CLI', () => {
     // La lista numerada aparece porque el canal no tiene botones.
     expect(p1.out).toContain('more');
 
-    const p2 = await dm(['chat', 'más']);
+    const p2 = await dm(['chat', 'more']);
     expect(p2.out).toContain('6–7');
   }, 120_000);
 

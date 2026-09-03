@@ -1,10 +1,13 @@
 # deiz-memory
 
-Memoria personal externa, accesible por chat. Le mandas cualquier cosa (foto, audio,
-texto, PDF) y después le preguntas en lenguaje natural.
+Memoria personal externa, accesible por chat. Le mandas un archivo (foto, audio, PDF,
+documento) y después le preguntas en lenguaje natural.
 
 **Frase de una línea:** _un segundo cerebro con interfaz de conversación, optimizado
 para devolverte con evidencia lo que guardaste, en el momento en que lo necesitas._
+
+Este documento describe **el sistema que existe**. Lo que se pensó y no se construyó no
+está acá; vive en el historial de git, que es donde corresponde.
 
 ---
 
@@ -18,8 +21,7 @@ No es "no tengo dónde guardar cosas". Es:
    número de emergencia) pero encontrarlo requiere 10 minutos y calma. Justo lo que no
    tienes cuando lo necesitas.
 3. **Datos que caducan sin avisar** → seguros, licencias, recetas, garantías. El riesgo
-   acá no es solo olvidarlos: es **consultarlos y recibir el dato viejo** sin darte
-   cuenta.
+   no es solo olvidarlos: es **consultarlos y recibir el dato viejo** sin darte cuenta.
 
 Todo lo que se diseñe acá se justifica contra uno de esos tres.
 
@@ -30,147 +32,136 @@ Todo lo que se diseñe acá se justifica contra uno de esos tres.
 - No reemplaza el documento original (siempre se guarda el original y se cita).
 - **Solo chat.** No hay web, no hay app que instalar. La accesibilidad inmediata es el
   producto; cualquier paso extra mata la captura (§6.1).
-- No se borra nada. El storage es un disco duro personal en la nube: append-only (§14.1).
+- No se borra nada salvo `purge`, que es explícito y auditado (§14.1).
 - No da consejo médico, legal ni tributario. Devuelve **lo que tú guardaste**.
 - **Sin recordatorios, notificaciones proactivas ni agenda.** El bot responde cuando le
-  hablas; nunca inicia conversación.
+  hablas; nunca inicia conversación. Lo sostiene el tipo `Turn`, no la buena voluntad.
 
 ## 3. Principios de diseño
 
 Restricciones duras, no aspiraciones:
 
-1. **Captura sin fricción.** Mandar algo al bot nunca requiere elegir categoría,
-   etiqueta ni carpeta. Se manda y listo. Clasificar es problema del sistema.
-2. **Nunca inventar.** Toda respuesta factual cita la memoria de origen (con fecha y
-   link al archivo original). Si no está guardado, la respuesta correcta es
-   _"no lo tengo"_, no una inferencia plausible.
-3. **El tiempo es de primera clase.** Todo dato tiene fecha del hecho, fecha de captura
-   y —cuando aplica— ventana de validez. Un dato vencido se responde marcado como
-   vencido, o no se responde.
-4. **Confirmación diferida.** Si el sistema duda, guarda igual y deja la duda en una
-   bandeja de revisión. Nunca bloquea la captura con preguntas.
-   _(Construido en F1.6: `dm review` y `/review`.)_
+1. **Captura sin fricción.** Mandar un archivo nunca requiere elegir categoría, etiqueta
+   ni carpeta. Se manda y listo. Clasificar es problema del sistema.
+2. **Nunca inventar.** Toda respuesta factual cita la memoria de origen, y **la cita se
+   verifica en código**: sin ella, la prosa se descarta. Si no está guardado, la
+   respuesta correcta es _"no lo tengo"_.
+3. **El tiempo es de primera clase.** Todo dato tiene fecha de captura y fecha del hecho.
+   Las listas por categoría ordenan por cuándo pasó, no por cuándo lo guardaste.
+4. **Confirmación diferida.** Si el sistema duda, guarda igual y deja la duda en la
+   bandeja de revisión (`dm review`, `/review`). Nunca bloquea la captura con preguntas.
 5. **Respuesta útil > respuesta completa.** El dato y su fuente, no un resumen de 400
    palabras.
 6. **El original es sagrado.** El blob crudo nunca se borra ni se sobreescribe. Todo lo
-   derivado (texto, clasificación, extracción) es regenerable desde él.
-7. **Tus categorías son tuyas y son data.** Los dominios son filas editables, nunca un enum
-   en el código. Agregar uno no puede requerir un deploy (§9).
+   derivado —texto, trozos, vectores, clasificación— es regenerable desde él.
+7. **Tus categorías son tuyas y son data.** Los dominios son filas editables, nunca un
+   enum en el código. Agregar uno no puede requerir un deploy (§9).
 
 ## 4. Modelo de datos
 
-Pocos objetos a propósito. Si algo no cabe acá, probablemente sea scope creep.
+Dos objetos, y no hace falta un tercero.
 
-### `Memory` — la unidad de captura (inmutable)
-Todo lo que entra genera exactamente una Memory. **Es el único objeto necesario para
-el MVP.**
+### `Memory` — la unidad de captura
 
 ```
 id
-owner_id          la persona dueña. Permanente, nunca cambia. En TODA fila, desde F0
-source            telegram | cli | manual
-captured_at       cuándo entró al sistema
-occurred_at       cuándo pasó el hecho (≠ captured_at; se infiere después)
-raw               blob original (foto, audio, pdf, texto)
-normalized_text   texto extraído (ver §8.1)
-domain_id         → tabla `domains` (§9). Nunca un enum en código
-tags              etiquetas libres, para lo que cruza dominios
-title             título corto autogenerado, para listar
-confidence        qué tan segura fue la clasificación
-status            raw | normalized | classified | needs_review | verified
-hidden            oculta de resultados, pero jamás borrada (§14.1)
+owner_id            la persona dueña. Permanente, en TODA tabla
+source              telegram | cli | manual
+captured_at         cuándo entró al sistema
+occurred_at         cuándo pasó el hecho (lo pone el clasificador si falta)
+blob_sha256         → tabla blobs. Null si es solo nota
+note                lo que escribiste tú. NUNCA se regenera ni se pisa
+normalized_text     lo extraído del archivo. Regenerable desde el blob
+normalization_lane  qué carril lo leyó (§8.1), para poder reprocesar sin adivinar
+domain_id           → tabla domains (§9). Nunca un enum en código
+tags                etiquetas libres, para lo que cruza dominios
+title               título corto autogenerado
+domain_confidence   qué tan segura fue la clasificación
+status              raw | normalized | needs_review | classified
+hidden              oculta de resultados, pero no borrada
 ```
 
-La compartición **no vive acá**: es una relación aparte (`memory_space`), porque una
-memoria puede estar compartida en varios espacios a la vez, o en ninguno (§10).
-
-### `Fact` — dato tipado extraído de una Memory *(fase tardía, no MVP)*
-Cuando llegue el momento de responder "¿cuál es mi deducible?" con precisión, hace falta
-un dato consultable por SQL y no por embeddings.
-
-```
-memory_id         de dónde salió (trazabilidad obligatoria)
-type              póliza_auto | póliza_salud | receta | ...
-payload           JSON tipado según schema por tipo
-valid_from / valid_until
-superseded_by     una póliza nueva invalida la anterior, no la borra
-```
-
-**Insight clave:** la supersesión es lo que separa esto de un basurero de notas. Cuando
-llega la póliza nueva, la vieja no se elimina — se marca superada y deja de responder
-por defecto, pero sigue disponible para "¿qué cubría el año pasado?". Sin esto, en seis
-meses el bot te entrega datos caducos con total seguridad y dejas de confiar en él.
-
-### `Entity` — personas, empresas, lugares *(fase tardía)*
-Doctores, aseguradoras, clínicas, el mecánico. Permite _"todo lo del Dr. X"_ o
-_"el teléfono de mi corredor"_.
-
-### `Space` — relación de compartición, sin dueño
-Un Space ("Casa", "Papás") **no es dueño de nada y no tiene administrador**: es el lugar
-donde varias personas ponen a la vista memorias que siguen siendo suyas. Todos los
-participantes son pares. Especificado en **§10**.
+**`note` y `normalized_text` son columnas distintas a propósito.** Lo tuyo y lo derivado
+del archivo no se mezclan: cuando llegaban juntos, la primera transcripción se comía la
+nota.
 
 ### `Domain` — categoría editable en runtime
-No es un enum: es una fila que puedes crear, renombrar, archivar o fusionar desde el
-chat. Especificado en **§9**.
 
-### `Playbook` — respuesta pre-armada para urgencias *(fase tardía)*
-_"Choqué el auto"_ no debería disparar una búsqueda semántica de 8 segundos. Se arma
-por adelantado desde lo guardado: teléfono de la aseguradora, número de póliza,
-deducible, pasos. Se regenera cuando cambia el documento de origen.
+```
+id            estable e inmutable — la identidad real
+slug          salud            (para comandos: /salud)
+label         Salud            (para mostrar; renombrable sin romper nada)
+description   "consultas, recetas, exámenes, Isapre, bonos"
+aliases       ["médico", "doctor"]
+active        true | false
+```
 
-## 5. Los tres verbos del router
+**`description` no es documentación: es el prompt** (§9).
 
-Todo mensaje entrante se enruta a uno de tres:
+### Las otras tablas
 
-| Verbo | Ejemplo | Camino |
+`owners` · `blobs` (direccionables por sha256) · `memory_chunks` (trozos con su vector) ·
+`channel_identities` y `pairing_codes` (§10) · `chat_sessions` (el estado de la
+conversación) · `audit_log` (qué se purgó).
+
+## 5. Los verbos del router
+
+| Verbo | Cuándo | Camino |
 |---|---|---|
-| **Capturar** | foto de una receta, `/capture el mecánico es Juan +569...` | ingest → normalizar → clasificar → guardar |
-| **Recordar** | "¿cuál es mi deducible?", "¿qué me recetaron en marzo?" | recuperación + citación |
-| **Aclarar** | respuesta a una pregunta del bot, corrección de un dato | actualizar Memory + marcar verified |
+| **Capturar** | llega un archivo, o escribes `/capture` | ingest → normalizar → indexar → clasificar |
+| **Recordar** | cualquier otro texto, o `/search` / `/ask` | recuperación + citación |
+| **Acción** | un botón, o su palabra escrita | sobre la última lista mostrada |
 
-La ambigüedad se resuelve a favor de **capturar** en cualquier canal donde el mensaje
-llegue sin intención declarada. **En el chat, no: ahí se resuelve a favor de recordar.**
-
-Es una corrección nacida del uso, no del diseño. Lo que uno escribe en una conversación
-es, casi siempre, algo que le está preguntando a alguien. Adivinar con una heurística
+**Guardar es explícito; escribir es preguntar.** Lo que uno escribe en una conversación
+es, casi siempre, algo que le está preguntando a alguien. Adivinarlo con una heurística
 —"¿empieza con *cuál*?"— acertaba a medias y dejaba preguntas convertidas en memorias,
-que después hay que ocultar a mano. Así que en el chat **guardar es explícito**: un
-archivo adjunto, o `/capture`.
+que después hay que ocultar a mano.
 
-Y el principio de §3.1 —capturar sin fricción— se sostiene donde importa: mandar un
-archivo sigue siendo un gesto, sin comando ni categoría. Y el de no perder nada también:
-si la consulta no encuentra nada, la respuesta ofrece guardar ese texto tal cual, a un
-toque.
+El principio de §3.1 se sostiene donde importa: mandar un archivo sigue siendo un gesto,
+sin comando ni categoría. Y no perder nada también: si la consulta no encuentra nada, la
+respuesta ofrece guardar ese texto tal cual, a un toque.
 
-## 6. Recuperación: dos modos, no uno
+## 6. Recuperación
 
-El error clásico es meter todo a un vector store y esperar que funcione. No funciona
-para _"¿cuál es mi número de póliza?"_.
+- **Filtro estructurado primero** — dominio y ventana de fechas recortan el universo.
+  Es lo que de verdad baja el ruido.
+- **Full-text** sobre los trozos: preciso para lo que se escribe igual — un RUT, una
+  patente, un número de póliza.
+- **Semejanza** con vectores locales: rescata las preguntas escritas con otras palabras
+  que las del documento.
 
-- **Modo contexto (semántico):** full-text + vectores sobre `normalized_text`. Es lo que
-  hay en el MVP, y alcanza para la mayoría de las consultas.
-- **Modo hecho (determinista):** consulta SQL sobre `Fact`, filtrando por tipo y
-  vigencia. Preciso y verificable. Llega en fase tardía, solo para los datos duros que
-  lo justifiquen.
-- **Híbrido:** filtro estructurado primero (dominio + ventana temporal), búsqueda
-  semántica después dentro de ese subconjunto. Reduce muchísimo el ruido.
+Se fusionan normalizando cada lista contra su propio máximo, porque `ts_rank` y la
+similitud coseno viven en escalas distintas. Un trozo que aparece en las dos sube.
 
-Toda respuesta trae: el dato, la fecha del hecho, y un link al original.
+**Se indexa por trozos, no por documento.** Una póliza de 80 mil caracteres promediada en
+un vector no se parece a nada en particular. Y cada trozo se embebe solo, sin anteponerle
+el título: si los ochenta empiezan con "póliza de auto BCI", los ochenta se parecen entre
+sí y ninguno destaca.
+
+**Una pregunta no se busca con AND.** `/search poliza auto` pide las dos cosas; una
+pregunta no — el párrafo que responde dice "deducible" y no dice "auto". Medido sobre una
+póliza real: cero resultados con AND, ocho con la palabra sola.
+
+**Ninguna cifra que no esté en lo que leyó.** La verificación de cita comprueba que el
+documento citado exista; no que el número venga de ahí. Ese hueco dejaba pasar el peor
+caso —cita válida, cifra inventada, más creíble que una respuesta sin cita—, y pasó de
+verdad: "5 UF" con ninguno de los ocho pasajes conteniendo ese número. Ahora toda cifra
+de la prosa tiene que aparecer en los pasajes leídos, normalizando la escritura chilena
+(`UF 3,0` y `3 UF` son el mismo dato) y **comprobando también la unidad**, que es lo que
+atrapa `$89.990` redactado como `89.990 UF`. Si no calza, se descarta la prosa y quedan
+las fuentes.
+
+Toda respuesta trae: el dato, su fecha, y el id para abrir el original.
 
 ### 6.1 Solo chat — y cómo se paga esa decisión
 
-Nada de web ni de app propia: la única app que hace falta es la que ya usas todos los
-días. Ese es el argumento central del producto y no se negocia.
+La única app que hace falta es la que ya usas todos los días. El costo real: **el chat es
+pésimo para explorar 40 resultados.** No se resuelve con una web:
 
-El costo real: **el chat es pésimo para explorar 40 resultados.** No se resuelve con una
-web, se resuelve dentro del chat:
-
-- **Paginación con botones** — 5 resultados por vez, botón "más". Nunca un muro de texto.
+- **Paginación** — 5 por vez, botón `more`. Nunca un muro de texto.
 - **Refinamiento conversacional** — "de esos, solo los de 2025" en vez de scroll.
-- **Exportar bajo demanda** — _"mándame todo lo de salud en PDF"_. Cuando de verdad hay
-  que revisar volumen, la respuesta es un documento generado y enviado al chat, no una
-  pantalla que navegar.
+- **Dos botones por resultado** — `datos` y `archivo`, en la misma fila. Bajar un
+  documento no puede costar dos toques y una pantalla intermedia.
 
 ## 7. Arquitectura
 
@@ -178,666 +169,294 @@ Monolito. Nada de microservicios para un sistema de un usuario.
 
 ```
 Telegram ──> Channel Adapter ──> Ingest Queue (ack inmediato)
-             (identidad + espacio)
+             (identidad + capacidades)
                                       │
                           ┌───────────┴───────────┐
                           ▼                       ▼
                     Normalizer              (blob store)
-              markitdown / visión / STT
+              markitdown / OCR / Whisper
                           │
                           ▼
-         Clasificador (dominio + título + fecha del hecho)
-            ▲ lee los dominios activos desde la DB
+                  Trozos + vectores
+                          │
+                          ▼
+              Clasificador (dominio, título, fecha)
+                 ▲ lee los dominios activos desde la DB
                           │
                   ┌───────┴────────┐
                   ▼                ▼
-              Memories        Review Inbox (baja confianza)
+              Memories        Bandeja de revisión
                   │
                   ▼
             Postgres + pgvector ◄──── Retriever
 ```
 
 **Puntos no negociables:**
-- El adapter de canal está detrás de una interfaz. Telegram hoy, WhatsApp después,
-  sin tocar el core.
-- **`owner_id` en todas las tablas desde F0**, aunque los espacios compartidos lleguen
-  mucho después. Meter tenancy a posteriori es una migración brutal; meterla ahora es
-  una columna.
-- La ingesta es asíncrona. El usuario recibe "guardado ✓" en <1s; normalización y
-  clasificación corren después. Nunca hacer esperar al usuario por un LLM.
-- Todo lo derivado es re-ejecutable. Si mejora el prompt o el schema, se reprocesan los
-  blobs originales sin pérdida.
-- **El prompt del clasificador se construye en runtime** desde la tabla `domains`. No
-  hay lista de dominios escrita en el código, en ningún lado.
+- El adapter de canal está detrás de una interfaz. Telegram hoy, otro después, sin tocar
+  el core.
+- **`owner_id` en todas las tablas.** Meter tenancy a posteriori es una migración brutal.
+- La ingesta es asíncrona. El acuse llega en <1s; normalizar, indexar y clasificar corren
+  después. Nunca hacer esperar al usuario por un modelo.
+- Todo lo derivado es re-ejecutable desde el blob original.
+- **El prompt del clasificador se construye en runtime** desde la tabla `domains`.
+- **Un módulo único habla con el storage.** Cambiar de proveedor es una variable.
 
 ### 7.1 El contrato del adapter de canal
 
-**Telegram por ahora.** Pero el adapter no es "el archivo donde vive el bot": es la
-frontera que decide si agregar WhatsApp más adelante cuesta un día o cuesta un rewrite.
-Se diseña desde F0 (§16).
+Lo importante no es enviar y recibir: es **declarar capacidades**. El core nunca asume
+que existen los botones de Telegram ni su límite de archivo.
 
-Lo que el adapter traduce:
+```ts
+export interface Capabilities {
+  maxUploadBytes: number;      // lo que el bot puede MANDAR
+  maxDownloadBytes: number;    // lo que puede BAJAR (Telegram: 20 MB, y es un muro)
+  supportsButtons: boolean;
+  supportsRichFormatting: boolean;
+  canInitiate: boolean;        // declarado; nadie lo lee, a propósito
+}
 
-| Hacia adentro | Hacia afuera |
-|---|---|
-| identidad del remitente → `user_id` interno | texto |
-| mensaje entrante (texto / foto / audio / archivo) | opciones para elegir |
-| respuesta a una opción ofrecida | archivo o imagen |
-| límites y formatos propios del canal | resultados paginados |
-
-**Lo importante no es enviar y recibir: es declarar capacidades.** El core nunca asume
-que existen los botones inline de Telegram ni su límite de archivo. El adapter expone:
-
+/**
+ * Un turno: llega un mensaje, se responde, se cierra. `reply()` deja de servir
+ * cuando el handler retorna, y eso no es prolijidad — es §2 hecha tipo. Sin un
+ * `send()` suelto en el puerto, el bot no tiene *cómo* iniciar conversación.
+ */
+export interface Turn {
+  readonly incoming: Incoming;
+  readonly caps: Capabilities;
+  reply(r: Reply): Promise<void>;
+}
 ```
-maxUploadBytes / maxDownloadBytes
-supportsButtons        Telegram: sí. WhatsApp: listas interactivas, distintas
-supportsRichFormatting
-canInitiate            si el canal permite escribir sin que te hablen primero
-```
 
-Y el core degrada solo: sin botones, la paginación pasa a comandos numerados; con un
-límite de archivo menor, el export se parte en varias entregas. Si el core asume las
-capacidades de Telegram, el segundo canal es un rewrite disfrazado de adapter.
+**Cómo degrada.** Sin botones → la misma acción escrita: el botón lleva `more` y la
+persona escribe `more`. Solo funciona porque **el estado vive en `chat_sessions`, no en
+el payload del botón**; si el cursor viajara en el `callback_data`, un canal sin botones
+no podría reproducirlo. `dm chat` declara `supportsButtons: false`, así que cada corrida
+de los tests ejercita la rama degradada.
 
-## 8. Stack propuesto
+**Descarga sobre el límite → negativa honesta, y no se crea la memoria.** Una fila
+apuntando a un blob que no existe es peor que no tener la fila.
+
+## 8. Stack
 
 | Capa | Elección | Por qué |
 |---|---|---|
-| Canal | **Telegram Bot API** | gratis, sin aprobación, soporta fotos/audio/docs/PDF nativo. WhatsApp exige Meta Business API: costo por conversación y plantillas aprobadas |
-| Runtime | TypeScript + Node | stack que ya dominas |
-| Bot lib | **grammY**, en uso | mejor DX que telegraf hoy. El adapter lo aísla: el core no lo conoce |
-| DB | Postgres + pgvector | estructurado, full-text y vectores en un solo motor. Una DB, un backup |
-| Cola | pg-boss | sin Redis extra al inicio |
-| Blobs | **Garage** self-hosted (API S3), direccionable por contenido | el original es sagrado; ver §14.1 |
-| LLM | Claude | structured outputs; modelo chico para routing y clasificación, grande para extracción |
-| Documentos → texto | **markitdown** (Python: CLI al inicio, sidecar después) | PDF/docx/xlsx/html/csv → Markdown con estructura preservada. Ver §8.1 |
-| Imágenes y escaneos | **OCR (RapidOCR/PP-OCR)**, con LLM multimodal como alternativa; HEIC se convierte a JPEG antes | markitdown **no hace OCR**; ver §8.1. En impresos el OCR lee mejor los dígitos que un modelo chico, y es gratis y reproducible |
-| STT | Whisper en contenedor, API compatible con OpenAI | notas de voz. Mejor que el carril de audio de markitdown |
-| Deploy | 1 VPS o Fly.io, single-tenant | datos médicos: no los repartas |
+| Canal | Telegram Bot API + **grammY** | gratis, sin aprobación, soporta fotos/audio/docs/PDF nativo |
+| Runtime | TypeScript + Node | — |
+| DB | Postgres + pgvector | estructurado, full-text y vectores en un motor. Una DB, un backup |
+| Cola | pg-boss | sin Redis extra |
+| Blobs | **Garage** self-hosted (API S3), direccionable por contenido | §14.1 |
+| Clasificar y redactar | **Ollama** local (`qwen2.5:3b`) | nada sale del host, no cuesta por documento |
+| Embeddings | **Ollama** local (`nomic-embed-text`, 768d) | ídem |
+| Documentos → texto | **markitdown** en su contenedor | PDF/docx/xlsx/html/csv → Markdown con estructura |
+| Fotos y escaneos | **RapidOCR** (PP-OCR sobre ONNXRuntime) | §8.1 |
+| Audio | **Whisper** en contenedor | notas de voz |
 
-### 8.1 Normalización: markitdown + carriles
+Los tres carriles son **servicios en contenedores**, detrás del mismo puerto `Converter`.
+El motor de cada uno se cambia con una variable de entorno.
 
-**markitdown** (Microsoft) es el conversor por defecto. Convierte PDF, docx, xlsx, pptx,
-html, csv, json, epub y zip a Markdown **preservando la estructura** — tablas, títulos,
-listas. Para pólizas, boletas y planillas es justo lo que se necesita, y ese Markdown
-estructurado es mejor insumo que texto plano aplanado: una tabla de coberturas sigue
-pareciendo una tabla.
+### 8.1 Normalización: un router de carriles
 
-**Advertencia que define el diseño: markitdown no es un motor de OCR.**
-
-- **PDF** — usa pdfminer: extrae solo la capa de texto. Un PDF escaneado devuelve vacío.
-- **Imágenes** — extrae EXIF y, si le pasas un cliente LLM, genera una *descripción* de
-  la imagen. Una descripción no es una transcripción fiel. Para una receta manuscrita
-  no sirve.
-- **Audio** — su carril usa `speech_recognition` (Google Web Speech por defecto): flojo
-  en español de Chile y manda el audio a Google. Usar Whisper en su lugar.
-
-Por eso el Normalizer es un **router de carriles**, no una sola llamada:
+**markitdown no es un motor de OCR.** Con PDF usa pdfminer: extrae solo la capa de texto,
+así que un PDF escaneado devuelve vacío. Por eso el Normalizer es un router:
 
 | Entrada | Carril | Herramienta |
 |---|---|---|
-| PDF con capa de texto, docx, xlsx, pptx, html, csv | A — documento digital | **markitdown** |
-| PDF escaneado (capa de texto < ~100 chars) | B — visual | LLM multimodal, página por página |
-| Foto (receta, boleta, carnet, patente) | B — visual | LLM multimodal, prompt de transcripción fiel |
+| PDF con capa de texto, docx, xlsx, pptx, html, csv | A — documento | markitdown |
+| PDF escaneado (capa de texto < 100 chars) | B — visual | OCR, página por página |
+| Foto (receta, boleta, carnet, patente) | B — visual | OCR |
 | Nota de voz | C — audio | Whisper |
 
-**Regla de fallback:** siempre se intenta A primero — barato, determinista, reproducible.
-Si el resultado es pobre (pocos caracteres, sin estructura), cae a B. El carril usado
-queda registrado en la Memory, para poder reprocesar después sin adivinar qué pasó.
+**Regla de fallback:** siempre se intenta A primero —barato, determinista, reproducible—
+y se cae a B si el resultado viene pobre. El carril usado queda en la fila, para poder
+reprocesar sin adivinar qué pasó.
 
-**Integración:** markitdown es Python, el core es TypeScript. Como la ingesta ya es
-asíncrona, al principio basta invocarlo por CLI (`uvx markitdown`, con `markitdown[all]`);
-el arranque de Python por archivo no se nota si nadie está esperando. Si empieza a
-molestar, se pasa a un sidecar FastAPI con un `POST /convert` en el mismo compose.
+**El carril B es OCR clásico, no un LLM multimodal.** En documentos impresos el OCR gana
+justo donde importa —números de póliza, RUT, montos: cadenas que no se adivinan por
+contexto y donde los modelos chicos fallan—, y es gratis y reproducible. El carril
+multimodal sigue disponible (`DM_VISION_BACKEND=anthropic|openai`) y es el correcto para
+manuscrito, que es lo que el OCR no puede leer.
+
+**El HEIC del iPhone se transcodifica a JPEG** antes del OCR. TIFF sigue sin carril.
 
 ## 9. Dominios — dinámicos por diseño
 
-Un dominio **no es un enum en el código**: es una fila en la tabla `domains`, editable
-en cualquier momento desde el chat. La lista de abajo es una semilla, no una lista
-cerrada. El día que necesites guardar cosas de **migración**, se crea y listo — sin
-tocar el repo y sin deploy.
+Un dominio **no es un enum**: es una fila editable desde el chat.
 
-### El registro `Domain`
-
-```
-id            estable e inmutable — la identidad real
-slug          migracion        (para comandos: /migracion)
-label         Migración        (para mostrar; renombrable sin romper nada)
-description   "Visas, RUT, permanencia definitiva, apostillas, extranjería"
-aliases       ["visa", "PDI", "extranjería"]
-active        true | false
-created_at
-```
-
-**`description` no es documentación: es el prompt.** Y está medido: sobre 170
-documentos reales, con la descripción de "Hogar" hablando solo de garantías y gastos
-comunes, el manual de la alarma del departamento quedó **sin dominio y con 0,95 de
-confianza** — el modelo tenía razón, no calzaba. Ampliar la descripción lo movió a
-`hogar` con 0,9, sin tocar una línea de código. El clasificador se arma en runtime
-concatenando las descripciones de los dominios activos. Un dominio con descripción vaga
-clasifica mal. Por eso al crear uno, el bot pide o propone una descripción de una línea:
-es el único campo que de verdad mueve la precisión.
+**`description` es el prompt, y está medido.** Sobre 170 documentos reales, con la
+descripción de "Hogar" hablando solo de garantías y gastos comunes, el manual de la
+alarma quedó **sin dominio y con 0,95 de confianza** — el modelo tenía razón, no calzaba.
+Ampliar la descripción lo movió a `hogar` con 0,9, **sin tocar una línea de código**. El
+clasificador se arma en runtime concatenando las descripciones de los dominios activos.
 
 **El `id` es la identidad, nunca el nombre.** Renombrar "vehículo" a "auto" cambia un
 `label`; ninguna Memory se entera.
 
-### Operaciones desde el chat
-
 | Operación | Qué hace |
 |---|---|
 | `/domains` | lista los activos, con cuántas memorias tiene cada uno |
-| **crear** | pide una descripción de una línea; queda activo de inmediato |
-| **editar** | cambia label, descripción o aliases. No toca las memorias existentes |
-| **archivar** | `active = false`. Deja de proponerse al clasificar; sus memorias siguen ahí y siguen siendo buscables |
-| **fusionar** | mueve todas las memorias de A a B y archiva A |
+| `/create` | pide una descripción de una línea; avisa si se solapa con otra |
+| `/describe`, `/rename` | no tocan las memorias existentes |
+| `/archive` | deja de proponerse al clasificar; sus memorias siguen buscándose |
+| `/merge` | mueve todas las memorias de A a B y archiva A |
 
-**No hay borrado duro.** Eliminar un dominio con memorias adentro las dejaría huérfanas
-o, peor, se las llevaría. Las dos operaciones honestas son **archivar** y **fusionar**;
-en la práctica fusionar es la que vas a querer el 90% de las veces _("esto de 'papeles'
-en realidad era 'documentos'")_.
+**No hay borrado duro.** Borrar un dominio con memorias adentro las dejaría huérfanas.
+Las dos operaciones honestas son archivar y fusionar.
 
-### Cómo nace un dominio nuevo
+**Cómo nace uno nuevo.** Explícito (`/create`), o **emergente**: `/propose` junta las
+memorias que no calzan bien en ningún dominio activo y sugiere uno. El punto del segundo
+camino es que no tienes que anticipar tus propias categorías.
 
-Dos caminos, y el segundo es el que hace que esto valga la pena:
+**El guardrail: la proliferación es el modo de falla.** Crear libremente termina en 40
+dominios con la mitad solapados. Tres frenos: **el bot propone, nunca crea solo**; antes
+de crear **chequea solapamiento** contra las descripciones existentes; y lo que cruza
+dominios va con **un dominio primario + tags libres**.
 
-1. **Explícito** — se lo pides: _"crea el dominio migración"_.
-2. **Emergente** — el clasificador junta varias memorias que no calzan bien en ningún
-   dominio activo y **propone** uno: _"van 3 cosas que parecen trámites de extranjería
-   y no calzan en ningún dominio. ¿Creo 'migración'?"_.
+**Semilla (contexto Chile):** Salud · Seguros · Vehículo · Documentos · Finanzas ·
+Trabajo · Hogar · Personas. Editables desde el día uno.
 
-El punto del camino 2 es que no tienes que anticipar tus propias categorías. Hoy no sabes
-qué vas a necesitar guardar en dos años; el sistema lo descubre de tus propios datos.
-
-### Guardrail: la proliferación es el modo de falla
-
-Crear categorías libremente y sin frenos termina en 40 dominios con la mitad solapados ("salud",
-"médico", "doctores"). Tres frenos:
-
-- **El bot propone, nunca crea solo.** Un dominio nuevo siempre pasa por tu confirmación.
-- **Antes de crear, chequea solapamiento** contra las descripciones existentes:
-  _"esto se parece mucho a 'documentos'. ¿Lo creo igual, o lo guardo ahí?"_.
-- **Revisión ocasional** de dominios con muy pocas memorias o descripciones parecidas,
-  con sugerencia de fusión.
-
-Para lo que cruza dominios (un certificado de vacunas que sirve para salud **y** para
-migración): **un dominio primario + `tags` libres**. Un solo primario mantiene
-`/migracion` limpio y el clasificador simple.
-
-### Semilla inicial (contexto Chile)
-
-Editables, renombrables o archivables desde el día uno. En el MVP el dominio es **solo
-una etiqueta** para filtrar y listar — no implica schema ni extracción tipada.
-
-- **Salud** — consultas, recetas, exámenes, medicamentos, alergias, vacunas,
-  Isapre/Fonasa, bonos y reembolsos
-- **Seguros** — salud complementario, auto, hogar, vida: coberturas, deducibles,
-  teléfonos 24/7, número de póliza
-- **Vehículo** — patente, revisión técnica, permiso de circulación, SOAP, mantenciones
-- **Documentos** — cédula, pasaporte, licencia de conducir
-- **Finanzas** — suscripciones, pagos recurrentes, garantías de compras, boletas
-- **Trabajo** — decisiones, contactos, compromisos
-- **Hogar** — garantías de electrodomésticos, técnicos de confianza, medidas, contratos
-- **Personas** — cumpleaños, tallas, preferencias, contactos de emergencia
-
-Y dos que probablemente aparezcan solos con el tiempo, sin modelarlos en detalle ahora:
-**tributario (SII)** — comprobantes, formularios, contribuciones, boletas de honorarios —
-y **migración** — visas, RUT, permanencia definitiva, apostillas. Nacen como dominio
-cuando llegue el tercer documento del tipo, por cualquiera de los dos caminos de arriba.
-
-## 10. Espacios y compartición
-
-### El principio: la memoria es tuya, el espacio es una vista
-
-Un Space **no posee memorias**. Cada Memory tiene un `owner_id` permanente —la persona
-que la capturó— y compartirla es crear una relación, no transferirla:
-
-```
-memory_space   (memory_id, space_id, shared_by, shared_at)
-```
-
-De ahí salen tres consecuencias, todas buenas:
-
-- **Una memoria puede estar en varios espacios a la vez.** La póliza del auto puede verse
-  en "Casa" y en "Papás" sin duplicarse ni copiarse: son dos filas.
-- **Dejar de compartir es borrar una fila.** Revocación instantánea y sin ambigüedad.
-- **Si te sales de un espacio, tus memorias se van contigo.** Se eliminan sus relaciones
-  con ese espacio; los originales no se tocan porque nunca dejaron de ser tuyos.
-
-No existe el concepto de "espacio personal". Tus memorias son tuyas por defecto y no
-están compartidas con nadie hasta que lo digas.
-
-### Nada desaparece en silencio
-
-La contracara de "mis memorias se van conmigo" es que **al resto le desaparece
-contenido**. Que datos se esfumen sin aviso es el peor tipo de falla, así que **todo
-retiro se avisa**, siempre:
-
-- **Al salir del espacio** — _"X salió de Casa. 14 memorias que había compartido ya no
-  están disponibles."_ Agregado, sin listar qué eran.
-- **Al dejar de compartir una memoria suelta** — se avisa **nombrándola**: _"X dejó de
-  compartir 'Póliza auto 2026'."_ Retirar varias de una vez se agrupa en un solo aviso.
-
-Nombrarla no es un descuido: quien estaba en el espacio **ya tenía acceso a esa memoria**,
-así que el título no revela nada nuevo. Y si el aviso no dijera cuál es, sería inútil —
-la persona que dependía de ese documento no sabría qué fue lo que perdió.
-
-**El límite honesto que esto deja claro:** dejar de compartir es *retirar*, no *borrar de
-la cabeza del otro*. Quien ya lo vio, ya lo vio, y ahora además sabe que lo retiraste.
-Si algo no debe verlo nadie, la respuesta es no compartirlo — no compartirlo y arrepentirse.
-
-### El registro `Space`
-
-```
-id
-label         "Casa" | "Papás"
-created_at
-created_by    solo dato histórico; no otorga ningún privilegio
-```
-
-### Sin dueño y sin roles: todos son pares
-
-Un espacio **no tiene administrador**. La propiedad existe solo a nivel de memoria, y
-cada persona es dueña y responsable de las suyas. De ahí sale todo el gobierno del
-espacio, sin necesidad de inventar jerarquías:
-
-| Acción | Quién |
-|---|---|
-| invitar | cualquier participante |
-| compartir y dejar de compartir | solo el dueño de esa memoria |
-| cambiar las categorías del espacio | requiere el acuerdo de **todos** los participantes |
-| salir | cada quien de sí mismo |
-| **expulsar a otro** | **nadie** |
-
-**Nadie puede expulsar a nadie, y no hace falta.** Es la consecuencia más interesante del
-modelo: si alguien no debería seguir viendo tus cosas, no necesitas sacarlo del espacio
-—necesitas dejar de compartir—, y eso está siempre enteramente en tus manos. El espacio
-se queda vacío de tu contenido en el acto.
-
-El costo aceptado: si entra alguien que no debía (un link filtrado), no hay botón para
-echarlo. El remedio es que cada quien deje de compartir y el espacio se abandone. Para
-un sistema entre personas que se conocen, es un intercambio razonable, y evita el
-problema mucho peor de que alguien tenga poder sobre los datos de otro.
-
-**Un espacio sin participantes se archiva solo.** No hay que "cerrarlo": muere cuando
-sale el último.
-
-### Categorías: dos niveles
-
-Cada persona tiene sus propios `domains` (§9) — sus categorías privadas, sobre sus
-memorias. Un espacio compartido tiene además **su propia lista de categorías**, para que
-`/casa documentos` sea coherente sin importar cómo nombre cada uno las cosas en privado.
-
-Al compartir algo, el bot sugiere el dominio del espacio; tu dominio privado no se toca.
-Una memoria puede así estar en tu "papeles" y en el "documentos" de Casa a la vez.
-
-#### Cambiar las categorías del espacio: por unanimidad
-
-Como nadie manda (§10), **ningún cambio estructural se aplica sin el acuerdo de todos los
-participantes**: crear, renombrar, fusionar o archivar una categoría del espacio. Lo
-propone cualquiera —o el propio bot—, y solo se aplica cuando todos dijeron que sí.
-
-- **Un solo rechazo la mata de inmediato.** No tiene sentido esperar al resto.
-- **Las propuestas pendientes se ven con `/proposals`** y caducan a los 7 días si alguien
-  nunca respondió. Sin caducidad, un espacio de cuatro personas nunca cambia nada.
-  _(Se llamaba `/pendientes`, que ya es el comando de "qué te falta por leer". Dos cosas
-  distintas con el mismo nombre en el mismo bot es una trampa para F5.)_
-- Un espacio de una sola persona no es un caso especial: la unanimidad es contigo mismo.
-
-**Lo que NO requiere unanimidad: usar las categorías que ya existen.** Al compartir algo
-eliges su categoría y listo. Se vota la estructura compartida, nunca el día a día — si
-no, compartir se vuelve insoportable.
-
-#### Y sí, el bot también propone
-
-El mecanismo de categorías emergentes de §9 aplica igual acá, pero mirando lo que
-comparte **todo el grupo**: si entre varios acumulan cosas que no calzan en ninguna
-categoría del espacio, el bot propone una — _"entre ustedes van 5 cosas del colegio.
-¿Creo la categoría 'colegio' en Casa?"_ — y esa propuesta pasa por la misma unanimidad.
-
-### Identidad e invitación — la ventaja del chat
+## 10. Identidad y emparejamiento
 
 **No hay cuentas, ni contraseñas, ni verificación de correo.** La identidad es el user id
-del canal. El onboarding completo es:
+del canal, que **no es falsificable** — por eso no hace falta allowlist ni cuarentena.
 
-`/invitar casa` → link de un solo uso → la otra persona abre el bot → adentro.
+```
+dm pair --bot <usuario>   →   link de un solo uso, 15 minutos
+```
 
-Tu mamá no crea una cuenta, no elige una contraseña, no instala nada. Es probablemente el
-mayor beneficio práctico de ser solo chat.
+La otra persona lo abre, Telegram manda `/start <code>`, y queda vinculada. Sin instalar
+nada. Es probablemente el mayor beneficio práctico de ser solo chat.
 
-### Búsqueda
+**Y es una propiedad estructural, no una promesa:** `route()` exige un `Actor`. Sin
+identidad vinculada no hay Actor, y sin Actor no existe el camino para llamar a nada. La
+regla dura 9 deja de depender de que alguien se acuerde de un `WHERE`.
 
-Al preguntar se busca en **tus memorias + todo lo compartido en los espacios donde eres
-miembro**, y la respuesta dice de dónde viene cada cosa. Obligarte a recordar dónde
-guardaste algo sería reintroducir el problema que el sistema existe para eliminar.
+Un id desconocido recibe **una** línea seca y después silencio 10 minutos.
 
-### El modo de falla: filtrar algo sensible
+## 11. Comandos
 
-Se mitiga por diseño, no por cuidado del usuario:
+**Uno solo por operación, en inglés, con el nombre del CLI.** Dos formas de decir lo
+mismo es una que hay que mantener sincronizada con la otra para siempre.
 
-- **Nada se comparte por inercia.** El default siempre es privado; compartir es un acto
-  explícito.
-- Al compartir algo de un dominio sensible (salud, finanzas), el bot **confirma nombrando
-  a quién se lo vas a mostrar**.
-- Dejar de compartir es inmediato, y **siempre se avisa** al espacio (ver abajo).
+### Chat
 
-## 12. Roadmap
+```
+/capture <texto>     guarda eso como memoria    (un archivo se guarda solo)
+/ask <pregunta>      responde citando la fuente
+/search <algo>       lista lo que coincide, de a cinco
+/pending             qué falta por leer
+/review              lo que quedó dudoso
+/domains             tus categorías · /<slug> para ver una
+/create <n>: <desc>  ·  /describe <n>: <d>  ·  /rename <n> <nuevo>
+/archive <n>         ·  /merge <a> <b>      ·  /propose
+/help
 
-Pasos chicos y estables. Cada fase tiene que ser útil sola y quedar en verde antes de
-pasar a la siguiente. Si una fase no se usa en la vida real, se arregla o se descarta —
-no se acumula.
+view:N   los datos      open:N  el archivo     hide:N  sacar de resultados
+more     página siguiente   save  guardar lo que buscaste   yes / no
+```
 
-**F0 — Tubería tonta.** Sin LLM. El bot recibe texto, foto, audio y PDF; guarda el blob
-original con su metadata y responde `guardado ✓ #id`. Búsqueda full-text sobre lo que
-venga en texto. Un comando `/search`. Tres cosas que parecen prematuras y no lo son:
-`owner_id` en todas las tablas, un **módulo único de acceso a blobs** (`put`/`get`, nadie
-más habla con Garage — es lo que hace posible cambiar a R2 con una variable), y el adapter
-de canal con capacidades declaradas (§7.1).
-_Listo cuando:_ lo usas una semana y no vuelves a las notas del teléfono, y el backup
-cifrado off-site corre solo y ya lo restauraste una vez.
-> **Construido.** Core + CLI, Postgres y Garage, 55 tests. Ver [README](./README.md).
-> Pendiente del criterio de listo: el backup off-site y la semana de uso real.
->
-> **El 3 de septiembre de 2026 el sistema se vació entero** —base, blobs, identidades
-> vinculadas— para empezar a poblarlo de cero. Eso reinicia el reloj de la semana de uso
-> real, y deja el **backup off-site** (§14.2) como lo único de F0 que sigue sin
-> construirse. Es el único riesgo irreversible que queda: los blobs viven en un solo
-> host, y un blob perdido no se reprocesa desde nada.
+**El número siempre es de la última lista que viste.** El registro cuelga de la forma del
+`Outcome`, en un solo lugar, para que una lista nueva quede cubierta sin que nadie se
+acuerde: cuando numerar y registrar vivían en archivos distintos, `/documentos` ofrecía
+botones sin registrar los ids y `view:2` abría el segundo de la búsqueda anterior.
 
-**F1 — Texto de todo.** Los tres carriles de §8.1: markitdown para documentos, visión
-para fotos y escaneos, Whisper para audio. La búsqueda del F0 ahora alcanza el
-**contenido**, no solo lo que escribiste tú.
-_Listo cuando:_ mandas la foto de una boleta y la encuentras buscando por lo que dice.
-> **Construido.** Router de carriles, cola pg-boss con `dm worker`, y `dm reprocess`
-> para UC-15. 126 tests. La migración 003 parte `note` (lo tuyo, nunca se pisa) de
-> `normalized_text` (lo derivado del blob, regenerable) — sin esa línea, la primera
-> transcripción se comía la nota.
->
-> **Los tres carriles son servicios**, no binarios en el host: `documents`
-> (markitdown + rasterizado), `ocr` (RapidOCR) y `whisper`, cada uno en su
-> contenedor y detrás del mismo puerto `Converter`. El motor de cada carril se
-> cambia con una variable de entorno. Ver [README](./README.md).
->
-> **Validado contra el corpus real** de entonces (173 memorias, borrado en el reinicio
-> del 3-sep): 65 por markitdown sin un
-> solo error, 61 por OCR, 38 sin carril (CAD, zips, video) y 8 de texto. Los
-> únicos fallos fueron 2 HEIC —que el OCR no lee— y un fixture corrupto de 22
-> bytes. La migración 003 rescató las 168 notas, ninguna perdida.
->
-> **Una corrección a §8.1:** el carril B por defecto es OCR clásico, no un LLM
-> multimodal. Para documentos impresos el OCR *gana* justo donde importa — números
-> de póliza, RUT, montos: cadenas que no se adivinan por contexto y donde los
-> modelos chicos fallan. Además es gratis y reproducible desde el blob. El carril
-> multimodal sigue disponible (`DM_VISION_BACKEND=anthropic|openai`) y es el
-> correcto para manuscrito, que es lo que el OCR no puede leer.
+### Terminal
 
-**F1.5 — Canal de chat.** Telegram, con el adapter de §7.1: capacidades declaradas,
-router de verbos en el core, emparejamiento por código de un solo uso, y paginación de
-cinco en cinco. Es la fase que el roadmap original no tenía y que §2 daba por supuesta —
-sin ella el producto es un CLI, y "solo chat" es la premisa entera.
-_Listo cuando:_ mandas la foto de una boleta desde el teléfono y la encuentras buscando
-por lo que dice. Es también la primera vez que el `time-to-capture` de §15 se puede
-medir de verdad, con el pulgar.
-> **Construido.** Puerto `Channel` con capacidades declaradas, router de verbos puro,
-> emparejamiento por código de un solo uso, paginación de cinco, y adapter de Telegram.
-> 182 tests. Dos decisiones que sostienen el diseño mejor que un comentario: el tipo
-> `Turn` cierra la respuesta al terminar el handler —así el bot no *tiene cómo* iniciar
-> conversación—, y `route()` exige un `Actor`, de modo que sin identidad vinculada no
-> existe el camino para llamar a nada (regla dura 9).
-> **Criterio cumplido.** Foto mandada desde el teléfono a @DeizMemoryBot: guardada,
-> leída por OCR en 2 segundos y encontrada buscando por lo que dice. Telegram entrega
-> las fotos **sin nombre de archivo**, así que hasta F2 el título de una foto del
-> teléfono es el volcado del OCR — que es justo el problema que F2 nombra.
->
-> **Corregido con el uso real, después de F3.** Cuatro cosas que solo aparecen cuando el
-> pulgar es tuyo, y todas del mismo tipo — algo correcto que nadie conecta, o un número
-> que se resuelve contra el estado equivocado:
->
-> - **Guardar pasa a ser explícito** (§5): un archivo, o `/capture`. El texto suelto se
->   consulta. La escotilla de "guardarlo igual" estaba a medio conectar —`pending.save`
->   no contaba como algo en pantalla— y ahora es lo único que sostiene no perder nada.
-> - **Los comandos son los del CLI, en inglés**: `/search`, `/capture`, `/ask`, `/review`,
->   `/domains`; y `view:N`, `open:N`, `hide:N`, `more`. Los nombres en español siguen
->   parseando. La prosa y las etiquetas no se tocaron: son la voz del bot, no su API.
-> - **`view:2` se resolvía contra la lista anterior.** `/<categoría>` numeraba y ofrecía
->   botones sin registrar los ids. Devolvía un documento real, el equivocado. Numerar
->   vivía en `present.ts` y registrar en cada rama de `route.ts`; ahora el registro
->   cuelga de la forma del `Outcome`, en un solo lugar. El mismo bug tenía el botón
->   "mandarme el original" del detalle, que codificaba `abrir:1`.
-> - **Dos botones por resultado**: `datos` y `archivo`. Bajar algo costaba dos toques y
->   una pantalla intermedia. Y `view:N` muestra los datos, no la transcripción entera.
->
-> 291 tests.
+```
+dm init · dm doctor · dm serve · dm worker · dm chat "<msg>"
+dm capture <archivo> | --text "..." | -        --title --occurred --wait
+dm ls · dm search · dm ask · dm show · dm open · dm in <categoría>
+dm domains [create|edit|archive|merge|propose] · dm classify · dm index
+dm review · dm reprocess [--failed|--pending|--all|--lane|--wait]
+dm pair · dm identities
+dm hide · dm unhide · dm purge <id> --yes
+```
 
-**F1.6 — Bandeja de revisión.** La deuda que dejó F1: los carriles ya marcan cosas
-—OCR de baja confianza, transcripción cortada, un formato que no se pudo leer— y no hay
-dónde verlas. §3.4 promete la bandeja, §7 la dibuja, §17 la define y el modelo de datos
-tiene `needs_review`; ninguna fase la construía. Hoy revisar es escribir SQL.
+Globales: `--json` y `--actor <id>`. Salidas: `0` ok · `1` error · `2` requiere
+confirmación · `3` no encontrado · `4` prohibido · `5` prefijo ambiguo.
 
-Tres cosas concretas que hay que arreglar juntas, porque son la misma:
+**Lo que NO está en el chat es deliberado:** `purge` (irreversible, vive en la terminal
+con auditoría — el chat solo oculta) y la mantención (`classify`, `index`, `reprocess`,
+`worker`, `serve`).
 
-- **`status` miente.** `needs_review` no se escribe nunca —solo existe en el CHECK de la
-  001— y peor: una memoria que falló queda como `normalized`, porque una corrida con
-  error no toca el estado y F0 la había marcado así cuando su nota vivía en
-  `normalized_text`. El estado tiene que reflejar la realidad o no sirve de señal.
-- **Reintentar no siempre puede ayudar.** `dm reprocess --failed` sirve cuando la causa
-  fue transitoria (la API caída, un servicio apagado). Para un HEIC que el carril no
-  sabe leer, reintentar es un botón que no hace nada. Hay que distinguir el fallo que se
-  arregla solo del que necesita código.
-- **La confirmación no nombra lo afectado.** `purge` dice qué va a borrar; `reprocess`
-  dice "3 memorias" y ya. `Affected[]` existe justo para eso.
+## 12. Estado y límites conocidos
 
-_Listo cuando:_ `dm review` te muestra qué quedó dudoso y por qué, y puedes decidir sobre
-cada cosa sin abrir `psql`.
-> **Construido.** `dm review` y `/revisar` en el chat, `status` que dice la verdad
-> (`needs_review`), y `PermanentError` para que sea el carril que falla —y no una regex
-> sobre el mensaje— quien declare si reintentar puede ayudar. La confirmación de
-> `reprocess` ahora nombra lo afectado, como `purge`. 193 tests.
+Construido y en verde: captura, los tres carriles, canal de chat, bandeja de revisión,
+dominios dinámicos con clasificación local, y preguntas en lenguaje natural con cita
+verificada. **291 tests.**
 
-**F2 — Dominios y clasificación.** Tabla `domains` con su CRUD desde el chat (§9), y
-clasificador que se arma en runtime desde ella: dominio, título corto y fecha del hecho.
-El título generado no es un adorno: **el nombre del archivo casi nunca significa algo**
-—`IMG_20260114_093312.jpg`, `scan0001.pdf`, `WhatsApp Document...`— así que hasta que
-exista un título, media biblioteca no tiene cómo nombrarse.
-Todavía sin schemas tipados. Comando `/<slug>` para listar.
-_Listo cuando:_ creas un dominio nuevo desde el chat, mandas algo y cae ahí — y `/salud`
-te lista tus consultas ordenadas por fecha real, no por fecha de captura.
-> **Construido.** Tabla `domains` con CRUD (crear avisa si se solapa, no hay borrado
-> duro: archivar y fusionar), `/<slug>` resuelto contra la tabla, y clasificador con
-> **IA local** (Ollama, `qwen2.5:3b`) que arma su prompt en runtime desde las
-> descripciones. Lo que devuelve se valida: un dominio inventado se descarta, una fecha
-> del futuro también. Lo que puso la persona nunca se pisa.
->
-> **Y el CRUD vive en el chat, no solo en la terminal:** `/crear`, `/describir`,
-> `/renombrar`, `/archivar` y `/fusionar`, que es donde §9 siempre lo quiso —"agregar un
-> dominio no puede requerir un deploy" tampoco debería requerir un teclado. Eso obligó a
-> construir la ida y vuelta de confirmación que faltaba: el pendiente guarda la operación
-> y sus argumentos, así un `sí` reejecuta exactamente la misma llamada y no hay un segundo
-> camino que pueda divergir del primero. 257 tests.
->
-> El modelo es local aquí y no en el carril de visión a propósito: elegir entre ocho
-> categorías le sale bien a un modelo chico; leer un RUT sin equivocarse, no.
->
-> **Y faltaba lo principal: nadie llamaba al clasificador.** `classifyMemory` funcionaba
-> y se probaba, pero lo invocaba únicamente `dm classify` a mano. Quince documentos
-> entraron por Telegram y quedaron normalizados, indexados y **sin categoría**, con
-> `doctor` en verde y los ocho dominios en cero. La fase se dio por lista porque el
-> comando andaba, y nadie preguntó quién lo corría.
->
-> El arreglo es de una línea —la tubería clasifica después de indexar, sin pisar una
-> categoría ya puesta— pero la lección no: **el criterio de listo de una fase tiene que
-> nombrar quién dispara lo que construyó**, no solo que la operación funcione. Ahora
-> `doctor` tiene su propia fila `clasificar`, porque un chequeo que no mira el paso
-> siguiente da una calma falsa.
+**El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
+cero. No hay corpus histórico.
 
-**F3 — Preguntas en lenguaje natural.** Recuperación híbrida (filtro por dominio y fecha
-+ semántica) con cita obligatoria a la fuente.
-_Listo cuando:_ confías en la respuesta sin ir a abrir el PDF.
-> **Construido.** pgvector en la misma base, troceado por párrafos, embeddings locales
-> (`nomic-embed-text`, 768d) y fusión de full-text con semejanza sobre un subconjunto ya
-> recortado por dominio y fecha. La cita se verifica en código: sin ella la prosa se
-> descarta. 246 tests.
->
-> Dos cosas que solo aparecieron al probarlo con una póliza de verdad: preguntar no
-> puede hacer AND de todos los términos (cero resultados contra ocho), y anteponer el
-> título a cada trozo diluye los vectores en vez de darles contexto.
->
-> **Y una corrección al límite que había anotado acá.** Escribí que el modelo "a veces
-> agrega una unidad que no está en la fuente". Es peor que eso: **inventa la cifra
-> entera**. A "¿cuál es el deducible de mi seguro de auto?" contestó "5 UF [a853a71c]"
-> con ninguno de los ocho pasajes recuperados conteniendo ese número. La cita era
-> válida y el dato falso — que es el peor fallo posible, porque una respuesta *con*
-> cita es más creíble que una sin ella.
->
-> La causa no es solo el modelo. La palabra "auto" en la pregunta hace que el OR traiga
-> el anexo de asistencia en ruta —saturado de "vehículo"— y **empuje fuera la tabla de
-> coberturas**, la única con la cifra. La misma pregunta sin "auto" responde bien.
->
-> El arreglo es el mismo patrón que la cita: verificar en código, no confiar en el
-> prompt. `grounding.ts` exige que **toda cifra de la prosa aparezca en los pasajes
-> leídos**, normalizando la escritura chilena (`UF 3,0` y `3 UF` son el mismo dato) y
-> comprobando también la unidad, que es lo que atrapa el `$89.990` → `89.990 UF`. Si
-> algo no calza, se descarta la prosa y se muestran las fuentes. Estricto a propósito:
-> un "no lo tengo" de más se recupera; un número inventado con cita, no.
->
-> Y las fuentes se muestran **una por memoria**. Recuperar por trozo es correcto;
-> presentarlo por trozo hacía que la misma póliza saliera tres veces y que `ver 1`,
-> `ver 2` y `ver 3` abrieran el mismo archivo.
+Lo que falta, con nombre:
 
-**F5 — Espacios compartidos.** Tabla `memory_space`, participantes, `/invitar` con link
-de un solo uso, categorías del espacio por unanimidad, confirmación al compartir (§10).
-El `owner_id` ya existe desde F0; acá se agrega la relación encima.
-_Listo cuando:_ tu pareja comparte algo en "Casa" desde su teléfono, tú lo encuentras
-desde el tuyo, y al salirse del espacio desaparece limpio.
+- **Backup cifrado off-site — el único riesgo irreversible.** Todo lo demás se regenera
+  desde el blob; el blob no se regenera de nada, y hoy vive en un solo host. `restic` o
+  `age` contra R2 o B2, y **restaurado al menos una vez**: un backup que no se restauró
+  no existe.
+- **La semana de uso real.** Usarlo sin construir nada y ver qué falta de verdad.
+- **TIFF sigue sin carril**, y un bot de Telegram **no puede bajar más de 20 MB**.
+- **El modelo de 3B a veces se queda corto** al redactar. `DM_CLASSIFY_MODEL` lo cambia.
+- **`grounding` valida que la cifra esté en el texto, no que responda tu pregunta.** Si
+  la recuperación trae la sección equivocada, puede darte un número real de otra cosa.
 
-**F6 — Facts tipados donde duele.** Solo dos o tres tipos de alto valor (póliza de auto,
-póliza de salud, receta), con vigencia.
-_Listo cuando:_ "¿cuál es mi deducible?" responde en un mensaje, y una póliza vencida
-se identifica como vencida.
-
-**F7 — Playbooks de urgencia.** Respuestas pre-armadas para choque, urgencia médica,
-robo de documentos.
-_Listo cuando:_ en una situación real de estrés lo abres primero a él.
-
-## 13. Reglas duras para el agente
+## 13. Reglas duras
 
 Invariantes del producto:
 
-1. Nunca responder un dato factual sin `memory_id` de respaldo.
-2. Si hay dos memorias en conflicto, mostrar ambas con fechas y decir que hay conflicto.
+1. Nunca responder un dato factual sin `memory_id` de respaldo. **Verificado en código.**
+2. Nunca afirmar una cifra que no esté en los pasajes leídos. **Verificado en código.**
+3. Si hay dos memorias en conflicto, mostrar ambas con fechas y decir que hay conflicto.
    Jamás elegir una en silencio.
-3. Si el dato está vencido o superado, decirlo **antes** del dato.
 4. Máximo **una** pregunta de aclaración por captura. El resto va a la bandeja.
 5. Salud: devolver lo guardado, nunca interpretar ni recomendar.
 6. Tributario: mostrar el comprobante guardado, nunca calcular ni interpretar normativa.
-7. Nunca crear, renombrar, archivar ni fusionar una categoría sin confirmación
-   explícita — y si es de un espacio compartido, sin la de **todos** sus participantes.
-8. Confirmar antes de cualquier acción irreversible (marcar superado, fusionar, purgar).
-9. Toda consulta va filtrada por: memorias propias + lo compartido en espacios donde el
-   que pregunta es miembro. Sin excepción, sin "modo admin".
-10. Compartir algo de un dominio sensible exige confirmación que **nombre a quién se le
-    va a mostrar**.
-11. Nadie tiene autoridad sobre memorias ajenas: ni para verlas, ni para dejar de
-    compartirlas, ni para borrarlas. Los espacios no tienen administrador.
-12. Todo retiro de contenido compartido se avisa al espacio. Nada desaparece en silencio.
+7. Nunca crear, renombrar, archivar ni fusionar una categoría sin confirmación explícita.
+8. Confirmar antes de cualquier acción irreversible (fusionar, purgar).
+9. Toda consulta va filtrada por dueño. Sin excepción, sin "modo admin".
 
 ## 14. Privacidad y seguridad
 
 Esto guarda datos médicos y financieros. El modelo de amenaza, honesto:
 
 - **Los chats de bot en Telegram NO son E2E.** Telegram puede leerlos. Hay que asumirlo
-  conscientemente, o cambiar de canal más adelante.
-- Cifrado en reposo de blobs y DB. Backups cifrados y **probados** (un backup no
-  restaurado no existe).
-- Secretos fuera del repo. Nada de PII en logs — redactar antes de escribir.
-- **Aislamiento por dueño y por membresía.** Toda query lleva ese filtro. Es la
-  superficie de fuga más peligrosa del sistema una vez que hay más de una persona: un
-  `WHERE` olvidado no es un bug, es filtrar la ficha médica de alguien.
-- **Nivel sensible:** ciertos datos (bancarios, diagnósticos, claves de acceso) exigen
-  PIN antes de mostrarse. Protege el caso "me robaron el teléfono desbloqueado".
-- Contraseñas: **no se guardan**. Eso vive en un gestor de contraseñas real; acá solo
-  se recuerda dónde está.
-- Proveedor de LLM: verificar retención cero / no entrenamiento antes de mandarle una
-  receta médica.
+  conscientemente.
+- **La IA es local.** Clasificación, embeddings y redacción corren en Ollama en el mismo
+  host: no hay proveedor al que verificarle la retención.
+- Secretos fuera del repo. Nada de PII en logs — se loguean ids, tamaños y estados.
+- **Contraseñas y códigos 2FA: no se guardan.** Eso vive en un gestor real; acá solo se
+  recuerda dónde está.
+- **Aislamiento por dueño.** Toda query lleva ese filtro (regla dura 9).
 
 ### 14.1 Storage: el disco duro personal en la nube
 
-**Append-only.** Nada se borra. Corregir es agregar; ocultar es `hidden = true`. La
-memoria vieja sigue existiendo y sigue respondiendo preguntas del pasado
-_("¿qué cubría mi póliza en marzo?")_.
+**Append-only.** Corregir es agregar; ocultar es `hidden = true`.
 
-Una excepción honesta: **sí existe `purgar`**, para el caso real de haber subido algo que
-no debía estar ahí (datos de otra persona, la foto equivocada). Es explícito, pide
-confirmación y queda registrado en un log de auditoría. Prometer "es imposible borrar"
-es una promesa que se rompe el día que la necesitas.
+Una excepción honesta: **`purge` existe**, para el caso real de haber subido algo que no
+debía estar ahí. Es explícito, pide confirmación nombrando lo afectado, y queda en el log
+de auditoría. Prometer "es imposible borrar" es una promesa que se rompe el día que la
+necesitas.
 
-**Blobs direccionables por contenido** (sha256): deduplicación gratis, y compartir una
-memoria nunca mueve ni copia bytes.
+**Blobs direccionables por contenido** (sha256): deduplicación gratis. **Prefijo por
+dueño**, que es permanente.
 
-**El prefijo del bucket es por dueño, no por espacio.** El dueño es permanente y el
-espacio es una relación transitoria: si los blobs vivieran bajo un prefijo de espacio,
-salirse de uno obligaría a mover archivos. Bajo prefijo de dueño, salirse es borrar
-filas de una tabla.
-
-**Backend: S3-compatible, siempre.** El código nunca habla con un proveedor concreto:
-habla S3. Eso convierte la elección de dónde viven los bytes en una variable de entorno,
-no en una decisión de arquitectura.
-
-- **Nuestro stack: Garage self-hosted**, en el mismo host que el resto. Sin factura, sin
-  una cuenta de terceros guardando fichas médicas, sin cuotas de API.
-- **Extensible a Cloudflare R2** cuando convenga, cambiando endpoint y credenciales. Sin
-  tocar código.
-
-**Por qué Garage:** un solo binario en Rust, consumo de memoria mínimo, pensado
-exactamente para self-hosting en uno o pocos nodos. Cabe al lado de Postgres en el mismo
-VPS sin pelear por recursos, que es justo la forma del proyecto. No trae consola web —
-la administración es por CLI (`garage bucket`, `garage key`), y para un sistema de un
-dueño eso alcanza y sobra.
-
-**No nos casa con nada.** Habla S3, así que Garage es una decisión de despliegue, no de
-arquitectura: el día que quieras R2, cambian tres variables de entorno.
-
-**El costo real del self-hosting es la durabilidad, y hay que pagarlo.** Un solo host es
-un solo punto de falla, y acá el blob original es lo único irrecuperable: si se pierde,
-no hay reproceso que valga. Backup cifrado y **off-site**, no negociable — y el destino
-natural de ese backup es justamente R2 o B2. Entra primero como respaldo, no como
-almacenamiento primario.
+**Backend S3-compatible, siempre.** El código nunca habla con un proveedor concreto:
+habla S3. Garage self-hosted es una decisión de despliegue, no de arquitectura — el día
+que quieras R2, cambian tres variables.
 
 ### 14.2 Cifrado: solo donde los bytes salen del host
 
-La pregunta correcta no es "¿ciframos?" sino **qué protege cada cifrado**. Y en un
-sistema self-hosted de un solo dueño, la respuesta recorta mucho el alcance.
-
 **Cifrar cada blob no compra nada acá.** La app, Garage y la clave viven en el mismo VPS:
 quien entra al host se lleva los datos **y** la clave. Un cifrado cuya llave está al lado
-de la cerradura no es una defensa, es ceremonia — y costaría justo en las fases que
-tienen que ser rápidas.
+de la cerradura es ceremonia.
 
-**Lo único que sí compra algo es cifrar lo que sale del host.** Concretamente, uno solo:
+**Lo único que sí compra algo es cifrar lo que sale del host:** el backup off-site (§12).
+Su passphrase la guardas tú, se muestra una vez, y si la pierdes el respaldo es un
+ladrillo.
 
-- **El backup off-site — F0, no negociable.** Es el único lugar donde tus datos duermen
-  en infraestructura ajena. `restic` o `age` sobre el stream lo resuelve, es barato, y
-  cubre la amenaza real. Su passphrase la guardas tú, se muestra una vez y no hay
-  recuperación: si la pierdes, el respaldo es un ladrillo.
+Lo que de verdad mueve la aguja, y va antes: cifrado de disco del host, Postgres y Garage
+**sin puerto expuesto a internet**, y un backup **restaurado al menos una vez**.
 
-Lo que de verdad mueve la aguja en este sistema, y va antes que cualquier cifrado de
-blobs: **cifrado de disco del host**, Postgres y Garage **sin puerto expuesto a
-internet**, secretos fuera del repo, y un backup **restaurado al menos una vez** (uno que
-nunca se restauró no existe).
-
-#### La incomodidad que ordena las prioridades
-
-El texto en claro **ya sale de la caja, por diseño**: cada documento se le manda al
-proveedor de LLM para extraer, y cada respuesta pasa por un chat que no es E2E. Cifrar el
-blob en reposo mientras ocurre eso es proteger la única copia que nunca se movía.
-
-Los controles que realmente importan son otros dos, y ya están en §14: **un proveedor de
-LLM con retención cero**, y aceptar conscientemente lo que Telegram ve.
-
-#### Cuándo se reabre esto
-
-Esta decisión asume **self-hosted, un dueño, un host**. Si eso cambia —storage de
-terceros como fuente de verdad, o el sistema operado para gente que no eres tú— el
-cálculo se invierte y hay que rehacerlo desde cero.
+**Esto asume self-hosted, un dueño, un host.** Si eso cambia, el cálculo se invierte.
 
 ## 15. Métricas de éxito
 
@@ -845,63 +464,18 @@ De uso, no de sistema:
 
 - **Time-to-capture** < 5s percibidos.
 - **Capturas por semana** — si baja, la fricción subió.
-- **Recall confiable a la primera** — % de preguntas respondidas con la cita correcta
-  sin reintentar. Métrica estrella.
-- **Consultas que igual terminaron en el documento original** — si es alto, el recall
-  no está sirviendo, por más que haya respondido algo.
+- **Recall confiable a la primera** — % de preguntas respondidas con la cita correcta sin
+  reintentar. Métrica estrella.
+- **Consultas que igual terminaron en el documento original** — si es alto, el recall no
+  está sirviendo.
 - **Tasa de "no lo tengo"** — sana si es honesta, alarmante si el dato sí estaba.
-- **Miembros activos en espacios compartidos** — un espacio donde solo escribe una
-  persona no es compartir, es ruido.
 
-## 16. Canal: Telegram ahora, adapter desde el día uno
+## 16. Glosario
 
-Como el bot **solo responde y nunca inicia conversación**, la ventana de 24h de la
-Business API de WhatsApp no lo limita: siempre le hablas tú primero. Eso deja la
-comparación en estos términos:
-
-| | Telegram | WhatsApp (API oficial) |
-|---|---|---|
-| Costo | gratis | **gratis para este bot** — ver abajo |
-| Fricción de setup | nula, dos minutos con BotFather | Meta Business, verificación, 3–10 días hábiles |
-| Número | el que sea | uno **aparte**: uno ya registrado en WhatsApp normal no sirve |
-| Archivos y audio | nativo, pero **el bot no baja más de 20 MB** | límites más holgados |
-| **Que tu mamá ya lo tenga** | improbable | **prácticamente seguro** |
-
-**Corrección de la fila de costo, que antes decía "por conversación".** Desde el 1 de
-julio de 2025 Meta cobra por *plantilla*, y los mensajes que no son plantilla son
-gratis. Como este bot **solo responde** —siempre le hablas tú primero, y eso abre una
-ventana de 24 h—, nunca manda una plantilla: paga **$0** y no necesita que le aprueben
-ninguna. El costo de WhatsApp no es plata, es tiempo de trámite.
-
-**Decisión: Telegram primero, WhatsApp en paralelo.** Telegram permite usar el sistema
-hoy y no bloquea nada. Pero ahora que el costo de WhatsApp resultó ser cero, la fila
-que decide vuelve a ser la última: pedirle a tus papás que instalen Telegram contradice
-de frente el principio de "ninguna app nueva" (§2). Así que el trámite con Meta se
-empieza de inmediato —tarda días de todos modos— y WhatsApp entra cuando salga.
-
-El adapter de canal se trata como **código de primera clase**, con capacidades
-declaradas y no asumidas (§7.1). Se escribe una vez y sirve para los dos.
-
-**Dos riesgos aceptados, y conviene tenerlos escritos:**
-
-- **La cláusula de Meta del 15 de enero de 2026** prohíbe "asistentes de IA de propósito
-  general" en la plataforma. Esto no es eso —§2: no da consejo médico ni legal, devuelve
-  lo que tú guardaste— y hasta ahora se aplicó a proveedores grandes, no a personas.
-  Pero es un riesgo, no una ausencia de riesgo.
-- **Nada de clientes no oficiales de WhatsApp.** `wa-automate`, `whatsapp-web.js` y
-  Baileys violan los términos, y el baneo es permanente y sin apelación; sus propios
-  mantenedores dicen que para salud y finanzas hay que usar la API oficial. Un número
-  baneado además **no puede registrarse después en la Cloud API**: cierra la puerta de
-  salida.
-
-## 17. Glosario
-
-- **Memory** — captura cruda inmutable. La unidad del sistema.
+- **Memory** — captura inmutable. La unidad del sistema.
 - **Domain** — categoría editable en runtime; su `description` alimenta el clasificador.
-- **Space** — relación de compartición entre personas. No es dueño de las memorias.
-- **Purgar** — la única forma de borrar de verdad: explícita, confirmada y auditada.
 - **Carril** — ruta de normalización según el tipo de entrada (§8.1).
-- **Fact** — dato tipado extraído, con vigencia. Fase tardía.
-- **Supersesión** — un dato reemplaza a otro sin borrarlo.
-- **Playbook** — respuesta pre-armada para urgencias.
-- **Bandeja de revisión** — cola de resultados de baja confianza esperando confirmación.
+- **Trozo** (`memory_chunk`) — un párrafo con su vector. Lo que se cita.
+- **Grounding** — que toda cifra de la respuesta esté en los pasajes leídos.
+- **Purgar** — la única forma de borrar de verdad: explícita, confirmada y auditada.
+- **Bandeja de revisión** — lo que quedó dudoso, esperando que decidas.

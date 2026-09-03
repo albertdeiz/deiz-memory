@@ -86,56 +86,45 @@ export function classify(msg: Incoming, session: Session | null): Intent {
     const arg = rest.join(' ').trim();
 
     // Los comandos son los del CLI: `/search` es `dm search`, `/capture` es
-    // `dm capture`. Se aceptan además los nombres en español con que nació el
-    // bot, porque romperle los dedos a quien ya los tenía aprendidos no compra
-    // nada — pero los que se muestran y los que llevan los botones son estos.
-    if (cmd === 'start' || cmd === 'empezar') return { verb: 'parear', code: arg };
-    if (cmd === 'help' || cmd === 'ayuda') return { verb: 'ayuda' };
+    // `dm capture`. Uno solo por operación — dos nombres para lo mismo es uno
+    // que hay que mantener sincronizado con el otro para siempre.
+    if (cmd === 'start') return { verb: 'parear', code: arg };
+    if (cmd === 'help') return { verb: 'ayuda' };
 
     // Guardar es explícito: es la única forma de que un texto suelto entre al
     // corpus. Ver la nota de `classify()` más abajo.
-    if (cmd === 'capture' || cmd === 'capturar' || cmd === 'guardar') {
-      return { verb: 'capturar', text: arg || null, attachment: null };
-    }
+    if (cmd === 'capture') return { verb: 'capturar', text: arg || null, attachment: null };
 
     // `/search` lista; `/ask` responde citando. La diferencia es la de §6, y
     // vale tenerla a mano: a veces quieres el dato y a veces los documentos.
-    if (cmd === 'search' || cmd === 'buscar' || cmd === 'busca') {
-      return { verb: 'recordar', query: arg, adivinado: false };
-    }
-    if (cmd === 'ask' || cmd === 'preguntar') {
-      return { verb: 'recordar', query: contentWords(arg) || arg, adivinado: true };
-    }
+    if (cmd === 'search') return { verb: 'recordar', query: arg, adivinado: false };
+    if (cmd === 'ask') return { verb: 'recordar', query: contentWords(arg) || arg, adivinado: true };
 
-    if (cmd === 'pending' || cmd === 'pendientes') return { verb: 'pendientes' };
-    if (cmd === 'review' || cmd === 'revisar' || cmd === 'revision') return { verb: 'revisar' };
-    if (cmd === 'more' || cmd === 'mas') return { verb: 'accion', action: { kind: 'mas' } };
-    if (cmd === 'domains' || cmd === 'dominios' || cmd === 'categorias') return { verb: 'dominios' };
-    if (cmd === 'propose' || cmd === 'proponer') return { verb: 'proponer' };
+    if (cmd === 'pending') return { verb: 'pendientes' };
+    if (cmd === 'review') return { verb: 'revisar' };
+    if (cmd === 'more') return { verb: 'accion', action: { kind: 'mas' } };
+    if (cmd === 'domains') return { verb: 'dominios' };
+    if (cmd === 'propose') return { verb: 'proponer' };
 
     // CRUD de categorías desde el chat, que es donde §9 lo quiere.
     //
     // El separador es `:` y no un segundo argumento posicional porque tanto el
     // nombre como la descripción llevan espacios, y pedirle comillas a alguien
     // que escribe desde el teléfono es pedirle que no lo use.
-    if (cmd === 'create' || cmd === 'crear' || cmd === 'nueva') {
+    if (cmd === 'create') {
       const [nombre, ...resto] = arg.split(':');
-      return {
-        verb: 'crearDominio',
-        label: (nombre ?? '').trim(),
-        description: resto.join(':').trim(),
-      };
+      return { verb: 'crearDominio', label: (nombre ?? '').trim(), description: resto.join(':').trim() };
     }
-    if (cmd === 'describe' || cmd === 'describir') {
+    if (cmd === 'describe') {
       const [ref, ...resto] = arg.split(':');
       return { verb: 'describirDominio', ref: (ref ?? '').trim(), description: resto.join(':').trim() };
     }
-    if (cmd === 'rename' || cmd === 'renombrar') {
+    if (cmd === 'rename') {
       const [ref, ...resto] = arg.split(/\s+/);
       return { verb: 'renombrarDominio', ref: ref ?? '', label: resto.join(' ').trim() };
     }
-    if (cmd === 'archive' || cmd === 'archivar') return { verb: 'archivarDominio', ref: arg };
-    if (cmd === 'merge' || cmd === 'fusionar') {
+    if (cmd === 'archive') return { verb: 'archivarDominio', ref: arg };
+    if (cmd === 'merge') {
       const [from, into] = arg.split(/\s+/);
       return { verb: 'fusionarDominios', from: from ?? '', into: into ?? '' };
     }

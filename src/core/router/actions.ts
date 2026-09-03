@@ -26,8 +26,8 @@ export type Action =
  * Lo que viaja en un botón. Corto porque Telegram limita a 64 bytes.
  *
  * En inglés y con los nombres del CLI: `view` es `dm show`, `open` es `dm open`,
- * `hide` es `dm hide`. Los nombres en español con que nació el bot se siguen
- * **aceptando** al escribirlos —ver `parseAction`—, pero ya no se emiten.
+ * `hide` es `dm hide`. Un solo nombre por acción: dos formas de decir lo mismo
+ * es una que hay que mantener sincronizada con la otra para siempre.
  */
 export const encodeAction = (a: Action): string => {
   switch (a.kind) {
@@ -42,41 +42,24 @@ export const encodeAction = (a: Action): string => {
   }
 };
 
-/** Sin tildes y en minúsculas: así `más` y `mas` son la misma palabra. */
+/** En minúsculas y sin tildes: nadie escribe tildes en un teléfono. */
 const normalize = (s: string): string =>
   s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-/**
- * Palabras que valen por un botón. Se aceptan con y sin tilde porque nadie
- * escribe tildes en un teléfono, y en singular y plural donde tiene sentido.
- */
+/** Palabras que valen por un botón. En inglés, como los comandos. */
 const WORDS: Record<string, Action> = {
   more: { kind: 'mas' },
-  mas: { kind: 'mas' },
-  siguiente: { kind: 'mas' },
-  sigue: { kind: 'mas' },
   save: { kind: 'guardar' },
-  guardar: { kind: 'guardar' },
-  guardalo: { kind: 'guardar' },
   original: { kind: 'original' },
-  file: { kind: 'original' },
-  archivo: { kind: 'original' },
-  download: { kind: 'original' },
-  descargar: { kind: 'original' },
   yes: { kind: 'si' },
-  si: { kind: 'si' },
-  ok: { kind: 'si' },
-  dale: { kind: 'si' },
   no: { kind: 'no' },
-  cancel: { kind: 'no' },
-  cancelar: { kind: 'no' },
 };
 
-/** El nombre en español de una acción numerada sigue valiendo si lo escribes. */
+/** Las acciones que llevan número. La cadena es la misma del botón. */
 const NUMBERED: Record<string, 'ver' | 'abrir' | 'ocultar'> = {
-  view: 'ver', ver: 'ver',
-  open: 'abrir', abrir: 'abrir',
-  hide: 'ocultar', ocultar: 'ocultar',
+  view: 'ver',
+  open: 'abrir',
+  hide: 'ocultar',
 };
 
 /**

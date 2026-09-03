@@ -26,7 +26,7 @@ export interface NormalizeOutcome {
 /**
  * Leer un archivo de texto no necesita herramienta: es el carril más barato y el
  * único que nunca puede faltar. Vive acá y no en capture() para que reprocesar un
- * .txt pase por exactamente el mismo camino que reprocesar un PDF (UC-15).
+ * .txt pase por exactamente el mismo camino que reprocesar un PDF.
  */
 const textConverter: Converter = {
   async extract({ bytes }: ExtractInput) {

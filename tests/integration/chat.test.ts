@@ -128,7 +128,7 @@ describe('recordar', () => {
     const p1 = text(await ch.send({ text: '/search poliza' }));
     expect(p1).toContain('1–5');
 
-    const p2 = text(await ch.send({ text: 'más' }));
+    const p2 = text(await ch.send({ text: 'more' }));
     expect(p2).toContain('6–8');
   });
 
@@ -137,7 +137,7 @@ describe('recordar', () => {
     // sobre tu memoria.
     await guardar(2);
     await ch.send({ text: '/search poliza' });
-    expect(text(await ch.send({ text: 'más' }))).toBe('No hay más.');
+    expect(text(await ch.send({ text: 'more' }))).toBe('No hay más.');
   });
 
   it('un número suelto abre el resultado de esa posición', async () => {
@@ -269,18 +269,18 @@ describe('categorías desde el chat (§9)', () => {
   beforeEach(async () => { await pairMe(); });
 
   it('crea una categoría y la deja usable de inmediato', async () => {
-    const out = text(await ch.send({ text: '/crear Migración: Visas, RUT y permanencia definitiva' }));
+    const out = text(await ch.send({ text: '/create Migración: Visas, RUT y permanencia definitiva' }));
     expect(out).toContain('/migracion');
     expect(text(await ch.send({ text: '/migracion' }))).toContain('Migración');
   });
 
   it('exige descripción, porque la descripción es el prompt', async () => {
-    expect(text(await ch.send({ text: '/crear Varios' }))).toContain('descripción');
+    expect(text(await ch.send({ text: '/create Varios' }))).toContain('descripción');
   });
 
   it('pide confirmación si se solapa, y respeta el no', async () => {
-    await ch.send({ text: '/crear Consultorio: Consultas médicas y recetas del doctor' });
-    const aviso = text(await ch.send({ text: '/crear Medico: Consultas médicas y recetas clínicas' }));
+    await ch.send({ text: '/create Consultorio: Consultas médicas y recetas del doctor' });
+    const aviso = text(await ch.send({ text: '/create Medico: Consultas médicas y recetas clínicas' }));
     expect(aviso).toContain('se parece');
 
     expect(text(await ch.send({ text: 'no' }))).toContain('no hago nada');
@@ -288,32 +288,32 @@ describe('categorías desde el chat (§9)', () => {
   });
 
   it('y crea igual si dices que sí', async () => {
-    await ch.send({ text: '/crear Consultorio: Consultas médicas y recetas del doctor' });
-    await ch.send({ text: '/crear Medico: Consultas médicas y recetas clínicas' });
-    expect(text(await ch.send({ text: 'si' }))).toContain('/medico');
+    await ch.send({ text: '/create Consultorio: Consultas médicas y recetas del doctor' });
+    await ch.send({ text: '/create Medico: Consultas médicas y recetas clínicas' });
+    expect(text(await ch.send({ text: 'yes' }))).toContain('/medico');
   });
 
   it('renombrar no cambia el slug: la identidad es el id', async () => {
     // Descripción que no se solapa con la semilla, o el guardarraíl de §9
     // pediría confirmación y no habría nada que renombrar.
-    await ch.send({ text: '/crear Bitácora: Anotaciones sueltas del día a día' });
-    expect(text(await ch.send({ text: '/renombrar bitacora Diario' }))).toContain('/bitacora');
+    await ch.send({ text: '/create Bitácora: Anotaciones sueltas del día a día' });
+    expect(text(await ch.send({ text: '/rename bitacora Diario' }))).toContain('/bitacora');
   });
 
   it('fusionar mueve las memorias y pide confirmación primero', async () => {
-    await ch.send({ text: '/crear Papeles: Cosas sueltas de papel del escritorio' });
-    await ch.send({ text: '/crear Carpetas: Carpetas físicas archivadas en el mueble' });
-    expect(text(await ch.send({ text: '/fusionar papeles carpetas' }))).toContain('archiva');
-    expect(text(await ch.send({ text: 'si' }))).toContain('archivada');
+    await ch.send({ text: '/create Papeles: Cosas sueltas de papel del escritorio' });
+    await ch.send({ text: '/create Carpetas: Carpetas físicas archivadas en el mueble' });
+    expect(text(await ch.send({ text: '/merge papeles carpetas' }))).toContain('archiva');
+    expect(text(await ch.send({ text: 'yes' }))).toContain('archivada');
   });
 
   it('una confirmación vencida no vale', async () => {
     // Un "sí" que llega media hora tarde no se refiere a lo que crees.
     const t0 = new Date('2026-03-14T12:00:00Z');
-    await ch.send({ text: '/crear Consultorio: Consultas médicas y recetas', at: t0 });
-    await ch.send({ text: '/crear Medico: Consultas médicas y recetas clínicas', at: t0 });
+    await ch.send({ text: '/create Consultorio: Consultas médicas y recetas', at: t0 });
+    await ch.send({ text: '/create Medico: Consultas médicas y recetas clínicas', at: t0 });
     const tarde = new Date(t0.getTime() + 40 * 60_000);
-    expect(text(await ch.send({ text: 'si', at: tarde }))).toContain('No hay nada esperando');
+    expect(text(await ch.send({ text: 'yes', at: tarde }))).toContain('No hay nada esperando');
   });
 });
 

@@ -198,7 +198,7 @@ describe('el criterio de F1', () => {
   });
 });
 
-describe('reprocesar (UC-15)', () => {
+describe('reprocesar desde el original', () => {
   it('vuelve a leer el original y mejora el texto cuando mejora el carril', async () => {
     stack.deps.converters = fakeConverters({ vision: fakeConverter('throw:sin API key') });
     const res = await capture(stack.deps, actor, { bytes: jpegBytes, filename: 'receta.jpg' });

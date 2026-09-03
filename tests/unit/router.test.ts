@@ -29,8 +29,8 @@ describe('acciones · el botón y el teclado son lo mismo', () => {
     // Esta es la pieza que sostiene toda la degradación de §7.1. Si estas dos
     // dejaran de coincidir, un canal sin botones quedaría mudo.
     expect(parseAction(encodeAction({ kind: 'mas' }), true)).toEqual({ kind: 'mas' });
-    expect(parseAction('más', true)).toEqual({ kind: 'mas' });
-    expect(parseAction('MAS', true)).toEqual({ kind: 'mas' });
+    expect(parseAction('more', true)).toEqual({ kind: 'mas' });
+    expect(parseAction('MORE', true)).toEqual({ kind: 'mas' });
   });
 
   it('acepta ver:3 del botón y 3 pelado del teclado', () => {
@@ -53,7 +53,7 @@ describe('acciones · el botón y el teclado son lo mismo', () => {
 
 describe('clasificar · el orden es la regla', () => {
   it('un botón presionado se obedece, no se interpreta', () => {
-    const i = classify(msg({ action: 'mas', text: 'esto se ignora' }), conLista);
+    const i = classify(msg({ action: 'more', text: 'esto se ignora' }), conLista);
     expect(i).toEqual({ verb: 'accion', action: { kind: 'mas' } });
   });
 
@@ -76,7 +76,7 @@ describe('clasificar · el orden es la regla', () => {
   it('"más" con un archivo adjunto es una captura, no una acción', () => {
     // El adjunto manda: si mandaste algo, quieres guardarlo.
     const a = attachment();
-    const i = classify(msg({ attachment: a, text: 'más' }), conLista);
+    const i = classify(msg({ attachment: a, text: 'more' }), conLista);
     expect(i.verb).toBe('capturar');
   });
 
@@ -131,15 +131,16 @@ describe('los comandos son los del CLI, en inglés', () => {
       .toEqual({ verb: 'recordar', query: 'deducible', adivinado: false });
   });
 
-  it('los nombres viejos en español siguen valiendo', () => {
-    // Cambiar el idioma de los comandos no tiene por qué romperle los dedos a
-    // quien ya los tenía aprendidos.
-    expect(classify(msg({ text: '/buscar x' }), null).verb).toBe('recordar');
-    expect(classify(msg({ text: '/dominios' }), null).verb).toBe('dominios');
-    expect(classify(msg({ text: '/fusionar a b' }), null).verb).toBe('fusionarDominios');
+  it('los nombres en español ya no valen: un solo nombre por operación', () => {
+    // Cae al camino de /<categoría>, que responde que no la conoce. Mantener
+    // dos vocabularios es mantener dos, para siempre.
+    expect(classify(msg({ text: '/buscar x' }), null).verb).toBe('enDominio');
+    expect(classify(msg({ text: '/dominios' }), null).verb).toBe('enDominio');
+    expect(parseAction('ver:2', true)).toBeNull();
+    expect(parseAction('más', true)).toBeNull();
   });
 
-  it('las acciones se emiten en inglés y se aceptan en los dos idiomas', () => {
+  it('las acciones se emiten y se aceptan solo en inglés', () => {
     expect(encodeAction({ kind: 'ver', n: 3 })).toBe('view:3');
     expect(encodeAction({ kind: 'abrir', n: 2 })).toBe('open:2');
     expect(encodeAction({ kind: 'ocultar', n: 1 })).toBe('hide:1');
@@ -148,13 +149,11 @@ describe('los comandos son los del CLI, en inglés', () => {
 
     for (const [escrito, esperado] of [
       ['view:3', { kind: 'ver', n: 3 }],
-      ['ver:3', { kind: 'ver', n: 3 }],
       ['open:2', { kind: 'abrir', n: 2 }],
-      ['abrir:2', { kind: 'abrir', n: 2 }],
+      ['hide:1', { kind: 'ocultar', n: 1 }],
       ['more', { kind: 'mas' }],
-      ['más', { kind: 'mas' }],
+      ['MORE', { kind: 'mas' }],
       ['yes', { kind: 'si' }],
-      ['sí', { kind: 'si' }],
     ] as const) {
       expect(parseAction(escrito, true), escrito).toEqual(esperado);
     }

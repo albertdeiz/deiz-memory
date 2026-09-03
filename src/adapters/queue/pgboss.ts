@@ -88,7 +88,11 @@ export async function runWorker(
         return;
       }
       const v = result.value;
-      say(v.error ? `⚠ ${v.shortId}  ${v.lane}  ${v.error}` : `✓ ${v.shortId}  ${v.lane}  ${v.chars} caracteres`);
+      // El dominio va en la línea porque su ausencia fue invisible durante toda
+      // F2: quince documentos normalizados, ninguno categorizado, y el worker
+      // diciendo ✓ en todos.
+      const cat = v.domain ? ` → ${v.domain}` : '';
+      say(v.error ? `⚠ ${v.shortId}  ${v.lane}  ${v.error}` : `✓ ${v.shortId}  ${v.lane}  ${v.chars} caracteres${cat}`);
     },
   );
 

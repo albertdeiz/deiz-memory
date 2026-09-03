@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { capture, reprocess, search, show } from '../../src/core/index.js';
+import { capture, createDomain, reprocess, search, show } from '../../src/core/index.js';
 import type { Actor } from '../../src/core/domain/types.js';
 import { fakeConverter, fakeConverters } from '../helpers/converters.js';
 import { startStack, type TestStack } from '../helpers/stack.js';
@@ -408,5 +408,88 @@ describe('un fallo previo no explica un resultado posterior', () => {
     const detail = await show(stack.deps, actor, res.value.id);
     if (!detail.ok) throw new Error('no mostró');
     expect(detail.value.normalizationError).toContain('vision');
+  });
+});
+
+/**
+ * La clasificación es parte de la tubería, no un comando aparte.
+ *
+ * Durante todo F2 no lo fue: `classifyMemory` existía y funcionaba, pero lo
+ * llamaba únicamente `dm classify` a mano. Quince documentos entraron por
+ * Telegram y quedaron normalizados, indexados y sin categoría, con `doctor` en
+ * verde. La fase se dio por lista porque el comando andaba.
+ */
+describe('clasificar es parte de guardar', () => {
+  const fakeClassifier = (domain: string | null) => ({
+    async classify() {
+      return { domain, title: 'Póliza de auto', occurredAt: null, confidence: 0.9, tags: [] };
+    },
+    async complete() { return ''; },
+    async available() { return { ok: true, detail: 'fake' }; },
+  });
+
+  beforeEach(async () => {
+    await createDomain(stack.deps.db, actor, { label: 'Seguros', description: 'pólizas y coberturas' });
+    await createDomain(stack.deps.db, actor, { label: 'Hogar', description: 'garantías y técnicos' });
+  });
+
+  /** El slug de la categoría que quedó puesta, o null. */
+  const categoria = async (id: string): Promise<string | null> => {
+    const { rows } = await stack.deps.db.query<{ slug: string }>(
+      `select d.slug from memories m join domains d on d.id = m.domain_id where m.id = $1`, [id]);
+    return rows[0]?.slug ?? null;
+  };
+
+  it('una memoria que entra sale con categoría, sin que nadie corra un comando', async () => {
+    stack.deps.classifier = fakeClassifier('seguros');
+    const res = await capture(stack.deps, actor, {
+      bytes: Buffer.from(LARGO), filename: 'poliza.txt',
+    });
+    if (!res.ok) throw new Error('no capturó');
+
+    expect(await categoria(res.value.id)).toBe('seguros');
+    const d = await show(stack.deps, actor, res.value.id);
+    if (!d.ok) throw new Error('no existe');
+    expect(d.value.title).toBe('Póliza de auto');
+    expect(d.value.status).toBe('classified');
+  });
+
+  it('una nota suelta también se clasifica, aunque no tenga archivo', async () => {
+    // Salir temprano por "no hay blob" ya había dejado las notas fuera del
+    // índice una vez. El mismo camino no puede dejarlas sin categoría.
+    stack.deps.classifier = fakeClassifier('hogar');
+    const res = await capture(stack.deps, actor, { text: 'el gásfiter es Juan, +56 9 1234 5678' });
+    if (!res.ok) throw new Error('no capturó');
+
+    expect(await categoria(res.value.id)).toBe('hogar');
+  });
+
+  it('reprocesar NO pisa la categoría que ya tenía', async () => {
+    // Reprocesar mejora el texto; no revisa decisiones ya tomadas. Para
+    // reclasificar a propósito está `dm classify <id>`.
+    stack.deps.classifier = fakeClassifier('seguros');
+    const res = await capture(stack.deps, actor, {
+      bytes: Buffer.from(LARGO), filename: 'poliza.txt',
+    });
+    if (!res.ok) throw new Error('no capturó');
+
+    stack.deps.classifier = fakeClassifier('hogar');
+    await reprocess(stack.deps, actor, { ids: [res.value.id], confirm: true });
+
+    expect(await categoria(res.value.id)).toBe('seguros');
+  });
+
+  it('sin clasificador se guarda igual, solo que sin categoría', async () => {
+    // La captura nunca se bloquea por un servicio caído (§7).
+    stack.deps.classifier = null;
+    const res = await capture(stack.deps, actor, {
+      bytes: Buffer.from(LARGO), filename: 'poliza.txt',
+    });
+    if (!res.ok) throw new Error('no capturó');
+
+    expect(await categoria(res.value.id)).toBeNull();
+    const d = await show(stack.deps, actor, res.value.id);
+    if (!d.ok) throw new Error('no existe');
+    expect(d.value.normalizedText).toContain('Póliza');
   });
 });

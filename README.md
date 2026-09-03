@@ -170,6 +170,11 @@ asume).
 
 ## El clasificador es local
 
+Corre **solo**, como parte de guardar: mandas algo, el worker lo lee, lo indexa y
+le pone categoría, título y fecha del hecho. No hay comando que correr.
+(`dm classify` sigue estando, para reclasificar algo a propósito.)
+
+
 Dominio, título corto y fecha del hecho los pone un modelo que corre en el mismo
 compose (Ollama, `qwen2.5:3b`). Nada sale del host y no cuesta por documento.
 

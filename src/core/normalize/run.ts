@@ -19,6 +19,8 @@ export interface NormalizeOutcome {
   chars: number;
   error: string | null;
   attempts: Attempt[];
+  /** Qué categoría le puso el clasificador, o null si no le puso ninguna. */
+  domain?: string | null;
 }
 
 /**
@@ -87,15 +89,18 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
   // todas las notas sueltas fuera de `dm ask`, en silencio.
   if (!row.blob_sha256 || !row.storage_key) {
     await save(deps, id, { text: null, lane: 'none', error: null, detail: { reason: 'memoria sin archivo' } });
-    await reindex(deps, id);
-    return ok({ id, shortId: short, lane: 'none', chars: 0, error: null, attempts: [] });
+    const domain = await finish(deps, id);
+    return ok({ id, shortId: short, lane: 'none', chars: 0, error: null, attempts: [], domain });
   }
 
   const candidates = lanesFor(row.media_type);
   if (candidates.length === 0) {
     const detail = { reason: 'sin carril', mediaType: row.media_type };
     await save(deps, id, { text: null, lane: 'none', error: null, detail });
-    return ok({ id, shortId: short, lane: 'none', chars: 0, error: null, attempts: [] });
+    // Sin carril no hay texto extraído, pero puede haber nota tuya — y esa nota
+    // tiene que ser tan buscable y tan clasificable como un PDF.
+    const domain = await finish(deps, id);
+    return ok({ id, shortId: short, lane: 'none', chars: 0, error: null, attempts: [], domain });
   }
 
   let bytes: Buffer;
@@ -191,7 +196,7 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
   //
   // Se hace haya embedder o no: el full-text de la recuperación corre sobre los
   // trozos, así que sin ellos no hay nada que buscar por ningún camino.
-  await reindex(deps, id);
+  const domain = await finish(deps, id);
 
   return ok({
     id,
@@ -200,7 +205,44 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
     chars: finalText?.length ?? 0,
     error,
     attempts,
+    domain,
   });
+}
+
+/**
+ * Lo que va después de guardar el texto: dejarla buscable y clasificada.
+ *
+ * Que cualquiera de las dos falle no invalida la normalización — el texto ya
+ * está en la fila y es lo caro de recuperar.
+ */
+async function finish(deps: Deps, id: Uuid): Promise<string | null> {
+  await reindex(deps, id);
+  return reclassify(deps, id);
+}
+
+/**
+ * Dominio, título corto y fecha del hecho.
+ *
+ * **Esto faltaba, y es la razón por la que ningún dominio tenía memorias.** El
+ * clasificador está construido desde F2, pero lo llamaba únicamente
+ * `dm classify` a mano: todo lo que entraba por Telegram quedaba normalizado,
+ * indexado y sin categoría para siempre. La fase se dio por lista porque el
+ * comando funcionaba, y nadie preguntó quién lo corría.
+ *
+ * No pisa una categoría que ya está puesta: reprocesar mejora el texto, no
+ * revisa decisiones. Para reclasificar a propósito está `dm classify <id>`.
+ */
+async function reclassify(deps: Deps, id: Uuid): Promise<string | null> {
+  if (!deps.classifier) return null;
+  const { rows } = await deps.db.query<{ owner_id: string; domain_id: string | null }>(
+    `select owner_id, domain_id from memories where id = $1`, [id],
+  );
+  const m = rows[0];
+  if (!m || m.domain_id) return null;
+
+  const { classifyMemory } = await import('../classify/run.js');
+  const r = await classifyMemory(deps, { ownerId: m.owner_id }, id).catch(() => null);
+  return r?.ok ? r.value.domain : null;
 }
 
 /** Rehace los trozos. Que falle no invalida la normalización. */

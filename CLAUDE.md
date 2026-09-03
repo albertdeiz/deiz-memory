@@ -623,6 +623,18 @@ te lista tus consultas ordenadas por fecha real, no por fecha de captura.
 >
 > El modelo es local aquí y no en el carril de visión a propósito: elegir entre ocho
 > categorías le sale bien a un modelo chico; leer un RUT sin equivocarse, no.
+>
+> **Y faltaba lo principal: nadie llamaba al clasificador.** `classifyMemory` funcionaba
+> y se probaba, pero lo invocaba únicamente `dm classify` a mano. Quince documentos
+> entraron por Telegram y quedaron normalizados, indexados y **sin categoría**, con
+> `doctor` en verde y los ocho dominios en cero. La fase se dio por lista porque el
+> comando andaba, y nadie preguntó quién lo corría.
+>
+> El arreglo es de una línea —la tubería clasifica después de indexar, sin pisar una
+> categoría ya puesta— pero la lección no: **el criterio de listo de una fase tiene que
+> nombrar quién dispara lo que construyó**, no solo que la operación funcione. Ahora
+> `doctor` tiene su propia fila `clasificar`, porque un chequeo que no mira el paso
+> siguiente da una calma falsa.
 
 **F3 — Preguntas en lenguaje natural.** Recuperación híbrida (filtro por dominio y fecha
 + semántica) con cita obligatoria a la fuente.

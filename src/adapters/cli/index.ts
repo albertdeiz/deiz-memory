@@ -292,6 +292,26 @@ program
                 consejo,
             required: false,
           });
+
+          // Su propia fila, y no un renglón de la anterior, porque la ausencia
+          // de categoría fue invisible durante toda F2: quince documentos
+          // normalizados, ninguno clasificado, y `doctor` en verde. Un chequeo
+          // que no mira el paso siguiente da una calma falsa.
+          const { rows: sin } = await db.query<{ n: string }>(
+            `select count(*)::text as n from memories
+              where owner_id = $1 and not hidden and domain_id is null
+                and (normalized_text is not null or note is not null)`,
+            [who.value],
+          );
+          const sinDominio = Number(sin[0]!.n);
+          checks.push({
+            check: 'clasificar',
+            ok: sinDominio === 0,
+            detail: sinDominio === 0
+              ? 'todas categorizadas'
+              : `${sinDominio} sin categoría — dm classify`,
+            required: false,
+          });
         }
       } catch {
         checks.push({ check: 'normalizar', ok: false, detail: 'no se pudo consultar — ¿falta migrar?', required: true });

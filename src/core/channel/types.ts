@@ -62,6 +62,15 @@ export interface Option {
   label: string;
   /** La MISMA cadena que la persona podría escribir. Ver `router/actions.ts`. */
   action: string;
+  /**
+   * Sugerencia de agrupación: las opciones con el mismo `group` van juntas.
+   *
+   * Es una sugerencia y no una orden porque no todos los canales tienen filas.
+   * Telegram las pone lado a lado; un canal sin botones la ignora entera y
+   * sigue listando qué escribir. Nada de la degradación depende de esto — por
+   * eso es opcional y no cambia las acciones ofrecidas.
+   */
+  group?: number;
 }
 
 export type Reply =

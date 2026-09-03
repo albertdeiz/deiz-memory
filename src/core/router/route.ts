@@ -101,12 +101,30 @@ async function registerList(
   input: RouteInput,
   r: Extract<Result<Outcome>, { ok: true }>,
 ): Promise<Result<Outcome>> {
-  const ids = numbered(r.value);
-  // `resultados` y `respuesta` ya escribieron la suya —con su `lastQuery` y su
-  // offset, que acá no se conocen—, así que no se tocan.
-  if (!ids) return r;
-  await writeSession(deps.db, input.conv, actor.ownerId,
-    { lastQuery: null, lastOffset: 0, pending: { ids } }, input.now);
+  const v = r.value;
+
+  // Una lista numerada nueva reemplaza a la anterior. `resultados` y
+  // `respuesta` ya escribieron la suya —con su `lastQuery` y su offset, que acá
+  // no se conocen—, así que no se tocan.
+  const ids = numbered(v);
+  if (ids) {
+    await writeSession(deps.db, input.conv, actor.ownerId,
+      { lastQuery: null, lastOffset: 0, pending: { ids } }, input.now);
+    return r;
+  }
+
+  // Abrir un detalle no cambia la lista: mueve el foco. Se conserva `ids` para
+  // que "ver 3" siga significando el tercero de lo que estás mirando.
+  if (v.kind === 'detalle') {
+    const prev = await readSession(deps.db, input.conv);
+    await writeSession(deps.db, input.conv, actor.ownerId,
+      {
+        lastQuery: prev?.lastQuery ?? null,
+        lastOffset: prev?.lastOffset ?? 0,
+        pending: { ...(prev?.pending ?? {}), viewing: v.memory.id },
+      },
+      input.now);
+  }
   return r;
 }
 
@@ -400,6 +418,14 @@ async function doAction(
         const d = await show(deps, actor, id);
         return d.ok ? ok({ kind: 'detalle', memory: d.value }) : d;
       }
+      const b = await fetchBlob(deps, actor, id);
+      return b.ok ? ok({ kind: 'archivo', blob: b.value }) : b;
+    }
+
+    case 'original': {
+      // El archivo de lo que estás mirando, no el de un puesto de la lista.
+      const id = session?.pending?.viewing;
+      if (!id) return err('invalid', 'No estás mirando nada. Abre algo primero.');
       const b = await fetchBlob(deps, actor, id);
       return b.ok ? ok({ kind: 'archivo', blob: b.value }) : b;
     }

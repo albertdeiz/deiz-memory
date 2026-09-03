@@ -16,6 +16,16 @@ export interface Pending {
   /** Texto que se ofreció guardar tras una búsqueda vacía (§5). */
   save?: string;
   /**
+   * La memoria cuyo detalle está en pantalla.
+   *
+   * Separada de `ids` porque no es un elemento de la lista: es *lo que estás
+   * mirando*. El botón "mandarme el original" del detalle codificaba
+   * `abrir:1` y por lo tanto te mandaba el archivo del PRIMERO de la lista,
+   * no el del que abriste. Guardar la lista y el foco por separado es lo que
+   * permite que `ver 3` siga funcionando después de haber abierto el 2.
+   */
+  viewing?: string;
+  /**
    * Una confirmación en curso: qué operación repetir si dices que sí.
    *
    * Se guarda la operación y sus argumentos, no un id de "cosa pendiente":

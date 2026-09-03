@@ -1,6 +1,6 @@
 import { Bot, InputFile, type Context } from 'grammy';
 import type {
-  Attachment, Capabilities, Channel, Incoming, Reply, Turn,
+  Attachment, Capabilities, Channel, Incoming, Option, Reply, Turn,
 } from '../../../core/channel/types.js';
 
 /**
@@ -135,10 +135,30 @@ export function telegramChannel(cfg: TelegramConfig): Channel {
       const last = i === parts.length - 1;
       // Los botones van solo en el último trozo: repetirlos se ve roto.
       const markup = last && r.options?.length
-        ? { inline_keyboard: r.options.map((o) => [{ text: o.label, callback_data: o.action }]) }
+        ? { inline_keyboard: rows(r.options) }
         : undefined;
       await ctx.reply(part, markup ? { reply_markup: markup } : {});
     }
+  };
+
+/**
+   * Reparte las opciones en filas respetando su `group`.
+   *
+   * Telegram apila una fila por botón, y con dos acciones por resultado eso son
+   * once filas en una página de cinco: un muro que hay que scrollear. Las que
+   * comparten `group` van lado a lado; las que no traen ninguno siguen solas,
+   * como antes.
+   */
+  const rows = (options: readonly Option[]): { text: string; callback_data: string }[][] => {
+    const out: { text: string; callback_data: string }[][] = [];
+    let current: number | undefined;
+    for (const o of options) {
+      const btn = { text: o.label, callback_data: o.action };
+      if (o.group !== undefined && o.group === current && out.length > 0) out[out.length - 1]!.push(btn);
+      else out.push([btn]);
+      current = o.group;
+    }
+    return out;
   };
 
   const toIncoming = (ctx: Context, action: string | null): Incoming | null => {

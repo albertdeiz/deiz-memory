@@ -134,9 +134,21 @@ clasificador de intención decide cuál es, y respeta lo explícito.
 /proponer            categorías que te faltan
 /revisar             lo que quedó dudoso
 /pendientes          qué falta por leer
-ver:N · abrir:N      el detalle, o el archivo original
+ver:N                los datos de ese resultado
+abrir:N              el archivo original de ese resultado
 ocultar:N            sacar de resultados, sin borrar
 ```
+
+Cada resultado trae **dos botones, en la misma fila**: `datos` y `archivo`. Bajar
+un documento era antes dos toques y una pantalla intermedia — abrir el detalle
+solo para poder pedir el original. Un resultado sin archivo (una nota tuya) no
+ofrece el segundo: un botón que sabe de antemano que va a fallar es peor que no
+estar.
+
+Y `ver:N` muestra **los datos** —categoría, fecha del hecho, tipo, tamaño, tu
+nota y un asomo de lo leído—, no la transcripción entera. Volcar 1200 caracteres
+de una póliza en el chat era llenar la pantalla con lo que el archivo ya dice
+mejor.
 
 **El número siempre es de la última lista que viste.** Suena obvio y no salió
 gratis: `/documentos` numeraba sus resultados y ofrecía los botones sin

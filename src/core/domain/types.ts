@@ -32,6 +32,8 @@ export interface MemorySummary {
   hidden: boolean;
   excerpt: string | null;
   domainId: Uuid | null;
+  /** El nombre de la categoría, para no tener que resolver el id al mostrar. */
+  domainLabel: string | null;
   tags: string[];
 }
 

@@ -5,9 +5,13 @@ export const MEMORY_COLUMNS = `
   m.id, m.owner_id, m.source, m.captured_at, m.occurred_at,
   m.original_filename, m.title, m.note, m.normalized_text, m.status, m.hidden,
   m.normalization_lane, m.normalized_at, m.normalization_error,
-  m.blob_sha256, m.domain_id, m.tags, m.domain_confidence, b.media_type, b.size_bytes`;
+  m.blob_sha256, m.domain_id, m.tags, m.domain_confidence, b.media_type, b.size_bytes,
+  d.label as domain_label`;
 
-export const MEMORY_FROM = `from memories m left join blobs b on b.sha256 = m.blob_sha256`;
+export const MEMORY_FROM =
+  `from memories m
+     left join blobs b on b.sha256 = m.blob_sha256
+     left join domains d on d.id = m.domain_id`;
 
 export interface MemoryRow {
   id: string;
@@ -26,6 +30,7 @@ export interface MemoryRow {
   hidden: boolean;
   blob_sha256: string | null;
   domain_id: string | null;
+  domain_label: string | null;
   tags: string[] | null;
   domain_confidence: number | null;
   media_type: string | null;
@@ -47,6 +52,7 @@ export const toSummary = (r: MemoryRow): MemorySummary => ({
   // la foto, eso es lo que reconoces en una lista, no el OCR del papel.
   excerpt: excerptOf(r.note ?? r.normalized_text),
   domainId: r.domain_id,
+  domainLabel: r.domain_label,
   tags: r.tags ?? [],
 });
 

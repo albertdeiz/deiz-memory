@@ -359,3 +359,53 @@ describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
     expect(text(await ch.send({ text: 'ver:1' }))).not.toContain('mudanza');
   });
 });
+
+describe('bajar el archivo desde la lista', () => {
+  beforeEach(async () => { await pairMe(); });
+
+  /** Un adjunto de bytes en memoria, sin tocar el disco. */
+  const bytesAttachment = (filename: string, body: string) => ({
+    filename,
+    declaredMediaType: 'text/plain',
+    sizeBytes: Buffer.byteLength(body),
+    fetch: async () => Buffer.from(body),
+  });
+
+  it('el botón de archivo manda el original de ESE resultado', async () => {
+    await ch.send({ text: 'contrato de arriendo' });
+    await ch.send({
+      text: 'la boleta de la amoladora',
+      attachment: bytesAttachment('boleta.txt', LARGO),
+    });
+
+    const lista = await ch.send({ text: '/buscar amoladora' });
+    const acciones = lista.flatMap((r) => (r.kind === 'text' ? (r.options ?? []).map((o) => o.action) : []));
+    expect(acciones).toContain('abrir:1');
+
+    const out = await ch.send({ text: 'abrir:1' });
+    const file = out.find((r) => r.kind === 'file');
+    expect(file).toBeDefined();
+    if (file?.kind === 'file') expect(file.bytes.toString()).toContain('Amoladora');
+  });
+
+  it('"mandarme el original" desde el detalle no manda el de otro', async () => {
+    // El botón codificaba `abrir:1`, así que abrir el segundo y pedir su
+    // original devolvía el archivo del primero de la lista.
+    for (const [name, cuerpo] of [['uno.txt', 'PRIMERO uno'], ['dos.txt', 'SEGUNDO dos']] as const) {
+      await ch.send({
+        text: cuerpo,
+        attachment: bytesAttachment(name, `${cuerpo} `.repeat(20)),
+      });
+    }
+
+    await ch.send({ text: '/buscar segundo' });
+    await ch.send({ text: 'ver:1' });
+    const out = await ch.send({ text: 'original' });
+    const file = out.find((r) => r.kind === 'file');
+    expect(file).toBeDefined();
+    if (file?.kind === 'file') {
+      expect(file.bytes.toString()).toContain('SEGUNDO');
+      expect(file.bytes.toString()).not.toContain('PRIMERO');
+    }
+  });
+});

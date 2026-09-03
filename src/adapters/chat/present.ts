@@ -19,6 +19,10 @@ const KINDS: [string, string][] = [
   ['video/', 'video'], ['text/', 'texto'],
 ];
 
+/** Un tamaño legible: en el teléfono "126 KB" dice más que 129024. */
+const size = (bytes: number): string =>
+  bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+
 const kindOf = (mediaType: string | null): string =>
   KINDS.find(([p]) => mediaType?.startsWith(p))?.[1] ?? 'archivo';
 
@@ -46,6 +50,29 @@ const withOptions = (body: string, options: Option[], caps: Capabilities): Reply
     options,
   };
 };
+
+
+/**
+ * Los dos botones de cada elemento de una lista: los datos y el archivo.
+ *
+ * Van juntos porque son las dos cosas que quieres hacer con un resultado, y
+ * separarlos en dos pasos —abrir el detalle solo para pedir el original— hacía
+ * que bajar un documento costara dos toques y una pantalla intermedia.
+ *
+ * `group` los pone lado a lado donde el canal tiene filas. Donde no, se listan
+ * como cualquier otra acción: la degradación no depende de esto.
+ */
+const porItem = (items: readonly { mediaType: string | null }[]): Option[] =>
+  items.flatMap((m, i) => {
+    const n = i + 1;
+    const fila: Option[] = [{ label: `${n} · datos`, action: encodeAction({ kind: 'ver', n }), group: n }];
+    // Sin archivo original no se ofrece bajarlo: un botón que sabe que va a
+    // fallar es peor que no estar.
+    if (m.mediaType) {
+      fila.push({ label: `${n} · archivo`, action: encodeAction({ kind: 'abrir', n }), group: n });
+    }
+    return fila;
+  });
 
 export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
   if (!result.ok) return [failure(result, caps)];
@@ -121,18 +148,29 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
     }
 
     case 'detalle': {
+      // Los datos de la memoria, no su transcripción. Volcar 1200 caracteres de
+      // una póliza acá era llenar la pantalla con lo que el archivo ya dice
+      // mejor: para eso está el botón de al lado, que te lo manda entero.
       const m = v.memory;
       const lines = [label(m), `${day(m.occurredAt ?? m.capturedAt)} · ${m.shortId}`];
+
+      const ficha = [
+        m.domainLabel,
+        m.originalFilename ? meaningfulName(m.originalFilename) ?? kindOf(m.mediaType) : kindOf(m.mediaType),
+        m.sizeBytes ? size(m.sizeBytes) : null,
+      ].filter(Boolean);
+      if (ficha.length) lines.push(ficha.join(' · '));
+      if (m.tags.length) lines.push(m.tags.map((t) => `#${t}`).join(' '));
+
       if (m.note) lines.push('', `tu nota: ${m.note}`);
       if (m.normalizationError) lines.push('', `⚠ ${m.normalizationError}`);
-      if (m.normalizedText) {
-        const t = m.normalizedText.trim();
-        lines.push('', t.length > 1200 ? `${t.slice(0, 1200)}…` : t);
-      } else if (m.sha256 && !m.normalizedAt) {
-        lines.push('', 'Todavía no lo he leído.');
-      }
+
+      // Un asomo de lo leído para reconocerlo, no el documento entero.
+      if (m.excerpt) lines.push('', m.excerpt);
+      else if (m.sha256 && !m.normalizedAt) lines.push('', 'Todavía no lo he leído.');
+
       const options: Option[] = m.sha256
-        ? [{ label: 'mandarme el original', action: encodeAction({ kind: 'abrir', n: 1 }) }]
+        ? [{ label: 'mandarme el original', action: encodeAction({ kind: 'original' }) }]
         : [];
       return [withOptions(lines.join('\n'), options, caps)];
     }
@@ -216,11 +254,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       const cuerpo = v.items
         .map((m, i) => `${i + 1}. ${label(m)}\n   ${day(m.occurredAt ?? m.capturedAt)} · ${m.shortId}`)
         .join('\n');
-      const options: Option[] = v.items.map((_, i) => ({
-        label: `ver ${i + 1}`,
-        action: encodeAction({ kind: 'ver', n: i + 1 }),
-      }));
-      return [withOptions(`${v.domain.label}:\n\n${cuerpo}`, options, caps)];
+      return [withOptions(`${v.domain.label}:\n\n${cuerpo}`, porItem(v.items), caps)];
     }
 
     case 'resultados':
@@ -256,10 +290,7 @@ function resultados(
   const hasta = v.offset + v.items.length;
   const head = `${desde}–${hasta} de lo que encontré para "${v.consulta}":`;
 
-  const options: Option[] = v.items.map((_, i) => ({
-    label: `ver ${i + 1}`,
-    action: encodeAction({ kind: 'ver', n: i + 1 }),
-  }));
+  const options: Option[] = porItem(v.items);
   if (v.hayMas) options.push({ label: 'más', action: encodeAction({ kind: 'mas' }) });
 
   return [withOptions(`${head}\n\n${numbered}${leyendo}`, options, caps)];

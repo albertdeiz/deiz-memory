@@ -15,6 +15,8 @@ export type Action =
   | { kind: 'mas' }
   | { kind: 'ver'; n: number }
   | { kind: 'abrir'; n: number }
+  /** El archivo de la memoria que estás viendo. Sin número: no es de una lista. */
+  | { kind: 'original' }
   | { kind: 'guardar' }
   | { kind: 'ocultar'; n: number }
   | { kind: 'si' }
@@ -43,6 +45,9 @@ const WORDS: Record<string, Action> = {
   siguiente: { kind: 'mas' },
   sigue: { kind: 'mas' },
   guardar: { kind: 'guardar' },
+  original: { kind: 'original' },
+  archivo: { kind: 'original' },
+  descargar: { kind: 'original' },
   guardalo: { kind: 'guardar' },
   si: { kind: 'si' },
   ok: { kind: 'si' },

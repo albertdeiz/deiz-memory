@@ -28,6 +28,9 @@ const item = (n: number): MemorySummary => ({
   sizeBytes: 1000,
   hidden: false,
   excerpt: null,
+  domainId: null,
+  domainLabel: null,
+  tags: [],
 });
 
 const resultados = (n: number, hayMas: boolean): Outcome => ({
@@ -62,7 +65,11 @@ describe('degradación · las mismas acciones con y sin botones', () => {
     const sinB = present(ok(out), sinBotones);
 
     expect(actionsOf(conB)).toEqual(actionsOf(sinB));
-    expect(actionsOf(conB)).toEqual(['ver:1', 'ver:2', 'ver:3', 'ver:4', 'ver:5', 'mas']);
+    // Dos acciones por resultado: los datos y el archivo.
+    expect(actionsOf(conB)).toEqual([
+      'ver:1', 'abrir:1', 'ver:2', 'abrir:2', 'ver:3', 'abrir:3',
+      'ver:4', 'abrir:4', 'ver:5', 'abrir:5', 'mas',
+    ]);
   });
 
   it('sin botones, el cuerpo dice qué escribir', () => {
@@ -174,5 +181,53 @@ describe('cuando la respuesta se descartó a propósito', () => {
       const [r] = present(ok(rechazo(reason)), CAPS) as [Reply];
       expect(r.body).not.toMatch(/\bnull\b/);
     }
+  });
+});
+
+describe('los dos botones de cada resultado', () => {
+  it('los datos y el archivo van en la misma fila', () => {
+    // `group` es lo que evita once filas apiladas en una página de cinco.
+    const [r] = present(ok(resultados(2, false)), conBotones) as [Reply];
+    const opts = r.kind === 'text' ? r.options ?? [] : [];
+    expect(opts.filter((o) => o.group === 1).map((o) => o.action)).toEqual(['ver:1', 'abrir:1']);
+    expect(opts.filter((o) => o.group === 2).map((o) => o.action)).toEqual(['ver:2', 'abrir:2']);
+  });
+
+  it('una nota suelta no ofrece "archivo": no tiene', () => {
+    // Un botón que sabe de antemano que va a fallar es peor que no estar.
+    const soloTexto: Outcome = {
+      ...resultados(1, false),
+      items: [{ ...item(1), mediaType: null, sizeBytes: null }],
+    };
+    expect(actionsOf(present(ok(soloTexto), conBotones))).toEqual(['ver:1']);
+  });
+
+  it('el original del detalle es el que estás mirando, no el primero de la lista', () => {
+    // Codificaba `abrir:1`, que se resuelve contra la lista: abrir el tercero y
+    // pedir su original te mandaba el archivo del primero.
+    const detalle: Outcome = {
+      kind: 'detalle',
+      memory: {
+        ...item(3), ownerId: 'o', status: 'classified', sha256: 'abc', note: null,
+        normalizedText: 'x'.repeat(5000), lane: 'document', normalizedAt: new Date(),
+        normalizationError: null, domainLabel: 'Seguros',
+      },
+    };
+    expect(actionsOf(present(ok(detalle), conBotones))).toEqual(['original']);
+  });
+
+  it('el detalle muestra los datos, no el documento entero', () => {
+    const detalle: Outcome = {
+      kind: 'detalle',
+      memory: {
+        ...item(3), ownerId: 'o', status: 'classified', sha256: 'abc', note: 'mi nota',
+        normalizedText: 'z'.repeat(5000), lane: 'document', normalizedAt: new Date(),
+        normalizationError: null, domainLabel: 'Seguros', excerpt: 'z'.repeat(120),
+      },
+    };
+    const body = bodyOf(present(ok(detalle), conBotones));
+    expect(body).toContain('Seguros');
+    expect(body).toContain('mi nota');
+    expect(body.length).toBeLessThan(600);
   });
 });

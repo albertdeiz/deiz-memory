@@ -76,6 +76,55 @@ export async function route(
   actor: Actor,
   input: RouteInput,
 ): Promise<Result<Outcome>> {
+  const r = await dispatch(deps, actor, input);
+  return r.ok ? registerList(deps, actor, input, r) : r;
+}
+
+/**
+ * Deja anotada la lista que se acaba de mostrar, para que "ver 2" signifique el
+ * segundo de ESA lista.
+ *
+ * Se hace acá, en un solo lugar, y no en cada rama. `enDominio` numeraba sus
+ * resultados y ofrecía los botones `ver N` sin escribir la sesión nunca: al
+ * pulsar el 2 salía el segundo de la búsqueda anterior. Un documento real, de
+ * otra cosa — el fallo silencioso más caro que puede tener esto, porque parece
+ * una respuesta.
+ *
+ * La causa de fondo no era la rama olvidada: era que **numerar y registrar
+ * vivían en archivos distintos**, así que la próxima lista que alguien agregue
+ * repite el bug. Acá el registro cuelga de la forma del `Outcome`, y una lista
+ * nueva queda cubierta sin que nadie se acuerde.
+ */
+async function registerList(
+  deps: Deps,
+  actor: Actor,
+  input: RouteInput,
+  r: Extract<Result<Outcome>, { ok: true }>,
+): Promise<Result<Outcome>> {
+  const ids = numbered(r.value);
+  // `resultados` y `respuesta` ya escribieron la suya —con su `lastQuery` y su
+  // offset, que acá no se conocen—, así que no se tocan.
+  if (!ids) return r;
+  await writeSession(deps.db, input.conv, actor.ownerId,
+    { lastQuery: null, lastOffset: 0, pending: { ids } }, input.now);
+  return r;
+}
+
+/** Los ids de una lista numerada, en el mismo orden en que se muestran. */
+function numbered(v: Outcome): string[] | null {
+  switch (v.kind) {
+    case 'enDominio':
+      return v.items.map((m) => m.id);
+    default:
+      return null;
+  }
+}
+
+async function dispatch(
+  deps: Deps,
+  actor: Actor,
+  input: RouteInput,
+): Promise<Result<Outcome>> {
   const session = await readSession(deps.db, input.conv);
   const { intent } = input;
 

@@ -305,3 +305,57 @@ describe('categorías desde el chat (§9)', () => {
     expect(text(await ch.send({ text: 'si', at: tarde }))).toContain('No hay nada esperando');
   });
 });
+
+describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
+  /**
+   * El bug: `/documentos` numeraba sus cuatro resultados y ofrecía los botones
+   * `ver N` sin registrar nunca esos ids en la sesión. Al pulsar el 2 salía el
+   * segundo de la BÚSQUEDA anterior — un documento real, de otra cosa. Es el
+   * peor tipo de fallo silencioso, porque parece una respuesta.
+   */
+  const guardar = async (text: string) => {
+    const out = await ch.send({ text });
+    return out;
+  };
+
+  beforeEach(async () => {
+    await pairMe();
+    await s.deps.db.query(
+      `insert into domains (owner_id, slug, label, description)
+       values ($1,'papeles','Papeles','cédula, pasaporte, licencia')`, [s.ownerId]);
+  });
+
+  it('numerar una categoría no puede resolverse contra la lista anterior', async () => {
+    // Una búsqueda deja SU lista en la sesión...
+    await guardar('contrato de arriendo del departamento');
+    await guardar('presupuesto de la mudanza');
+    await ch.send({ text: '/buscar mudanza' });
+
+    // ...y ahora una categoría con otras cosas, en otro orden.
+    for (const t of ['cédula de identidad', 'licencia de conducir', 'pasaporte vigente']) {
+      const r = await guardar(t);
+      const id = /([0-9a-f]{8})/.exec(text(r))?.[1];
+      await s.deps.db.query(
+        `update memories set domain_id = (select id from domains where owner_id=$2 and slug='papeles')
+          where id::text like $1 || '%'`, [id, s.ownerId]);
+    }
+
+    const lista = text(await ch.send({ text: '/papeles' }));
+    // El segundo de lo que se mostró, leído de la propia respuesta.
+    const segundo = /^2\. (.+)$/m.exec(lista)?.[1]?.trim();
+    expect(segundo).toBeTruthy();
+
+    const detalle = text(await ch.send({ text: 'ver:2' }));
+    expect(detalle).toContain(segundo!.split('\n')[0]!);
+    // Y desde luego nada de la búsqueda de antes.
+    expect(detalle).not.toContain('mudanza');
+  });
+
+  it('una categoría vacía no deja viva la lista anterior', async () => {
+    await guardar('presupuesto de la mudanza');
+    await ch.send({ text: '/buscar mudanza' });
+    await ch.send({ text: '/papeles' });
+    // No hay nada en Papeles, así que "ver 1" no puede abrir la mudanza.
+    expect(text(await ch.send({ text: 'ver:1' }))).not.toContain('mudanza');
+  });
+});

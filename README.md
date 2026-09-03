@@ -138,6 +138,13 @@ ver:N · abrir:N      el detalle, o el archivo original
 ocultar:N            sacar de resultados, sin borrar
 ```
 
+**El número siempre es de la última lista que viste.** Suena obvio y no salió
+gratis: `/documentos` numeraba sus resultados y ofrecía los botones sin
+registrar esos ids, así que `ver 2` abría el segundo de la *búsqueda anterior* —
+un documento real, de otra cosa. Numerar y registrar vivían en archivos
+distintos. Ahora el registro cuelga de la forma del `Outcome`, en un solo lugar,
+así que una lista nueva queda cubierta sin que nadie se acuerde.
+
 El separador es `:` y no un espacio porque tanto el nombre como la descripción
 llevan espacios adentro.
 

@@ -152,7 +152,13 @@ export async function route(
         if (!r.ok) return r;
         // Sin respuesta redactada se cae a la lista: los pasajes sirven igual,
         // y es mejor que un "no pude" cuando sí hay material.
-        if (r.value.text) {
+        //
+        // Con una excepción: si la prosa se descartó **a propósito** —sin cita,
+        // o con una cifra que no está en lo que se leyó— la lista sola miente
+        // por omisión. La persona preguntó un número y recibe documentos sin
+        // enterarse de que el bot se negó a dárselo. Eso se dice.
+        const rechazada = r.value.reason === 'sin_cita' || r.value.reason === 'sin_respaldo';
+        if (r.value.text || rechazada) {
           await writeSession(deps.db, input.conv, actor.ownerId,
             { lastQuery: intent.query, lastOffset: 0,
               pending: { ids: r.value.sources.map((p) => p.memoryId) } }, input.now);

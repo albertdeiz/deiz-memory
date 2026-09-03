@@ -278,6 +278,35 @@ de auto BCI", los ochenta se parecen entre sí y ninguno destaca.
 Todo local: los vectores y la redacción salen de Ollama en el mismo compose.
 Sin embedder el sistema degrada a full-text en vez de fallar.
 
+### Ninguna cifra que no esté en lo que leyó
+
+La verificación de cita comprueba que el documento citado exista. No comprueba
+que **el número** venga de ahí, y ese hueco dejaba pasar el peor caso: cita
+válida, cifra inventada — más creíble que una respuesta sin cita.
+
+Pasó de verdad. A *"¿cuál es el deducible de mi seguro de auto?"* contestó
+**"5 UF"**, y ninguno de los ocho pasajes recuperados contenía ese número. La
+misma pregunta sin la palabra "auto" respondía bien (3 UF): "auto" hace que el
+OR traiga el anexo de asistencia en ruta, saturado de "vehículo", y empuje fuera
+la tabla de coberturas.
+
+Ahora **toda cifra de la respuesta tiene que aparecer en los pasajes leídos**, o
+la prosa se descarta y quedan las fuentes. Dos detalles que lo hacen usable:
+
+- **Normaliza la escritura chilena.** `UF 3,0` en el documento y `3 UF` en la
+  respuesta son el mismo dato; `$89.990` son 89990. Sin esto se descartarían
+  justo las respuestas correctas.
+- **Comprueba la unidad, no solo el número.** Es lo que atrapa `$89.990`
+  redactado como `89.990 UF`: cifra correcta, unidad inventada.
+
+Es estricto a propósito. Un "no lo tengo" de más se recupera —las fuentes están
+ahí y las abres—; un número inventado con cita válida no lo delata nada.
+
+**Y las fuentes van una por memoria.** Recuperar por trozo es correcto —el
+modelo necesita el párrafo—, pero mostrarlo por trozo hacía que la misma póliza
+apareciera tres veces, y en el chat que `ver 1`, `ver 2` y `ver 3` abrieran el
+mismo archivo.
+
 ## Los tres carriles
 
 markitdown convierte PDF, docx, xlsx, html y csv a Markdown **preservando la

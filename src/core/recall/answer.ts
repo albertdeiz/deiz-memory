@@ -1,6 +1,7 @@
 import type { Actor } from '../domain/types.js';
 import type { Deps } from '../ports.js';
 import { err, ok, type Result } from '../result.js';
+import { checkGrounding } from './grounding.js';
 import { retrieve, type Passage, type RetrieveInput } from './retrieve.js';
 
 /**
@@ -27,7 +28,7 @@ export interface Answer {
   /** Los pasajes en que se apoya. Siempre presentes, aunque no haya prosa. */
   sources: Passage[];
   /** Por qué no hay respuesta, cuando no la hay. */
-  reason: 'sin_resultados' | 'sin_modelo' | 'sin_cita' | null;
+  reason: 'sin_resultados' | 'sin_modelo' | 'sin_cita' | 'sin_respaldo' | null;
 }
 
 /** Cuántos pasajes se le dan al modelo. Más que esto diluye y cuesta. */
@@ -47,7 +48,7 @@ export async function answer(
     return ok({ text: null, sources: [], reason: 'sin_resultados' });
   }
   if (!input.synthesize || !deps.classifier) {
-    return ok({ text: null, sources, reason: input.synthesize ? 'sin_modelo' : null });
+    return ok({ text: null, sources: dedupe(sources), reason: input.synthesize ? 'sin_modelo' : null });
   }
 
   const usados = sources.slice(0, MAX_PASSAGES);
@@ -85,7 +86,7 @@ export async function answer(
   })).trim() || null;
   if (!texto || /NO_LO_TENGO/i.test(texto)) {
     // El modelo dice que no está. Se le cree: es justo lo que pide la regla 2.
-    return ok({ text: null, sources, reason: 'sin_resultados' });
+    return ok({ text: null, sources: dedupe(sources), reason: 'sin_resultados' });
   }
 
   // Regla dura 1, verificada y no confiada: una respuesta factual sin cita no
@@ -101,7 +102,7 @@ export async function answer(
       user: `Fragmentos:\n\n${contexto}\n\n---\n\nRespuesta a corregir: ${final}`,
     })).trim();
     if (/\[\d+\]/.test(reintento)) final = reintento;
-    else return ok({ text: null, sources, reason: 'sin_cita' });
+    else return ok({ text: null, sources: dedupe(sources), reason: 'sin_cita' });
   }
 
   const texto2 = resolveCitations(final, usados);
@@ -109,6 +110,13 @@ export async function answer(
   // Las fuentes se reordenan dejando adelante las que la respuesta citó de
   // verdad. Si no, "ver 1" abre un documento que no es de donde salió el dato —
   // que es peor que no ofrecer el botón.
+  // Regla dura 2, también verificada y no confiada: una cifra que no está en
+  // lo que se leyó no se muestra, aunque venga con una cita impecable.
+  const respaldo = checkGrounding(texto2, usados.map((p) => p.content));
+  if (!respaldo.ok) {
+    return ok({ text: null, sources: dedupe(usados), reason: 'sin_respaldo' });
+  }
+
   const citados = new Set(
     [...texto2.matchAll(/\[([0-9a-f]{8})\]/g)].map((m) => m[1]!),
   );
@@ -117,7 +125,29 @@ export async function answer(
     ...usados.filter((p) => !citados.has(p.shortId)),
   ];
 
-  return ok({ text: texto2, sources: ordenadas, reason: null });
+  return ok({ text: texto2, sources: dedupe(ordenadas), reason: null });
+}
+
+/**
+ * Una fuente por memoria, quedándose con el mejor pasaje de cada una.
+ *
+ * El modelo sí lee varios trozos del mismo documento —para eso se trocea—, pero
+ * mostrarlos como fuentes distintas es mentira de interfaz: la misma póliza
+ * aparecía tres veces seguidas, y en el chat eso significa que `ver 1`, `ver 2`
+ * y `ver 3` abren exactamente el mismo archivo.
+ *
+ * Se hace acá y no en `retrieve()` a propósito: recuperar por trozo es lo
+ * correcto, presentar por trozo no. El orden de entrada ya viene resuelto —por
+ * puntaje, y con las citadas adelante—, así que quedarse con la primera de cada
+ * memoria conserva esa decisión.
+ */
+function dedupe(passages: Passage[]): Passage[] {
+  const vistas = new Set<string>();
+  return passages.filter((p) => {
+    if (vistas.has(p.memoryId)) return false;
+    vistas.add(p.memoryId);
+    return true;
+  });
 }
 
 const fecha = (p: Passage): string =>

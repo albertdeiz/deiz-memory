@@ -135,3 +135,44 @@ describe('honestidad del "no lo tengo"', () => {
     expect(bodyOf(present(ok(agotado), conBotones))).toBe('No hay más.');
   });
 });
+
+describe('cuando la respuesta se descartó a propósito', () => {
+  const fuente = {
+    memoryId: '00000000-0000-0000-0000-000000000001',
+    shortId: 'a853a71c',
+    title: 'Póliza auto',
+    occurredAt: null,
+    capturedAt: new Date('2026-09-03T12:00:00Z'),
+    domainLabel: 'Seguros',
+    content: 'UF 3,0 por siniestro',
+    seq: 0,
+    via: 'texto' as const,
+    score: 1,
+  };
+
+  const rechazo = (reason: 'sin_cita' | 'sin_respaldo'): Outcome => ({
+    kind: 'respuesta',
+    consulta: '¿cuál es mi deducible?',
+    answer: { text: null, sources: [fuente], reason },
+  });
+
+  it('dice que no dio la cifra, en vez de listar y callarse', () => {
+    // Listar documentos sin decir nada deja creer que no había respuesta. La
+    // verdad es otra: la había y se descartó por no tener respaldo.
+    const [r] = present(ok(rechazo('sin_respaldo')), CAPS) as [Reply];
+    expect(r.body).toMatch(/sin inventarla/i);
+    expect(r.body).toContain('a853a71c');
+  });
+
+  it('y lo mismo cuando el problema fue la falta de cita', () => {
+    const [r] = present(ok(rechazo('sin_cita')), CAPS) as [Reply];
+    expect(r.body).toMatch(/sin inventar/i);
+  });
+
+  it('nunca muestra la palabra null donde iba la respuesta', () => {
+    for (const reason of ['sin_cita', 'sin_respaldo'] as const) {
+      const [r] = present(ok(rechazo(reason)), CAPS) as [Reply];
+      expect(r.body).not.toMatch(/\bnull\b/);
+    }
+  });
+});

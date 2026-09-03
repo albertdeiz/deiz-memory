@@ -120,6 +120,18 @@ describe('recuperación híbrida', () => {
     expect(r.value).toHaveLength(0);
   });
 
+  it('un documento con varios trozos que calzan figura UNA vez en las fuentes', async () => {
+    // Recuperar por trozo es correcto —el modelo necesita el párrafo—, pero
+    // presentarlo por trozo es mentira de interfaz: en el chat "ver 1", "ver 2"
+    // y "ver 3" abrían el mismo archivo.
+    const parrafo = (n: number) => `El deducible de la sección ${n} es relevante. ${'x'.repeat(900)}`;
+    await guardar([parrafo(1), parrafo(2), parrafo(3)].join('\n\n'));
+    const r = await answer(s.deps, actor, { query: 'deducible' });
+    if (!r.ok) throw new Error('falló');
+    const ids = r.value.sources.map((p) => p.memoryId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it('sin embedder degrada a full-text en vez de fallar', async () => {
     await guardar('el deducible es de 5 UF');
     s.deps.embedder = null;
@@ -170,6 +182,29 @@ describe('responder con cita (regla dura 1)', () => {
     if (!r.ok) throw new Error('falló');
     expect(r.value.reason).toBe('sin_resultados');
     expect(llamado).toBe(false);
+  });
+
+  it('DESCARTA una cifra que no está en los pasajes, aunque la cita sea válida', async () => {
+    // El fallo real que motivó esto: la cita apuntaba a un documento que existe
+    // y el número no estaba en ninguna parte de lo que el modelo leyó. Una
+    // respuesta así es MÁS creíble que una sin cita, y por eso es la peor.
+    s.deps.classifier = fakeClassifier('El deducible es de 12 UF por siniestro [1].');
+    const r = await answer(s.deps, actor, { query: 'deducible', synthesize: true });
+    if (!r.ok) throw new Error('falló');
+    expect(r.value.text).toBeNull();
+    expect(r.value.reason).toBe('sin_respaldo');
+    expect(r.value.sources.length).toBeGreaterThan(0);
+  });
+
+  it('la misma cifra escrita distinto sí pasa', async () => {
+    // "UF 5,0" en el documento y "5 UF" en la respuesta son el mismo dato. Sin
+    // normalizar, este guardarraíl descartaría justo las respuestas correctas.
+    await guardar('cobertura de sismo con deducible UF 5,0 por evento');
+    s.deps.classifier = fakeClassifier('El deducible es de 5 UF [1].');
+    const r = await answer(s.deps, actor, { query: 'deducible', synthesize: true });
+    if (!r.ok) throw new Error('falló');
+    expect(r.value.reason).toBeNull();
+    expect(r.value.text).toMatch(/5 UF/);
   });
 
   it('sin sintetizar devuelve los pasajes, que ya sirven', async () => {

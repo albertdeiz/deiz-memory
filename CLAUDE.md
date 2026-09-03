@@ -636,9 +636,27 @@ _Listo cuando:_ confías en la respuesta sin ir a abrir el PDF.
 > puede hacer AND de todos los términos (cero resultados contra ocho), y anteponer el
 > título a cada trozo diluye los vectores en vez de darles contexto.
 >
-> Límite conocido: con un modelo de 3B la redacción a veces agrega una unidad que no
-> está en la fuente —vi "$89.990" convertido en "89.990 UF"—. Los números se copian
-> bien; las unidades no siempre. Un modelo mayor lo arregla cambiando `DM_CLASSIFY_MODEL`.
+> **Y una corrección al límite que había anotado acá.** Escribí que el modelo "a veces
+> agrega una unidad que no está en la fuente". Es peor que eso: **inventa la cifra
+> entera**. A "¿cuál es el deducible de mi seguro de auto?" contestó "5 UF [a853a71c]"
+> con ninguno de los ocho pasajes recuperados conteniendo ese número. La cita era
+> válida y el dato falso — que es el peor fallo posible, porque una respuesta *con*
+> cita es más creíble que una sin ella.
+>
+> La causa no es solo el modelo. La palabra "auto" en la pregunta hace que el OR traiga
+> el anexo de asistencia en ruta —saturado de "vehículo"— y **empuje fuera la tabla de
+> coberturas**, la única con la cifra. La misma pregunta sin "auto" responde bien.
+>
+> El arreglo es el mismo patrón que la cita: verificar en código, no confiar en el
+> prompt. `grounding.ts` exige que **toda cifra de la prosa aparezca en los pasajes
+> leídos**, normalizando la escritura chilena (`UF 3,0` y `3 UF` son el mismo dato) y
+> comprobando también la unidad, que es lo que atrapa el `$89.990` → `89.990 UF`. Si
+> algo no calza, se descarta la prosa y se muestran las fuentes. Estricto a propósito:
+> un "no lo tengo" de más se recupera; un número inventado con cita, no.
+>
+> Y las fuentes se muestran **una por memoria**. Recuperar por trozo es correcto;
+> presentarlo por trozo hacía que la misma póliza saliera tres veces y que `ver 1`,
+> `ver 2` y `ver 3` abrieran el mismo archivo.
 
 **F5 — Espacios compartidos.** Tabla `memory_space`, participantes, `/invitar` con link
 de un solo uso, categorías del espacio por unanimidad, confirmación al compartir (§10).

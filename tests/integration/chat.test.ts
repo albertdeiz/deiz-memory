@@ -33,7 +33,7 @@ beforeEach(async () => {
 const pairMe = async (channel = ch, ownerId = s.ownerId) => {
   const c = await mintPairingCode(s.deps.db, ownerId, new Date());
   if (!c.ok) throw new Error('no acuñó');
-  return channel.send({ text: `/empezar ${c.value.code}` });
+  return channel.send({ text: `/start ${c.value.code}` });
 };
 
 describe('quién puede hablarle', () => {
@@ -55,11 +55,11 @@ describe('quién puede hablarle', () => {
 
   it('con un código válido queda adentro', async () => {
     expect(text(await pairMe())).toContain('Listo');
-    expect(text(await ch.send({ text: 'el gasfiter es Rodrigo' }))).toContain('Guardado');
+    expect(text(await ch.send({ text: '/capture el gasfiter es Rodrigo' }))).toContain('Guardado');
   });
 
   it('un código inventado no abre la puerta', async () => {
-    expect(text(await ch.send({ text: '/empezar ZZZZZZZZ' }))).toContain('no sirve');
+    expect(text(await ch.send({ text: '/start ZZZZZZZZ' }))).toContain('no sirve');
     const { rows } = await s.deps.db.query<{ n: string }>('select count(*)::text n from channel_identities');
     expect(rows[0]!.n).toBe('0');
   });
@@ -68,11 +68,20 @@ describe('quién puede hablarle', () => {
 describe('capturar', () => {
   beforeEach(async () => { await pairMe(); });
 
-  it('guarda un texto suelto y no promete leerlo', async () => {
+  it('guarda un texto suelto con /capture, y no promete leerlo', async () => {
     // Un texto ya es texto: no hay nada que un carril pueda agregarle.
-    const out = text(await ch.send({ text: 'el mecánico es Juan +569 1234 5678' }));
+    const out = text(await ch.send({ text: '/capture el mecánico es Juan +569 1234 5678' }));
     expect(out).toContain('Guardado');
     expect(out).not.toContain('Lo estoy leyendo');
+  });
+
+  it('un texto SIN /capture no se guarda: se consulta', async () => {
+    // En un chat, lo que escribes es casi siempre algo que estás preguntando.
+    // Guardar por defecto dejaba preguntas convertidas en memorias.
+    const out = text(await ch.send({ text: 'el mecánico es Juan +569 1234 5678' }));
+    expect(out).not.toContain('Guardado');
+    const { rows } = await s.deps.db.query<{ n: string }>('select count(*)::text n from memories');
+    expect(rows[0]!.n).toBe('0');
   });
 
   it('guarda una foto y avisa que la está leyendo', async () => {
@@ -103,20 +112,20 @@ describe('recordar', () => {
 
   const guardar = async (n: number) => {
     for (let i = 1; i <= n; i++) {
-      await ch.send({ text: `póliza número ${i} del vehículo` });
+      await ch.send({ text: `/capture póliza número ${i} del vehículo` });
     }
   };
 
   it('encuentra lo guardado y numera los resultados', async () => {
     await guardar(3);
-    const out = text(await ch.send({ text: '/buscar poliza' }));
+    const out = text(await ch.send({ text: '/search poliza' }));
     expect(out).toContain('1–3');
     expect(out).toMatch(/1\. /);
   });
 
   it('pagina de a cinco, como manda §6.1', async () => {
     await guardar(8);
-    const p1 = text(await ch.send({ text: '/buscar poliza' }));
+    const p1 = text(await ch.send({ text: '/search poliza' }));
     expect(p1).toContain('1–5');
 
     const p2 = text(await ch.send({ text: 'más' }));
@@ -127,21 +136,23 @@ describe('recordar', () => {
     // Son cosas distintas: una es el final de una lista, la otra una respuesta
     // sobre tu memoria.
     await guardar(2);
-    await ch.send({ text: '/buscar poliza' });
+    await ch.send({ text: '/search poliza' });
     expect(text(await ch.send({ text: 'más' }))).toBe('No hay más.');
   });
 
   it('un número suelto abre el resultado de esa posición', async () => {
     await guardar(3);
-    await ch.send({ text: '/buscar poliza' });
+    await ch.send({ text: '/search poliza' });
     const detalle = text(await ch.send({ text: '2' }));
     expect(detalle).toContain('póliza número');
   });
 
-  it('un número suelto sin lista en pantalla se guarda, no se interpreta', async () => {
-    // §5: perder un dato es lo caro.
+  it('un número suelto sin lista en pantalla no es "ver el séptimo"', async () => {
+    // Sin lista, un 7 no puede significar una posición. Se consulta, y si no
+    // hay nada se ofrece guardarlo: no se pierde.
     const out = text(await ch.send({ text: '7' }));
-    expect(out).toContain('Guardado');
+    expect(out).toContain('No lo tengo');
+    expect(text(await ch.send({ text: 'save' }))).toContain('Guardado');
   });
 
   it('ofrece guardar una pregunta que no encontró nada', async () => {
@@ -149,13 +160,13 @@ describe('recordar', () => {
     expect(out).toContain('No lo tengo');
     expect(out).toContain('guardar');
 
-    expect(text(await ch.send({ text: 'guardar' }))).toContain('Guardado');
+    expect(text(await ch.send({ text: 'save' }))).toContain('Guardado');
   });
 
   it('no ofrece guardar lo que buscaste a propósito', async () => {
     // Si escribiste /buscar querías buscar. Ofrecerte guardar "pinguino" como
     // nota sería guardarte un texto que nunca quisiste guardar.
-    const out = text(await ch.send({ text: '/buscar pinguino' }));
+    const out = text(await ch.send({ text: '/search pinguino' }));
     expect(out).toContain('No lo tengo');
     expect(out).not.toContain('guardar');
   });
@@ -167,7 +178,7 @@ describe('recordar', () => {
     await ch.send({ attachment: await fileAttachment('fixtures/f1/boleta-escaneada.png') });
     await s.deps.db.query(`update memories set normalized_at = null where blob_sha256 is not null`);
 
-    const out = text(await ch.send({ text: '/buscar amoladora' }));
+    const out = text(await ch.send({ text: '/search amoladora' }));
     expect(out).toContain('No lo tengo');
     expect(out).toMatch(/por leer/);
   });
@@ -183,7 +194,7 @@ describe('aislamiento entre personas (regla dura 9)', () => {
     await serveChannel(otro, s.deps);
     await pairMe(otro, s.otherOwnerId);
 
-    const out = text(await otro.send({ text: '/buscar poliza' }));
+    const out = text(await otro.send({ text: '/search poliza' }));
     expect(out).toContain('No lo tengo');
     expect(out).not.toContain('secreta');
   });
@@ -220,22 +231,22 @@ describe('paridad con el CLI', () => {
     // Sin embedder la recuperación degrada a full-text, que acá alcanza: lo
     // que se prueba es que preguntar responda, no la calidad del vector.
     s.deps.embedder = null;
-    await ch.send({ text: 'el deducible de la póliza es de 5 UF por siniestro' });
+    await ch.send({ text: '/capture el deducible de la póliza es de 5 UF por siniestro' });
 
     const preg = text(await ch.send({ text: '¿cuál es el deducible?' }));
     expect(preg).toContain('5 UF');
     expect(preg).toMatch(/\[[0-9a-f]{8}\]/);
 
-    const busq = text(await ch.send({ text: '/buscar deducible' }));
+    const busq = text(await ch.send({ text: '/search deducible' }));
     expect(busq).toContain('1–1');
   });
 
   it('se puede ocultar un resultado sin poder borrarlo', async () => {
     // El chat oculta; purgar es irreversible y se queda en la terminal.
-    await ch.send({ text: 'la póliza del auto' });
-    await ch.send({ text: '/buscar poliza' });
-    expect(text(await ch.send({ text: 'ocultar:1' }))).toContain('No se borró');
-    expect(text(await ch.send({ text: '/buscar poliza' }))).toContain('No lo tengo');
+    await ch.send({ text: '/capture la póliza del auto' });
+    await ch.send({ text: '/search poliza' });
+    expect(text(await ch.send({ text: 'hide:1' }))).toContain('No se borró');
+    expect(text(await ch.send({ text: '/search poliza' }))).toContain('No lo tengo');
 
     // Sigue existiendo: ocultar es un flag, no un borrado.
     const { rows } = await s.deps.db.query<{ n: string }>('select count(*)::text n from memories');
@@ -244,8 +255,8 @@ describe('paridad con el CLI', () => {
 
   it('un comando que no existe orienta hacia los dos caminos', async () => {
     const out = text(await ch.send({ text: '/pinguinos' }));
-    expect(out).toContain('/dominios');
-    expect(out).toContain('/ayuda');
+    expect(out).toContain('/domains');
+    expect(out).toContain('/help');
   });
 
   it('no ofrece exportar, que no existe', async () => {
@@ -273,7 +284,7 @@ describe('categorías desde el chat (§9)', () => {
     expect(aviso).toContain('se parece');
 
     expect(text(await ch.send({ text: 'no' }))).toContain('no hago nada');
-    expect(text(await ch.send({ text: '/dominios' }))).not.toContain('/medico');
+    expect(text(await ch.send({ text: '/domains' }))).not.toContain('/medico');
   });
 
   it('y crea igual si dices que sí', async () => {
@@ -313,10 +324,7 @@ describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
    * segundo de la BÚSQUEDA anterior — un documento real, de otra cosa. Es el
    * peor tipo de fallo silencioso, porque parece una respuesta.
    */
-  const guardar = async (text: string) => {
-    const out = await ch.send({ text });
-    return out;
-  };
+  const guardar = async (body: string) => ch.send({ text: `/capture ${body}` });
 
   beforeEach(async () => {
     await pairMe();
@@ -329,7 +337,7 @@ describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
     // Una búsqueda deja SU lista en la sesión...
     await guardar('contrato de arriendo del departamento');
     await guardar('presupuesto de la mudanza');
-    await ch.send({ text: '/buscar mudanza' });
+    await ch.send({ text: '/search mudanza' });
 
     // ...y ahora una categoría con otras cosas, en otro orden.
     for (const t of ['cédula de identidad', 'licencia de conducir', 'pasaporte vigente']) {
@@ -345,7 +353,7 @@ describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
     const segundo = /^2\. (.+)$/m.exec(lista)?.[1]?.trim();
     expect(segundo).toBeTruthy();
 
-    const detalle = text(await ch.send({ text: 'ver:2' }));
+    const detalle = text(await ch.send({ text: 'view:2' }));
     expect(detalle).toContain(segundo!.split('\n')[0]!);
     // Y desde luego nada de la búsqueda de antes.
     expect(detalle).not.toContain('mudanza');
@@ -353,10 +361,10 @@ describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
 
   it('una categoría vacía no deja viva la lista anterior', async () => {
     await guardar('presupuesto de la mudanza');
-    await ch.send({ text: '/buscar mudanza' });
+    await ch.send({ text: '/search mudanza' });
     await ch.send({ text: '/papeles' });
     // No hay nada en Papeles, así que "ver 1" no puede abrir la mudanza.
-    expect(text(await ch.send({ text: 'ver:1' }))).not.toContain('mudanza');
+    expect(text(await ch.send({ text: 'view:1' }))).not.toContain('mudanza');
   });
 });
 
@@ -378,11 +386,11 @@ describe('bajar el archivo desde la lista', () => {
       attachment: bytesAttachment('boleta.txt', LARGO),
     });
 
-    const lista = await ch.send({ text: '/buscar amoladora' });
+    const lista = await ch.send({ text: '/search amoladora' });
     const acciones = lista.flatMap((r) => (r.kind === 'text' ? (r.options ?? []).map((o) => o.action) : []));
-    expect(acciones).toContain('abrir:1');
+    expect(acciones).toContain('open:1');
 
-    const out = await ch.send({ text: 'abrir:1' });
+    const out = await ch.send({ text: 'open:1' });
     const file = out.find((r) => r.kind === 'file');
     expect(file).toBeDefined();
     if (file?.kind === 'file') expect(file.bytes.toString()).toContain('Amoladora');
@@ -398,8 +406,8 @@ describe('bajar el archivo desde la lista', () => {
       });
     }
 
-    await ch.send({ text: '/buscar segundo' });
-    await ch.send({ text: 'ver:1' });
+    await ch.send({ text: '/search segundo' });
+    await ch.send({ text: 'view:1' });
     const out = await ch.send({ text: 'original' });
     const file = out.find((r) => r.kind === 'file');
     expect(file).toBeDefined();

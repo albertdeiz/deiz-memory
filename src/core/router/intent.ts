@@ -27,12 +27,6 @@ export type Intent =
   | { verb: 'ayuda' };
 // 'aclarar' (§5) todavía no existe: no hay clasificador que dude. Llega en F2.
 
-/**
- * Palabras con las que la gente empieza una pregunta. Sin tildes porque el
- * texto llega normalizado.
- */
-const ASKING = /^(cual|cuales|que|cuando|donde|cuanto|cuanta|quien|como|tengo|tienes|busca|buscar|encuentra|encontrar|muestra|mostrar|dame|hay)\b/;
-
 const normalize = (s: string): string =>
   s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
@@ -54,32 +48,19 @@ export function contentWords(text: string): string {
     .trim();
 }
 
-/**
- * Si un texto suelto es una pregunta o algo que guardar.
- *
- * **Acá hay una desviación consciente de §5, y conviene que esté escrita.** §5
- * dice que la ambigüedad se resuelve siempre a favor de capturar. Pero en esta
- * fase la pregunta en lenguaje natural todavía no existe —es F3—, y guardar
- * "¿cuál es mi deducible?" como si fuera una memoria es doblemente malo: no
- * responde, y deja basura en el corpus que después hay que ocultar a mano.
- *
- * Así que la regla es estrecha: empieza con `¿`, o con una palabra de pregunta,
- * y no trae archivo. Todo lo demás se guarda, como manda §5.
- *
- * Y el espíritu de §5 se respeta igual donde importa: si la búsqueda no
- * encuentra nada, la respuesta ofrece guardarlo, y el texto queda esperando un
- * toque. No se pierde nada.
- */
-export const looksLikeQuestion = (text: string): boolean => {
-  const t = text.trim();
-  if (t.startsWith('¿')) return true;
-  return ASKING.test(normalize(t)) && contentWords(t).length > 0;
-};
-
 export interface Session {
   /** Ids de la última página mostrada, para que "ver 3" signifique algo. */
   ids: string[];
   hasConfirm: boolean;
+  /**
+   * Hay un texto esperando que digas "guardar".
+   *
+   * Cuenta como algo en pantalla igual que una lista. Sin esto, escribir
+   * `save` —en vez de pulsar el botón— no era una acción, se iba por texto
+   * libre y el ofrecimiento se perdía. Con el texto libre convertido en
+   * consulta, esa escotilla es lo único que sostiene "no se pierde nada".
+   */
+  hasSave: boolean;
 }
 
 /**
@@ -87,7 +68,8 @@ export interface Session {
  * siempre, y solo al final se decide sobre texto libre.
  */
 export function classify(msg: Incoming, session: Session | null): Intent {
-  const pending = (session?.ids.length ?? 0) > 0 || session?.hasConfirm === true;
+  const pending =
+    (session?.ids.length ?? 0) > 0 || session?.hasConfirm === true || session?.hasSave === true;
 
   // 1 · un botón ya presionado no se interpreta, se obedece
   if (msg.action) {
@@ -103,21 +85,40 @@ export function classify(msg: Incoming, session: Session | null): Intent {
     const cmd = normalize(rawCmd ?? '');
     const arg = rest.join(' ').trim();
 
+    // Los comandos son los del CLI: `/search` es `dm search`, `/capture` es
+    // `dm capture`. Se aceptan además los nombres en español con que nació el
+    // bot, porque romperle los dedos a quien ya los tenía aprendidos no compra
+    // nada — pero los que se muestran y los que llevan los botones son estos.
     if (cmd === 'start' || cmd === 'empezar') return { verb: 'parear', code: arg };
-    if (cmd === 'buscar' || cmd === 'busca') return { verb: 'recordar', query: arg, adivinado: false };
-    if (cmd === 'pendientes') return { verb: 'pendientes' };
-    if (cmd === 'revisar' || cmd === 'revision') return { verb: 'revisar' };
-    if (cmd === 'mas') return { verb: 'accion', action: { kind: 'mas' } };
-    if (cmd === 'ayuda' || cmd === 'help') return { verb: 'ayuda' };
-    if (cmd === 'dominios' || cmd === 'categorias') return { verb: 'dominios' };
-    if (cmd === 'proponer') return { verb: 'proponer' };
+    if (cmd === 'help' || cmd === 'ayuda') return { verb: 'ayuda' };
+
+    // Guardar es explícito: es la única forma de que un texto suelto entre al
+    // corpus. Ver la nota de `classify()` más abajo.
+    if (cmd === 'capture' || cmd === 'capturar' || cmd === 'guardar') {
+      return { verb: 'capturar', text: arg || null, attachment: null };
+    }
+
+    // `/search` lista; `/ask` responde citando. La diferencia es la de §6, y
+    // vale tenerla a mano: a veces quieres el dato y a veces los documentos.
+    if (cmd === 'search' || cmd === 'buscar' || cmd === 'busca') {
+      return { verb: 'recordar', query: arg, adivinado: false };
+    }
+    if (cmd === 'ask' || cmd === 'preguntar') {
+      return { verb: 'recordar', query: contentWords(arg) || arg, adivinado: true };
+    }
+
+    if (cmd === 'pending' || cmd === 'pendientes') return { verb: 'pendientes' };
+    if (cmd === 'review' || cmd === 'revisar' || cmd === 'revision') return { verb: 'revisar' };
+    if (cmd === 'more' || cmd === 'mas') return { verb: 'accion', action: { kind: 'mas' } };
+    if (cmd === 'domains' || cmd === 'dominios' || cmd === 'categorias') return { verb: 'dominios' };
+    if (cmd === 'propose' || cmd === 'proponer') return { verb: 'proponer' };
 
     // CRUD de categorías desde el chat, que es donde §9 lo quiere.
     //
     // El separador es `:` y no un segundo argumento posicional porque tanto el
     // nombre como la descripción llevan espacios, y pedirle comillas a alguien
     // que escribe desde el teléfono es pedirle que no lo use.
-    if (cmd === 'crear' || cmd === 'nueva') {
+    if (cmd === 'create' || cmd === 'crear' || cmd === 'nueva') {
       const [nombre, ...resto] = arg.split(':');
       return {
         verb: 'crearDominio',
@@ -125,16 +126,16 @@ export function classify(msg: Incoming, session: Session | null): Intent {
         description: resto.join(':').trim(),
       };
     }
-    if (cmd === 'describir') {
+    if (cmd === 'describe' || cmd === 'describir') {
       const [ref, ...resto] = arg.split(':');
       return { verb: 'describirDominio', ref: (ref ?? '').trim(), description: resto.join(':').trim() };
     }
-    if (cmd === 'renombrar') {
+    if (cmd === 'rename' || cmd === 'renombrar') {
       const [ref, ...resto] = arg.split(/\s+/);
       return { verb: 'renombrarDominio', ref: ref ?? '', label: resto.join(' ').trim() };
     }
-    if (cmd === 'archivar') return { verb: 'archivarDominio', ref: arg };
-    if (cmd === 'fusionar') {
+    if (cmd === 'archive' || cmd === 'archivar') return { verb: 'archivarDominio', ref: arg };
+    if (cmd === 'merge' || cmd === 'fusionar') {
       const [from, into] = arg.split(/\s+/);
       return { verb: 'fusionarDominios', from: from ?? '', into: into ?? '' };
     }
@@ -158,12 +159,22 @@ export function classify(msg: Incoming, session: Session | null): Intent {
     return { verb: 'capturar', text: text || null, attachment: msg.attachment };
   }
 
-  // 5 · texto libre
-  if (text && looksLikeQuestion(text)) {
-    // `adivinado`: lo tratamos como pregunta por una heurística, así que si no
-    // encuentra nada hay que ofrecer guardarlo. Es lo que mantiene el espíritu
-    // de §5 —no perder nada— sin ensuciar el corpus con preguntas.
-    return { verb: 'recordar', query: contentWords(text), adivinado: true };
+  // 5 · texto libre: se consulta, no se guarda.
+  //
+  // **Esto invierte §5 para el chat, a propósito y por experiencia de uso.** §5
+  // dice que la ambigüedad se resuelve a favor de capturar, y para el correo o
+  // un botón de compartir eso es correcto. En una conversación no: lo que
+  // escribes en un chat es, casi siempre, algo que le estás preguntando a
+  // alguien. Adivinar con una heurística —"¿empieza con cuál?"— acertaba a
+  // medias y dejaba preguntas guardadas como memorias, que después hay que
+  // ocultar a mano.
+  //
+  // Guardar pasa a ser explícito: un archivo, o `/capture`. Y el espíritu de §5
+  // se sostiene donde importa: si la consulta no encuentra nada, la respuesta
+  // ofrece guardar el texto tal cual y queda esperando un toque. No se pierde
+  // nada, solo deja de guardarse por accidente.
+  if (text) {
+    return { verb: 'recordar', query: contentWords(text) || normalize(text), adivinado: true };
   }
-  return { verb: 'capturar', text: text || null, attachment: null };
+  return { verb: 'capturar', text: null, attachment: null };
 }

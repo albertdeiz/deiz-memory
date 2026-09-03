@@ -129,8 +129,19 @@ Todo mensaje entrante se enruta a uno de tres:
 | **Recordar** | "¿cuál es mi deducible?", "¿qué me recetaron en marzo?" | recuperación + citación |
 | **Aclarar** | respuesta a una pregunta del bot, corrección de un dato | actualizar Memory + marcar verified |
 
-La ambigüedad se resuelve siempre a favor de **capturar**: guardar de más es barato,
-perder algo es caro.
+La ambigüedad se resuelve a favor de **capturar** en cualquier canal donde el mensaje
+llegue sin intención declarada. **En el chat, no: ahí se resuelve a favor de recordar.**
+
+Es una corrección nacida del uso, no del diseño. Lo que uno escribe en una conversación
+es, casi siempre, algo que le está preguntando a alguien. Adivinar con una heurística
+—"¿empieza con *cuál*?"— acertaba a medias y dejaba preguntas convertidas en memorias,
+que después hay que ocultar a mano. Así que en el chat **guardar es explícito**: un
+archivo adjunto, o `/capture`.
+
+Y el principio de §3.1 —capturar sin fricción— se sostiene donde importa: mandar un
+archivo sigue siendo un gesto, sin comando ni categoría. Y el de no perder nada también:
+si la consulta no encuentra nada, la respuesta ofrece guardar ese texto tal cual, a un
+toque.
 
 ## 6. Recuperación: dos modos, no uno
 

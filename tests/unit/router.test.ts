@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeAction, parseAction } from '../../src/core/router/actions.js';
-import { classify, contentWords, looksLikeQuestion } from '../../src/core/router/intent.js';
+import { classify, contentWords } from '../../src/core/router/intent.js';
 import type { Attachment, Incoming } from '../../src/core/channel/types.js';
 
 const attachment = (over: Partial<Attachment> = {}): Attachment => ({
@@ -22,7 +22,7 @@ const msg = (over: Partial<Incoming> = {}): Incoming => ({
   ...over,
 });
 
-const conLista = { ids: ['a', 'b', 'c'], hasConfirm: false };
+const conLista = { ids: ['a', 'b', 'c'], hasConfirm: false, hasSave: false };
 
 describe('acciones · el botón y el teclado son lo mismo', () => {
   it('el callback y la palabra escrita producen la misma acción', () => {
@@ -60,9 +60,9 @@ describe('clasificar · el orden es la regla', () => {
   it('un comando gana sobre cualquier heurística', () => {
     // `adivinado: false` porque lo pediste tú: si no encuentra nada, no tiene
     // sentido ofrecerte guardar "deducible" como nota.
-    expect(classify(msg({ text: '/buscar deducible' }), null))
+    expect(classify(msg({ text: '/search deducible' }), null))
       .toEqual({ verb: 'recordar', query: 'deducible', adivinado: false });
-    expect(classify(msg({ text: '/pendientes' }), null)).toEqual({ verb: 'pendientes' });
+    expect(classify(msg({ text: '/pending' }), null)).toEqual({ verb: 'pendientes' });
     expect(classify(msg({ text: '/start 8MGVBPG9' }), null))
       .toEqual({ verb: 'parear', code: '8MGVBPG9' });
   });
@@ -80,25 +80,84 @@ describe('clasificar · el orden es la regla', () => {
     expect(i.verb).toBe('capturar');
   });
 
-  it('texto libre se guarda — la ambigüedad cae hacia capturar (§5)', () => {
-    for (const t of ['el mecánico es Juan +569 1234 5678', 'comprar pan', 'Zañartu 1111']) {
-      expect(classify(msg({ text: t }), null).verb).toBe('capturar');
+  it('texto libre se CONSULTA: en un chat, lo que escribes es una pregunta', () => {
+    // Invierte §5 para el chat, a propósito. Adivinar con una heurística
+    // acertaba a medias y dejaba preguntas guardadas como memorias.
+    for (const t of ['el mecánico es Juan +569 1234 5678', 'comprar pan', 'poliza del auto']) {
+      expect(classify(msg({ text: t }), null).verb).toBe('recordar');
     }
+  });
+
+  it('guardar un texto es explícito, con /capture', () => {
+    expect(classify(msg({ text: '/capture el mecánico es Juan' }), null))
+      .toEqual({ verb: 'capturar', text: 'el mecánico es Juan', attachment: null });
+  });
+
+  it('un texto sin palabras con contenido igual consulta, no se pierde', () => {
+    // "hola" no deja contenido tras quitar las vacías; caer en un error seco
+    // sería peor que buscar y ofrecer guardarlo.
+    const i = classify(msg({ text: 'hola' }), null);
+    expect(i).toEqual({ verb: 'recordar', query: 'hola', adivinado: true });
   });
 });
 
-describe('la desviación de §5, acotada a preguntas', () => {
-  it('reconoce una pregunta y la manda a buscar', () => {
-    expect(looksLikeQuestion('¿cuál es mi deducible?')).toBe(true);
-    expect(looksLikeQuestion('cuando vence la revision tecnica')).toBe(true);
-    expect(looksLikeQuestion('busca la póliza del auto')).toBe(true);
+describe('los comandos son los del CLI, en inglés', () => {
+  it('cada comando tiene el nombre de su equivalente en la terminal', () => {
+    const casos: [string, string][] = [
+      ['/help', 'ayuda'],
+      ['/search x', 'recordar'],
+      ['/ask x', 'recordar'],
+      ['/capture x', 'capturar'],
+      ['/pending', 'pendientes'],
+      ['/review', 'revisar'],
+      ['/domains', 'dominios'],
+      ['/propose', 'proponer'],
+      ['/create Salud: cosas', 'crearDominio'],
+      ['/describe salud: cosas', 'describirDominio'],
+      ['/rename salud Salud2', 'renombrarDominio'],
+      ['/archive salud', 'archivarDominio'],
+      ['/merge a b', 'fusionarDominios'],
+    ];
+    for (const [texto, verbo] of casos) {
+      expect(classify(msg({ text: texto }), null).verb, texto).toBe(verbo);
+    }
   });
 
-  it('no toma por pregunta algo que solo quieres guardar', () => {
-    expect(looksLikeQuestion('el mecánico es Juan')).toBe(false);
-    expect(looksLikeQuestion('Zañartu 1111 Ñuñoa')).toBe(false);
-    // Empieza con palabra de pregunta pero no queda contenido: no es búsqueda.
-    expect(looksLikeQuestion('que')).toBe(false);
+  it('/ask responde y /search lista: la diferencia es adivinado', () => {
+    // Es la distinción de §6: el dato con su cita, o los documentos.
+    expect(classify(msg({ text: '/ask deducible' }), null))
+      .toEqual({ verb: 'recordar', query: 'deducible', adivinado: true });
+    expect(classify(msg({ text: '/search deducible' }), null))
+      .toEqual({ verb: 'recordar', query: 'deducible', adivinado: false });
+  });
+
+  it('los nombres viejos en español siguen valiendo', () => {
+    // Cambiar el idioma de los comandos no tiene por qué romperle los dedos a
+    // quien ya los tenía aprendidos.
+    expect(classify(msg({ text: '/buscar x' }), null).verb).toBe('recordar');
+    expect(classify(msg({ text: '/dominios' }), null).verb).toBe('dominios');
+    expect(classify(msg({ text: '/fusionar a b' }), null).verb).toBe('fusionarDominios');
+  });
+
+  it('las acciones se emiten en inglés y se aceptan en los dos idiomas', () => {
+    expect(encodeAction({ kind: 'ver', n: 3 })).toBe('view:3');
+    expect(encodeAction({ kind: 'abrir', n: 2 })).toBe('open:2');
+    expect(encodeAction({ kind: 'ocultar', n: 1 })).toBe('hide:1');
+    expect(encodeAction({ kind: 'mas' })).toBe('more');
+    expect(encodeAction({ kind: 'si' })).toBe('yes');
+
+    for (const [escrito, esperado] of [
+      ['view:3', { kind: 'ver', n: 3 }],
+      ['ver:3', { kind: 'ver', n: 3 }],
+      ['open:2', { kind: 'abrir', n: 2 }],
+      ['abrir:2', { kind: 'abrir', n: 2 }],
+      ['more', { kind: 'mas' }],
+      ['más', { kind: 'mas' }],
+      ['yes', { kind: 'si' }],
+      ['sí', { kind: 'si' }],
+    ] as const) {
+      expect(parseAction(escrito, true), escrito).toEqual(esperado);
+    }
   });
 
   it('deja solo las palabras que sirven para buscar', () => {
@@ -106,9 +165,7 @@ describe('la desviación de §5, acotada a preguntas', () => {
     expect(contentWords('cuando vence la revision tecnica')).toBe('vence revision tecnica');
   });
 
-  it('una pregunta va a recordar, con la consulta ya limpia', () => {
-    // `adivinado: true`: la heurística decidió que era pregunta, así que si no
-    // hay resultados hay que ofrecer guardarlo (§5, no perder nada).
+  it('una pregunta llega a recordar con la consulta ya limpia', () => {
     expect(classify(msg({ text: '¿cuál es mi deducible?' }), null))
       .toEqual({ verb: 'recordar', query: 'deducible', adivinado: true });
   });

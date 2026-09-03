@@ -22,12 +22,22 @@ export type Action =
   | { kind: 'si' }
   | { kind: 'no' };
 
-/** Lo que viaja en un botón. Corto porque Telegram limita a 64 bytes. */
+/**
+ * Lo que viaja en un botón. Corto porque Telegram limita a 64 bytes.
+ *
+ * En inglés y con los nombres del CLI: `view` es `dm show`, `open` es `dm open`,
+ * `hide` es `dm hide`. Los nombres en español con que nació el bot se siguen
+ * **aceptando** al escribirlos —ver `parseAction`—, pero ya no se emiten.
+ */
 export const encodeAction = (a: Action): string => {
   switch (a.kind) {
-    case 'ver': return `ver:${a.n}`;
-    case 'abrir': return `abrir:${a.n}`;
-    case 'ocultar': return `ocultar:${a.n}`;
+    case 'ver': return `view:${a.n}`;
+    case 'abrir': return `open:${a.n}`;
+    case 'ocultar': return `hide:${a.n}`;
+    case 'mas': return 'more';
+    case 'guardar': return 'save';
+    case 'si': return 'yes';
+    case 'no': return 'no';
     default: return a.kind;
   }
 };
@@ -41,19 +51,32 @@ const normalize = (s: string): string =>
  * escribe tildes en un teléfono, y en singular y plural donde tiene sentido.
  */
 const WORDS: Record<string, Action> = {
+  more: { kind: 'mas' },
   mas: { kind: 'mas' },
   siguiente: { kind: 'mas' },
   sigue: { kind: 'mas' },
+  save: { kind: 'guardar' },
   guardar: { kind: 'guardar' },
-  original: { kind: 'original' },
-  archivo: { kind: 'original' },
-  descargar: { kind: 'original' },
   guardalo: { kind: 'guardar' },
+  original: { kind: 'original' },
+  file: { kind: 'original' },
+  archivo: { kind: 'original' },
+  download: { kind: 'original' },
+  descargar: { kind: 'original' },
+  yes: { kind: 'si' },
   si: { kind: 'si' },
   ok: { kind: 'si' },
   dale: { kind: 'si' },
   no: { kind: 'no' },
+  cancel: { kind: 'no' },
   cancelar: { kind: 'no' },
+};
+
+/** El nombre en español de una acción numerada sigue valiendo si lo escribes. */
+const NUMBERED: Record<string, 'ver' | 'abrir' | 'ocultar'> = {
+  view: 'ver', ver: 'ver',
+  open: 'abrir', abrir: 'abrir',
+  hide: 'ocultar', ocultar: 'ocultar',
 };
 
 /**
@@ -68,10 +91,11 @@ export function parseAction(raw: string | null, hasPending: boolean): Action | n
   const s = normalize(raw);
   if (!s) return null;
 
-  const numbered = /^(ver|abrir|ocultar):(\d{1,2})$/.exec(s);
+  const numbered = /^([a-z]+)[:\s](\d{1,2})$/.exec(s);
   if (numbered) {
+    const kind = NUMBERED[numbered[1]!];
     const n = Number(numbered[2]);
-    return n >= 1 && n <= 99 ? { kind: numbered[1] as 'ver' | 'abrir' | 'ocultar', n } : null;
+    if (kind && n >= 1 && n <= 99) return { kind, n };
   }
 
   const word = WORDS[s];

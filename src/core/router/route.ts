@@ -193,7 +193,7 @@ async function dispatch(
       // existe. Nombrar los dos caminos cuesta una línea.
       if (!d) {
         return err('not_found',
-          `No conozco "/${intent.ref}". Mira /dominios para las categorías, o /ayuda para los comandos.`);
+          `No conozco "/${intent.ref}". Mira /domains para las categorías, o /help para los comandos.`);
       }
       const r = await list(deps, actor, { domainId: d.id, limit: PAGE });
       return r.ok ? ok({ kind: 'enDominio', domain: d, items: r.value }) : r;
@@ -211,7 +211,7 @@ async function dispatch(
       // Una pregunta se responde; una búsqueda por palabras se lista.
       //
       // La diferencia importa: "¿cuál es mi deducible?" quiere el dato con su
-      // cita, no cinco documentos donde buscarlo. `/buscar poliza` quiere la
+      // cita, no cinco documentos donde buscarlo. `/search poliza` quiere la
       // lista. El clasificador de intención ya distinguió las dos (§5), así que
       // acá solo hay que respetarlo.
       if (intent.adivinado && deps.classifier) {
@@ -359,7 +359,7 @@ async function doSearch(
 
   const pending: Pending = { ids: items.map((m) => m.id) };
   // Solo se ofrece guardar cuando fuimos NOSOTROS los que decidimos que esto
-  // era una pregunta. Si escribió /buscar quería buscar, y si pidió "más"
+  // era una pregunta. Si escribió /search quería buscar, y si pidió "más"
   // quería la página siguiente: ofrecerle guardar "deducible" como nota sería
   // absurdo, y encima lo haría con un texto que él nunca quiso guardar.
   const agotado = offset > 0 && items.length === 0;

@@ -30,7 +30,7 @@ afterAll(async () => { await pool.end(); });
 const pair = async () => {
   const p = await dm(['--json', 'pair']);
   expect(p.code).toBe(0);
-  return dm(['chat', `/empezar ${p.json.code}`]);
+  return dm(['chat', `/start ${p.json.code}`]);
 };
 
 /**
@@ -52,22 +52,22 @@ describe('conversación completa por CLI', () => {
   it('parear, guardar y encontrar', async () => {
     expect((await pair()).out).toContain('Listo');
 
-    expect((await dm(['chat', 'el mecánico es Juan Pérez de Ñuñoa'])).out).toContain('Guardado');
+    expect((await dm(['chat', '/capture el mecánico es Juan Pérez de Ñuñoa'])).out).toContain('Guardado');
 
     // Sin tildes, como escribe la gente en un teléfono.
-    const buscado = await dm(['chat', '/buscar mecanico']);
+    const buscado = await dm(['chat', '/search mecanico']);
     expect(buscado.out).toContain('1–1');
     expect(buscado.out).toContain('Juan');
   }, 90_000);
 
   it('sin botones, el bot dice qué escribir y la palabra funciona', async () => {
     await pair();
-    for (let i = 1; i <= 7; i++) await dm(['chat', `póliza ${i} del vehículo`]);
+    for (let i = 1; i <= 7; i++) await dm(['chat', `/capture póliza ${i} del vehículo`]);
 
-    const p1 = await dm(['chat', '/buscar poliza']);
+    const p1 = await dm(['chat', '/search poliza']);
     expect(p1.out).toContain('1–5');
     // La lista numerada aparece porque el canal no tiene botones.
-    expect(p1.out).toContain('mas');
+    expect(p1.out).toContain('more');
 
     const p2 = await dm(['chat', 'más']);
     expect(p2.out).toContain('6–7');
@@ -82,10 +82,10 @@ describe('conversación completa por CLI', () => {
 
   it('otra identidad no ve lo tuyo', async () => {
     await pair();
-    await dm(['chat', 'mi póliza secreta']);
+    await dm(['chat', '/capture mi póliza secreta']);
 
     // Otro id de canal, sin parear: ni siquiera llega a buscar.
-    const intruso = await dm(['chat', '--as', 'intruso', '/buscar poliza']);
+    const intruso = await dm(['chat', '--as', 'intruso', '/search poliza']);
     expect(intruso.out).toContain('No te conozco');
     expect(intruso.out).not.toContain('secreta');
   }, 90_000);

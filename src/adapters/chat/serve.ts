@@ -78,6 +78,7 @@ export async function serveChannel(
     const intent = classify(msg, session ? {
       ids: session.pending?.ids ?? [],
       hasConfirm: session.pending?.confirm !== undefined,
+      hasSave: session.pending?.save !== undefined,
     } : null);
 
     const res = await route(deps, actor, {

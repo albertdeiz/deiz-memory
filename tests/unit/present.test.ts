@@ -67,8 +67,8 @@ describe('degradación · las mismas acciones con y sin botones', () => {
     expect(actionsOf(conB)).toEqual(actionsOf(sinB));
     // Dos acciones por resultado: los datos y el archivo.
     expect(actionsOf(conB)).toEqual([
-      'ver:1', 'abrir:1', 'ver:2', 'abrir:2', 'ver:3', 'abrir:3',
-      'ver:4', 'abrir:4', 'ver:5', 'abrir:5', 'mas',
+      'view:1', 'open:1', 'view:2', 'open:2', 'view:3', 'open:3',
+      'view:4', 'open:4', 'view:5', 'open:5', 'more',
     ]);
   });
 
@@ -76,19 +76,19 @@ describe('degradación · las mismas acciones con y sin botones', () => {
     // De nada sirve ofrecer una acción que la persona no puede ver.
     const sinB = present(ok(resultados(2, true)), sinBotones);
     const body = bodyOf(sinB);
-    expect(body).toContain('ver:1');
-    expect(body).toContain('mas');
+    expect(body).toContain('view:1');
+    expect(body).toContain('more');
   });
 
   it('con botones, el cuerpo no se ensucia con la lista de comandos', () => {
     const conB = present(ok(resultados(2, true)), conBotones);
-    expect(bodyOf(conB)).not.toContain('ver:1');
+    expect(bodyOf(conB)).not.toContain('view:1');
   });
 
   it('sin resultados no se ofrece "más"', () => {
     const vacio: Outcome = { ...resultados(0, false), ofreceGuardar: 'garantia refrigerador' };
     for (const caps of [conBotones, sinBotones]) {
-      expect(actionsOf(present(ok(vacio), caps))).toEqual(['guardar']);
+      expect(actionsOf(present(ok(vacio), caps))).toEqual(['save']);
     }
   });
 
@@ -102,8 +102,8 @@ describe('degradación · las mismas acciones con y sin botones', () => {
     const conB = present(necesitaConfirmar, conBotones);
     const sinB = present(necesitaConfirmar, sinBotones);
 
-    expect(actionsOf(conB)).toEqual(['si', 'no']);
-    expect(actionsOf(sinB)).toEqual(['si', 'no']);
+    expect(actionsOf(conB)).toEqual(['yes', 'no']);
+    expect(actionsOf(sinB)).toEqual(['yes', 'no']);
     // Y en los dos casos se nombra lo afectado, no se pide un sí a ciegas.
     expect(bodyOf(conB)).toContain('Póliza 2026');
     expect(bodyOf(sinB)).toContain('Póliza 2026');
@@ -189,8 +189,8 @@ describe('los dos botones de cada resultado', () => {
     // `group` es lo que evita once filas apiladas en una página de cinco.
     const [r] = present(ok(resultados(2, false)), conBotones) as [Reply];
     const opts = r.kind === 'text' ? r.options ?? [] : [];
-    expect(opts.filter((o) => o.group === 1).map((o) => o.action)).toEqual(['ver:1', 'abrir:1']);
-    expect(opts.filter((o) => o.group === 2).map((o) => o.action)).toEqual(['ver:2', 'abrir:2']);
+    expect(opts.filter((o) => o.group === 1).map((o) => o.action)).toEqual(['view:1', 'open:1']);
+    expect(opts.filter((o) => o.group === 2).map((o) => o.action)).toEqual(['view:2', 'open:2']);
   });
 
   it('una nota suelta no ofrece "archivo": no tiene', () => {
@@ -199,7 +199,7 @@ describe('los dos botones de cada resultado', () => {
       ...resultados(1, false),
       items: [{ ...item(1), mediaType: null, sizeBytes: null }],
     };
-    expect(actionsOf(present(ok(soloTexto), conBotones))).toEqual(['ver:1']);
+    expect(actionsOf(present(ok(soloTexto), conBotones))).toEqual(['view:1']);
   });
 
   it('el original del detalle es el que estás mirando, no el primero de la lista', () => {

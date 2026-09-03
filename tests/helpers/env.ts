@@ -38,6 +38,11 @@ export const TEST_ENV: Record<string, string> = {
   S3_BUCKET: TEST_BUCKET,
   // Sin esto, el binario cargaría .env y volvería a apuntar a la base real.
   DM_ENV_FILE: '/dev/null',
+  // Sin clasificador. Estos tests son de la cola y de los carriles, y desde que
+  // la tubería clasifica sola cada captura llamaba a Ollama de verdad: veinte
+  // tests en paralelo contra un modelo que atiende de a uno, y el timeout.
+  // La clasificación tiene sus propios tests, con un clasificador falso.
+  DM_CLASSIFY_URL: '',
 };
 
 /**

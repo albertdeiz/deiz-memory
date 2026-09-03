@@ -121,23 +121,49 @@ dm chat --file boleta.jpg "la del taller"
 
 ### Qué hace el chat y qué se queda en la terminal
 
-Una **pregunta** se responde con cita; una **búsqueda** (`/buscar`) lista. El
-clasificador de intención decide cuál es, y respeta lo explícito.
+**Guardar es explícito; escribir es preguntar.** Mandas un archivo y se guarda.
+Escribes texto suelto y se consulta. Para guardar un texto, `/capture`.
+
+Esto invierte §5 —"la ambigüedad se resuelve siempre a favor de capturar"— y a
+propósito: lo que uno escribe en una conversación es casi siempre algo que le
+está preguntando a alguien. Antes se adivinaba con una heurística (*¿empieza con
+«cuál»?*), acertaba a medias, y dejaba preguntas guardadas como memorias que
+después hay que ocultar a mano. No se pierde nada igual: si la consulta no
+encuentra nada, la respuesta ofrece guardar ese texto tal cual, a un toque.
+
+Los comandos son **los del CLI**: `/search` es `dm search`, `/capture` es
+`dm capture`.
 
 ```
-/buscar <algo>       lista lo que coincide, de a cinco
-/dominios            tus categorías · /<categoría> para ver una
-/crear <n>: <desc>   crea una categoría; la descripción ES el prompt
-/describir <n>: <d>  cambia la descripción · /renombrar <n>: <nuevo>
-/archivar <n>        la saca de circulación, sin tocar sus memorias
-/fusionar <a>: <b>   mueve todo de A a B y archiva A
-/proponer            categorías que te faltan
-/revisar             lo que quedó dudoso
-/pendientes          qué falta por leer
-ver:N                los datos de ese resultado
-abrir:N              el archivo original de ese resultado
-ocultar:N            sacar de resultados, sin borrar
+/capture <texto>     guarda eso como memoria
+/ask <pregunta>      responde citando la fuente
+/search <algo>       lista lo que coincide, de a cinco
+/pending             qué me falta por leer
+/review              lo que quedó dudoso
+/domains             tus categorías · /<categoría> para ver una
+/create <n>: <desc>  crea una categoría; la descripción ES el prompt
+/describe <n>: <d>   cambia la descripción · /rename <n> <nuevo>
+/archive <n>         la saca de circulación, sin tocar sus memorias
+/merge <a> <b>       mueve todo de A a B y archiva A
+/propose             categorías que te faltan
+/help                esto
+
+view:N               los datos de ese resultado
+open:N               el archivo original de ese resultado
+hide:N               sacar de resultados, sin borrar
+more                 la página siguiente
 ```
+
+Los nombres en español con que nació el bot —`/buscar`, `/dominios`, `ver:2`,
+`más`— **se siguen aceptando** si los escribes. Cambiar el idioma de los
+comandos no tiene por qué romperle los dedos a quien ya los tenía aprendidos.
+
+**El número siempre es de la última lista que viste.** Suena obvio y no salió
+gratis: `/documents` numeraba sus resultados y ofrecía los botones sin
+registrar esos ids, así que `view:2` abría el segundo de la *búsqueda anterior* —
+un documento real, de otra cosa. Numerar y registrar vivían en archivos
+distintos. Ahora el registro cuelga de la forma del `Outcome`, en un solo lugar,
+así que una lista nueva queda cubierta sin que nadie se acuerde.
 
 Cada resultado trae **dos botones, en la misma fila**: `datos` y `archivo`. Bajar
 un documento era antes dos toques y una pantalla intermedia — abrir el detalle
@@ -145,24 +171,10 @@ solo para poder pedir el original. Un resultado sin archivo (una nota tuya) no
 ofrece el segundo: un botón que sabe de antemano que va a fallar es peor que no
 estar.
 
-Y `ver:N` muestra **los datos** —categoría, fecha del hecho, tipo, tamaño, tu
+Y `view:N` muestra **los datos** —categoría, fecha del hecho, tipo, tamaño, tu
 nota y un asomo de lo leído—, no la transcripción entera. Volcar 1200 caracteres
 de una póliza en el chat era llenar la pantalla con lo que el archivo ya dice
 mejor.
-
-**El número siempre es de la última lista que viste.** Suena obvio y no salió
-gratis: `/documentos` numeraba sus resultados y ofrecía los botones sin
-registrar esos ids, así que `ver 2` abría el segundo de la *búsqueda anterior* —
-un documento real, de otra cosa. Numerar y registrar vivían en archivos
-distintos. Ahora el registro cuelga de la forma del `Outcome`, en un solo lugar,
-así que una lista nueva queda cubierta sin que nadie se acuerde.
-
-El separador es `:` y no un espacio porque tanto el nombre como la descripción
-llevan espacios adentro.
-
-**Preguntar no necesita comando.** Si escribes algo que parece pregunta —empieza
-con `¿`, o con `cuál`, `qué`, `cuándo`— se responde citando la fuente. `/buscar`
-está para cuando quieres la lista y no la respuesta.
 
 Lo que **no** está en el chat es deliberado:
 
@@ -289,7 +301,7 @@ Se fusionan normalizando cada lista contra su propio máximo, porque `ts_rank` y
 la similitud coseno viven en escalas distintas. Un trozo que aparece en las dos
 sube: que dos métodos independientes coincidan es la mejor señal que hay.
 
-**Una pregunta no se busca con AND.** `/buscar poliza auto` pide las dos cosas;
+**Una pregunta no se busca con AND.** `/search poliza auto` pide las dos cosas;
 "¿cuál es el deducible de mi seguro de auto?" no — el párrafo que responde dice
 "deducible" y no dice "auto". Medido sobre una póliza real: cero resultados con
 AND, ocho con la palabra sola. Preguntar hace OR y deja que el ranking ordene.

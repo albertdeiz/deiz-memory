@@ -1,5 +1,5 @@
 import type { Capabilities, Option, Reply } from '../../core/channel/types.js';
-import type { MemorySummary } from '../../core/domain/types.js';
+import { excerptOf, type MemorySummary } from '../../core/domain/types.js';
 import { meaningfulName } from '../../core/filenames.js';
 import { encodeAction } from '../../core/router/actions.js';
 import type { Outcome } from '../../core/router/route.js';
@@ -162,11 +162,19 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       if (ficha.length) lines.push(ficha.join(' · '));
       if (m.tags.length) lines.push(m.tags.map((t) => `#${t}`).join(' '));
 
-      if (m.note) lines.push('', `tu nota: ${m.note}`);
+      // La cabecera cae al excerpt cuando no hay título, y el excerpt es la
+      // nota: sin esto, una nota suelta se leía dos veces seguidas.
+      const cabecera = lines[0];
+      if (m.note && cabecera !== m.excerpt) lines.push('', `tu nota: ${m.note}`);
       if (m.normalizationError) lines.push('', `⚠ ${m.normalizationError}`);
 
-      // Un asomo de lo leído para reconocerlo, no el documento entero.
-      if (m.excerpt) lines.push('', m.excerpt);
+      // Un asomo de LO LEÍDO, no `excerpt`.
+      //
+      // `excerpt` es `note ?? normalized_text` a propósito —en una lista tus
+      // palabras se reconocen mejor que el OCR del papel—, pero acá la nota ya
+      // se mostró arriba, así que usarlo la repetía entera.
+      const leido = excerptOf(m.normalizedText, 240);
+      if (leido) lines.push('', leido);
       else if (m.sha256 && !m.normalizedAt) lines.push('', 'Todavía no lo he leído.');
 
       const options: Option[] = m.sha256

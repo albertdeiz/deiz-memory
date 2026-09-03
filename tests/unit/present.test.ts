@@ -231,3 +231,34 @@ describe('los dos botones de cada resultado', () => {
     expect(body.length).toBeLessThan(600);
   });
 });
+
+describe('la nota se muestra una vez', () => {
+  const conNota = (over: Partial<MemorySummary> & Record<string, unknown> = {}): Outcome => ({
+    kind: 'detalle',
+    memory: {
+      ...item(1), ownerId: 'o', status: 'classified', sha256: 'abc',
+      note: 'póliza N°BP9344586, vigencia 29/07/2026',
+      normalizedText: 'Póliza de Seguro de Vehículo · deducible UF 3,0',
+      lane: 'document', normalizedAt: new Date(), normalizationError: null,
+      domainLabel: 'Seguros',
+      excerpt: 'póliza N°BP9344586, vigencia 29/07/2026',
+      ...over,
+    },
+  });
+
+  it('no la repite como asomo del documento', () => {
+    // `excerpt` es `note ?? normalized_text`: con nota, el asomo ERA la nota.
+    const body = bodyOf(present(ok(conNota()), conBotones));
+    expect(body.split('BP9344586')).toHaveLength(2);
+    // Y sí se ve lo que se extrajo, que es otra cosa.
+    expect(body).toContain('deducible UF 3,0');
+  });
+
+  it('una nota suelta sin título tampoco se lee dos veces', () => {
+    // Sin título la cabecera cae al excerpt, que también es la nota.
+    const body = bodyOf(present(ok(conNota({
+      title: null, originalFilename: null, mediaType: null, sha256: null, normalizedText: null,
+    })), conBotones));
+    expect(body.split('BP9344586')).toHaveLength(2);
+  });
+});

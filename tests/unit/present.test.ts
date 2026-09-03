@@ -262,3 +262,59 @@ describe('la nota se muestra una vez', () => {
     expect(body.split('BP9344586')).toHaveLength(2);
   });
 });
+
+/**
+ * Las acciones son un patrón, no una decisión por pantalla.
+ *
+ * Preguntar ofrecía solo `view` mientras buscar ofrecía `view` y `open`, porque
+ * cada listado armaba sus propios botones. No es una decisión distinta por
+ * pantalla: es la misma, y hay que escribirla una vez.
+ */
+describe('todo listado ofrece las mismas acciones', () => {
+  const conArchivo = { ...item(1), mediaType: 'application/pdf' };
+  const conArchivo2 = { ...item(2), mediaType: 'application/pdf' };
+
+  const listados: [string, Outcome][] = [
+    ['resultados', { ...resultados(2, false), items: [conArchivo, conArchivo2] }],
+    ['enDominio', {
+      kind: 'enDominio',
+      domain: { id: 'd', slug: 'salud', label: 'Salud', description: '', aliases: [], active: true },
+      items: [conArchivo, conArchivo2],
+    }],
+    ['revisar', {
+      kind: 'revisar',
+      items: [conArchivo, conArchivo2].map((m) => ({
+        ...m, lane: 'vision' as const, error: 'no se pudo leer', retryable: true, chars: 0,
+      })),
+    }],
+    ['respuesta', {
+      kind: 'respuesta',
+      consulta: 'deducible',
+      answer: {
+        text: 'El deducible es de 3 UF [id1].',
+        reason: null,
+        sources: [conArchivo, conArchivo2].map((m, i) => ({
+          memoryId: m.id, shortId: m.shortId, title: m.title,
+          occurredAt: null, capturedAt: m.capturedAt, domainLabel: null,
+          mediaType: m.mediaType, content: 'x', seq: i, via: 'texto' as const, score: 1,
+        })),
+      },
+    }],
+  ];
+
+  for (const [nombre, out] of listados) {
+    it(`${nombre} ofrece datos y archivo por cada elemento`, () => {
+      const acciones = actionsOf(present(ok(out), conBotones));
+      expect(acciones, nombre).toEqual(
+        expect.arrayContaining(['view:1', 'open:1', 'view:2', 'open:2']),
+      );
+    });
+
+    it(`${nombre} numera el cuerpo igual que las acciones`, () => {
+      // Si el cuerpo dijera "1." y la acción fuera del segundo, abrirías otro.
+      const body = bodyOf(present(ok(out), conBotones));
+      expect(body, nombre).toMatch(/^1\. /m);
+      expect(body, nombre).toMatch(/^2\. /m);
+    });
+  }
+});

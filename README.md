@@ -127,9 +127,12 @@ algo que le está preguntando a alguien. Antes se adivinaba con una heurística
 que después hay que ocultar a mano. No se pierde nada: si la consulta no encuentra nada,
 la respuesta ofrece guardar ese texto tal cual, a un toque.
 
-### Dos botones por resultado
+### Dos botones por resultado, en todo listado
 
-`datos` y `archivo`, en la misma fila. Bajar un documento era antes dos toques y una
+`datos` y `archivo`, en la misma fila. **En todos:** resultados de búsqueda, categoría,
+bandeja de revisión y las fuentes de una respuesta. Que cada pantalla armara sus propios
+botones es lo que hizo que preguntar ofreciera solo `datos` mientras buscar ofrecía los
+dos — no es una decisión distinta por pantalla, es la misma escrita una vez. Bajar un documento era antes dos toques y una
 pantalla intermedia — abrir el detalle solo para poder pedir el original. Un resultado
 sin archivo (una nota tuya) no ofrece el segundo: un botón que sabe de antemano que va a
 fallar es peor que no estar.

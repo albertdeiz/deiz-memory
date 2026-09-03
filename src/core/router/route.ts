@@ -128,11 +128,20 @@ async function registerList(
   return r;
 }
 
-/** Los ids de una lista numerada, en el mismo orden en que se muestran. */
+/**
+ * Los ids de una lista numerada, en el mismo orden en que se muestran.
+ *
+ * Un caso por cada listado que el bot entrega con acciones. `resultados` no
+ * está porque `doSearch` escribe la suya —lleva además la consulta y el offset
+ * para que "more" siga paginando—, y duplicarla acá la pisaría.
+ */
 function numbered(v: Outcome): string[] | null {
   switch (v.kind) {
     case 'enDominio':
+    case 'revisar':
       return v.items.map((m) => m.id);
+    case 'respuesta':
+      return v.answer.sources.map((p) => p.memoryId);
     default:
       return null;
   }
@@ -225,10 +234,8 @@ async function dispatch(
         // por omisión. La persona preguntó un número y recibe documentos sin
         // enterarse de que el bot se negó a dárselo. Eso se dice.
         const rechazada = r.value.reason === 'sin_cita' || r.value.reason === 'sin_respaldo';
+        // La sesión la escribe `registerList`, como con cualquier otro listado.
         if (r.value.text || rechazada) {
-          await writeSession(deps.db, input.conv, actor.ownerId,
-            { lastQuery: intent.query, lastOffset: 0,
-              pending: { ids: r.value.sources.map((p) => p.memoryId) } }, input.now);
           return ok({ kind: 'respuesta', answer: r.value, consulta: intent.query });
         }
       }

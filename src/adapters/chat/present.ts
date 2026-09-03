@@ -53,10 +53,16 @@ const withOptions = (body: string, options: Option[], caps: Capabilities): Reply
 
 
 /**
- * Los dos botones de cada elemento de una lista: los datos y el archivo.
+ * Las acciones de una lista: por cada elemento, los datos y el archivo.
  *
- * Van juntos porque son las dos cosas que quieres hacer con un resultado, y
- * separarlos en dos pasos —abrir el detalle solo para pedir el original— hacía
+ * **Esto es el patrón de TODO listado que entregue el bot** — resultados de
+ * búsqueda, categoría, bandeja de revisión y las fuentes de una respuesta. Que
+ * cada uno armara sus propios botones es exactamente lo que hizo que preguntar
+ * ofreciera solo `view` mientras buscar ofrecía `view` y `open`: no es una
+ * decisión distinta por pantalla, es la misma y hay que escribirla una vez.
+ *
+ * Van los dos juntos porque son las dos cosas que quieres hacer con un
+ * resultado, y separarlos —abrir el detalle solo para pedir el original— hacía
  * que bajar un documento costara dos toques y una pantalla intermedia.
  *
  * `group` los pone lado a lado donde el canal tiene filas. Donde no, se listan
@@ -135,19 +141,15 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       const a = v.answer;
       // Las fuentes van siempre, aunque la respuesta sea buena: la regla dura 1
       // pide respaldo, y en el chat eso significa poder abrir el documento.
-      const fuentes = a.sources.slice(0, 3).map((p, i) =>
-        `${i + 1}. ${p.title ?? '(sin título)'}  ${day(p.occurredAt ?? p.capturedAt)} · ${p.shortId}`);
-      const options: Option[] = a.sources.slice(0, 3).map((_, i) => ({
-        label: `ver ${i + 1}`,
-        action: encodeAction({ kind: 'ver', n: i + 1 }),
-      }));
+      const fuentes = a.sources.map((p, i) =>
+        `${i + 1}. ${p.title ?? '(sin título)'}\n   ${day(p.occurredAt ?? p.capturedAt)} · ${p.shortId}`);
       // Cuando la prosa se descartó por no tener respaldo, se dice — y se
       // muestran igual las fuentes, que sí son verdad verificable. Callarlo y
       // listar documentos deja creer que no había nada (reglas duras 1 y 2).
       const cabeza = a.text ?? (a.reason === 'sin_respaldo'
         ? 'No pude darte la cifra sin inventarla. Lo que encontré:'
         : 'No pude responderlo sin inventar. Lo que encontré:');
-      return [withOptions(`${cabeza}\n\nde:\n${fuentes.join('\n')}`, options, caps)];
+      return [withOptions(`${cabeza}\n\nde:\n${fuentes.join('\n')}`, porItem(a.sources), caps)];
     }
 
     case 'detalle': {
@@ -220,16 +222,15 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       // Cada línea dice qué hacer, no solo qué pasó: una bandeja que enumera
       // problemas sin salida te deja igual que antes.
       const cuerpo = v.items
-        .map((m) => {
-          const que = m.title ?? meaningfulName(m.originalFilename) ?? `(${kindOf(m.mediaType)} sin nombre)`;
+        .map((m, i) => {
           const salida =
             m.retryable === true ? 'puedo reintentarlo'
             : m.retryable === false ? 'reintentar no ayuda: hay que convertir el archivo o cambiar de carril'
             : 'todavía no sé si reintentar ayuda';
-          return `· ${que}\n  ${m.error}\n  ${salida}`;
+          return `${i + 1}. ${label(m)}\n   ${m.error}\n   ${salida}`;
         })
         .join('\n\n');
-      return [{ kind: 'text', body: `Esto quedó dudoso:\n\n${cuerpo}` }];
+      return [withOptions(`Esto quedó dudoso:\n\n${cuerpo}`, porItem(v.items), caps)];
     }
 
     case 'dominios': {

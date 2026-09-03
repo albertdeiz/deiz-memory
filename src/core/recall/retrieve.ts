@@ -30,6 +30,8 @@ export interface Passage {
   occurredAt: Date | null;
   capturedAt: Date;
   domainLabel: string | null;
+  /** Para saber si hay archivo que ofrecer. Una nota tuya no tiene original. */
+  mediaType: string | null;
   /** El trozo concreto que respondió, no el documento entero. Es la cita. */
   content: string;
   seq: number;
@@ -78,6 +80,7 @@ interface Row {
   occurred_at: Date | null;
   captured_at: Date;
   domain_label: string | null;
+  media_type: string | null;
   content: string;
   seq: number;
   score: number;
@@ -111,12 +114,13 @@ export async function retrieve(
   // 2 · Full-text sobre los trozos: preciso para lo que se escribe igual.
   const fts = await deps.db.query<Row>(
     `select c.memory_id, m.title, m.occurred_at, m.captured_at, d.label as domain_label,
-            c.content, c.seq,
+            b.media_type, c.content, c.seq,
             ts_rank(to_tsvector('es_unaccent', c.content),
                     to_tsquery('es_unaccent', $5)) as score
        from memory_chunks c
        join memories m on m.id = c.memory_id
        left join domains d on d.id = m.domain_id
+       left join blobs b on b.sha256 = m.blob_sha256
       where ${filtro}
         and to_tsvector('es_unaccent', c.content) @@ to_tsquery('es_unaccent', $5)
       order by score desc limit $6`,
@@ -131,11 +135,12 @@ export async function retrieve(
     if (v) {
       vec = await deps.db.query<Row>(
         `select c.memory_id, m.title, m.occurred_at, m.captured_at, d.label as domain_label,
-                c.content, c.seq,
+                b.media_type, c.content, c.seq,
                 1 - (c.embedding <=> $5::vector) as score
            from memory_chunks c
            join memories m on m.id = c.memory_id
            left join domains d on d.id = m.domain_id
+          left join blobs b on b.sha256 = m.blob_sha256
           where ${filtro} and c.embedding is not null
           order by c.embedding <=> $5::vector limit $6`,
         [...base, JSON.stringify(v), limit * 2],
@@ -182,6 +187,7 @@ function merge(fts: Row[], vec: Row[], limit: number): Passage[] {
       occurredAt: row.occurred_at,
       capturedAt: row.captured_at,
       domainLabel: row.domain_label,
+      mediaType: row.media_type,
       content: row.content,
       seq: row.seq,
       via: (f > 0 && v > 0 ? 'ambos' : f > 0 ? 'texto' : 'semejanza') as Passage['via'],

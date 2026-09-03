@@ -163,6 +163,11 @@ pésimo para explorar 40 resultados.** No se resuelve con una web:
 - **Dos botones por resultado** — `datos` y `archivo`, en la misma fila. Bajar un
   documento no puede costar dos toques y una pantalla intermedia.
 
+**Las acciones son un patrón, no una decisión por pantalla.** Todo listado que entrega el
+bot —búsqueda, categoría, bandeja de revisión, fuentes de una respuesta— numera igual y
+ofrece lo mismo, y registra sus ids por el mismo camino. Cuando cada uno armaba los
+suyos, preguntar ofrecía solo `view` mientras buscar ofrecía `view` y `open`.
+
 ## 7. Arquitectura
 
 Monolito. Nada de microservicios para un sistema de un usuario.

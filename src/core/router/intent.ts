@@ -102,7 +102,6 @@ export function classify(msg: Incoming, session: Session | null): Intent {
     if (cmd === 'buscar' || cmd === 'busca') return { verb: 'recordar', query: arg, adivinado: false };
     if (cmd === 'pendientes') return { verb: 'pendientes' };
     if (cmd === 'revisar' || cmd === 'revision') return { verb: 'revisar' };
-    if (cmd === 'exportar') return { verb: 'accion', action: { kind: 'exportar' } };
     if (cmd === 'mas') return { verb: 'accion', action: { kind: 'mas' } };
     if (cmd === 'ayuda' || cmd === 'help') return { verb: 'ayuda' };
     if (cmd === 'dominios' || cmd === 'categorias') return { verb: 'dominios' };
@@ -117,8 +116,9 @@ export function classify(msg: Incoming, session: Session | null): Intent {
   // 3 · una palabra de acción, pero solo si hay algo en pantalla esperándola.
   //     Es la rama que hace real la degradación sin botones.
   if (!msg.attachment && text) {
+    // Solo con algo en pantalla: sin lista, "más" o "2" son texto que guardar.
     const a = parseAction(text, pending);
-    if (a && (pending || a.kind === 'exportar')) return { verb: 'accion', action: a };
+    if (a && pending) return { verb: 'accion', action: a };
   }
 
   // 4 · hay archivo: se guarda, y el texto va de nota

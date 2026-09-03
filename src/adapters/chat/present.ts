@@ -64,6 +64,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
           '/pendientes      qué me falta por leer',
           '/revisar         lo que quedó dudoso',
           '/dominios        tus categorías, y /<categoría> para ver una',
+          'ocultar:N        saca un resultado de las búsquedas, sin borrarlo',
           '/proponer        categorías que te faltan, según lo que guardaste',
           '/ayuda           esto',
         ].join('\n'),
@@ -96,6 +97,19 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
           : `Me faltan ${v.sinLeer} por leer. Pregúntame en un rato.`,
       }];
 
+    case 'respuesta': {
+      const a = v.answer;
+      // Las fuentes van siempre, aunque la respuesta sea buena: la regla dura 1
+      // pide respaldo, y en el chat eso significa poder abrir el documento.
+      const fuentes = a.sources.slice(0, 3).map((p, i) =>
+        `${i + 1}. ${p.title ?? '(sin título)'}  ${day(p.occurredAt ?? p.capturedAt)} · ${p.shortId}`);
+      const options: Option[] = a.sources.slice(0, 3).map((_, i) => ({
+        label: `ver ${i + 1}`,
+        action: encodeAction({ kind: 'ver', n: i + 1 }),
+      }));
+      return [withOptions(`${a.text}\n\nde:\n${fuentes.join('\n')}`, options, caps)];
+    }
+
     case 'detalle': {
       const m = v.memory;
       const lines = [label(m), `${day(m.occurredAt ?? m.capturedAt)} · ${m.shortId}`];
@@ -112,6 +126,9 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
         : [];
       return [withOptions(lines.join('\n'), options, caps)];
     }
+
+    case 'ocultada':
+      return [{ kind: 'text', body: `Listo, ${v.shortId} ya no aparece en los resultados. No se borró.` }];
 
     case 'archivo':
       return [{

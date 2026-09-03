@@ -104,7 +104,20 @@ export async function answer(
     else return ok({ text: null, sources, reason: 'sin_cita' });
   }
 
-  return ok({ text: resolveCitations(final, usados), sources: usados, reason: null });
+  const texto2 = resolveCitations(final, usados);
+
+  // Las fuentes se reordenan dejando adelante las que la respuesta citó de
+  // verdad. Si no, "ver 1" abre un documento que no es de donde salió el dato —
+  // que es peor que no ofrecer el botón.
+  const citados = new Set(
+    [...texto2.matchAll(/\[([0-9a-f]{8})\]/g)].map((m) => m[1]!),
+  );
+  const ordenadas = [
+    ...usados.filter((p) => citados.has(p.shortId)),
+    ...usados.filter((p) => !citados.has(p.shortId)),
+  ];
+
+  return ok({ text: texto2, sources: ordenadas, reason: null });
 }
 
 const fecha = (p: Passage): string =>

@@ -109,6 +109,30 @@ dm chat "más"
 dm chat --file boleta.jpg "la del taller"
 ```
 
+### Qué hace el chat y qué se queda en la terminal
+
+Una **pregunta** se responde con cita; una **búsqueda** (`/buscar`) lista. El
+clasificador de intención decide cuál es, y respeta lo explícito.
+
+```
+/buscar <algo>   lista lo que coincide, de a cinco
+/dominios        tus categorías · /<categoría> para ver una
+/proponer        categorías que te faltan
+/revisar         lo que quedó dudoso
+/pendientes      qué falta por leer
+ver:N · abrir:N  el detalle, o el archivo original
+ocultar:N        sacar de resultados, sin borrar
+```
+
+Lo que **no** está en el chat es deliberado:
+
+- **`purge`** — irreversible. Vive en la terminal, con confirmación y auditoría.
+  El chat solo oculta.
+- **`classify`, `index`, `reprocess`, `worker`, `serve`** — mantención, no
+  conversación.
+- **crear y fusionar categorías** — §9 las quiere en el chat y todavía no están;
+  por ahora `dm domains`.
+
 ### El bot nunca te escribe primero
 
 §2 no admite matices, así que no hay ningún "ya está lista tu foto". Capturar

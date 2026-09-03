@@ -81,8 +81,13 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
   const short = shortId(id);
 
   // Solo nota: no hay blob del cual derivar nada, y eso no es un fallo.
+  //
+  // Pero sí hay que indexarla: lo que escribiste a mano tiene que ser tan
+  // buscable como lo que se extrajo de un PDF. Salir por acá sin indexar dejaba
+  // todas las notas sueltas fuera de `dm ask`, en silencio.
   if (!row.blob_sha256 || !row.storage_key) {
     await save(deps, id, { text: null, lane: 'none', error: null, detail: { reason: 'memoria sin archivo' } });
+    await reindex(deps, id);
     return ok({ id, shortId: short, lane: 'none', chars: 0, error: null, attempts: [] });
   }
 
@@ -181,18 +186,12 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
   });
 
   // Indexar va acá y no en un paso aparte: los trozos derivan del texto, así
-  // que cada vez que el texto cambia hay que rehacerlos o la búsqueda semántica
-  // queda respondiendo con lo viejo. Que falle no invalida la normalización.
-  if (deps.embedder && finalText) {
-    const owner = await deps.db.query<{ owner_id: string }>(
-      `select owner_id from memories where id = $1`, [id],
-    );
-    const ownerId = owner.rows[0]?.owner_id;
-    if (ownerId) {
-      const { indexMemory } = await import('../recall/index-chunks.js');
-      await indexMemory(deps, { ownerId }, id).catch(() => {});
-    }
-  }
+  // que cada vez que el texto cambia hay que rehacerlos o la búsqueda queda
+  // respondiendo con lo viejo. Que falle no invalida la normalización.
+  //
+  // Se hace haya embedder o no: el full-text de la recuperación corre sobre los
+  // trozos, así que sin ellos no hay nada que buscar por ningún camino.
+  await reindex(deps, id);
 
   return ok({
     id,
@@ -202,6 +201,17 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
     error,
     attempts,
   });
+}
+
+/** Rehace los trozos. Que falle no invalida la normalización. */
+async function reindex(deps: Deps, id: Uuid): Promise<void> {
+  const { rows } = await deps.db.query<{ owner_id: string }>(
+    `select owner_id from memories where id = $1`, [id],
+  );
+  const ownerId = rows[0]?.owner_id;
+  if (!ownerId) return;
+  const { indexMemory } = await import('../recall/index-chunks.js');
+  await indexMemory(deps, { ownerId }, id).catch(() => {});
 }
 
 interface Saved {

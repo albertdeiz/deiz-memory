@@ -14,6 +14,12 @@ const BATCH = 16;
 /**
  * Trocea una memoria y guarda sus vectores.
  *
+ * **Sin embedder igual trocea**, dejando el vector en null. Parece un detalle y
+ * no lo es: el full-text de la recuperación también corre sobre los trozos, así
+ * que si no hubiera trozos, no habría degradación a full-text — habría nada.
+ * Lo descubrí porque un test con el embedder apagado no encontraba lo que
+ * acababa de guardar.
+ *
  * Es reemplazable entero: los trozos y sus embeddings son derivados del blob,
  * igual que el texto, así que se borran y se regeneran sin pérdida. Por eso
  * empieza borrando — reindexar dos veces no duplica.
@@ -23,8 +29,6 @@ export async function indexMemory(
   actor: Actor,
   memoryId: Uuid,
 ): Promise<Result<IndexOutcome>> {
-  if (!deps.embedder) return err('invalid', 'No hay modelo de embeddings configurado.');
-
   const { rows } = await deps.db.query<{
     id: string; title: string | null; note: string | null; normalized_text: string | null;
   }>(
@@ -45,15 +49,15 @@ export async function indexMemory(
 
   for (let i = 0; i < trozos.length; i += BATCH) {
     const lote = trozos.slice(i, i + BATCH);
-    const vectores = await deps.embedder.embed(
-      lote.map((t) => contextualize(t.content)),
-    );
+    const vectores = deps.embedder
+      ? await deps.embedder.embed(lote.map((t) => contextualize(t.content)))
+      : null;
 
     for (const [j, t] of lote.entries()) {
       await deps.db.query(
         `insert into memory_chunks (memory_id, owner_id, seq, content, embedding)
          values ($1, $2, $3, $4, $5::vector)`,
-        [m.id, actor.ownerId, t.seq, t.content, JSON.stringify(vectores[j])],
+        [m.id, actor.ownerId, t.seq, t.content, vectores ? JSON.stringify(vectores[j]) : null],
       );
     }
   }

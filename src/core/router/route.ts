@@ -4,6 +4,8 @@ import type { Deps } from '../ports.js';
 import { err, ok, type Result } from '../result.js';
 import { capture, type CaptureResult } from '../ops/capture.js';
 import { fetchBlob, search, show, type BlobPayload } from '../ops/query.js';
+import { setHidden } from '../ops/lifecycle.js';
+import { answer, type Answer } from '../recall/answer.js';
 import { redeemPairingCode } from '../ops/identity.js';
 import { listReview, type ReviewItem } from '../ops/review.js';
 import { findDomain, listDomains, type Domain } from '../ops/domains.js';
@@ -38,6 +40,7 @@ export type Outcome =
       /** Se pidió "más" y ya no queda: distinto de "no lo tengo". */
       agotado: boolean;
     }
+  | { kind: 'respuesta'; answer: Answer; consulta: string }
   | { kind: 'detalle'; memory: MemoryDetail }
   | { kind: 'archivo'; blob: BlobPayload }
   | { kind: 'pendientes'; sinLeer: number }
@@ -45,6 +48,7 @@ export type Outcome =
   | { kind: 'dominios'; items: Domain[] }
   | { kind: 'propuestas'; items: Proposal[] }
   | { kind: 'enDominio'; domain: Domain; items: MemorySummary[] }
+  | { kind: 'ocultada'; shortId: string }
   | { kind: 'ayuda' };
 
 export interface RouteInput {
@@ -91,7 +95,13 @@ export async function route(
 
     case 'enDominio': {
       const d = await findDomain(deps.db, actor, intent.ref);
-      if (!d) return err('not_found', `No tengo una categoría "${intent.ref}". Mira /dominios.`);
+      // Cualquier /loquesea cae acá, así que el mensaje tiene que servir tanto
+      // a quien se equivocó de categoría como a quien probó un comando que no
+      // existe. Nombrar los dos caminos cuesta una línea.
+      if (!d) {
+        return err('not_found',
+          `No conozco "/${intent.ref}". Mira /dominios para las categorías, o /ayuda para los comandos.`);
+      }
       const r = await list(deps, actor, { domainId: d.id, limit: PAGE });
       return r.ok ? ok({ kind: 'enDominio', domain: d, items: r.value }) : r;
     }
@@ -104,8 +114,27 @@ export async function route(
     case 'capturar':
       return doCapture(deps, actor, input, null);
 
-    case 'recordar':
+    case 'recordar': {
+      // Una pregunta se responde; una búsqueda por palabras se lista.
+      //
+      // La diferencia importa: "¿cuál es mi deducible?" quiere el dato con su
+      // cita, no cinco documentos donde buscarlo. `/buscar poliza` quiere la
+      // lista. El clasificador de intención ya distinguió las dos (§5), así que
+      // acá solo hay que respetarlo.
+      if (intent.adivinado && deps.classifier) {
+        const r = await answer(deps, actor, { query: intent.query, synthesize: true });
+        if (!r.ok) return r;
+        // Sin respuesta redactada se cae a la lista: los pasajes sirven igual,
+        // y es mejor que un "no pude" cuando sí hay material.
+        if (r.value.text) {
+          await writeSession(deps.db, input.conv, actor.ownerId,
+            { lastQuery: intent.query, lastOffset: 0,
+              pending: { ids: r.value.sources.map((p) => p.memoryId) } }, input.now);
+          return ok({ kind: 'respuesta', answer: r.value, consulta: intent.query });
+        }
+      }
       return doSearch(deps, actor, input, intent.query, 0, intent.adivinado);
+    }
 
     case 'accion':
       return doAction(deps, actor, input, session);
@@ -223,6 +252,16 @@ async function doAction(
       return doCapture(deps, actor, { ...input, intent: { verb: 'capturar', text, attachment: null } }, text);
     }
 
+    case 'ocultar': {
+      const ids = session?.pending?.ids ?? [];
+      const id = ids[a.n - 1];
+      if (!id) return err('invalid', `No hay un ${a.n} en la última lista.`);
+      // Ocultar y no purgar: el chat no borra nada de forma irreversible. Para
+      // eso está la terminal, con su confirmación y su registro de auditoría.
+      const r = await setHidden(deps, actor, id, true);
+      return r.ok ? ok({ kind: 'ocultada', shortId: r.value.shortId }) : r;
+    }
+
     case 'ver':
     case 'abrir': {
       const ids = session?.pending?.ids ?? [];
@@ -249,8 +288,6 @@ async function doAction(
       return err('invalid', 'Todavía no hay acciones que confirmar por chat.');
     }
 
-    case 'exportar':
-      return err('invalid', 'Exportar todavía no está disponible por chat.');
   }
 }
 

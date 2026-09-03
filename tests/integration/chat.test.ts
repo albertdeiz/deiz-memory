@@ -205,3 +205,51 @@ describe('el turno se cierra', () => {
     await expect(escaped!({ kind: 'text', body: 'fuera del turno' })).rejects.toThrow(/turno ya se cerró/);
   });
 });
+
+describe('paridad con el CLI', () => {
+  beforeEach(async () => { await pairMe(); });
+
+  it('una pregunta se responde con cita; una búsqueda se lista', async () => {
+    // Es la diferencia que el chat no hacía: preguntar traía cinco documentos
+    // donde buscar, en vez del dato.
+    s.deps.classifier = {
+      async classify() { return {}; },
+      async complete() { return 'El deducible es de 5 UF [1].'; },
+      async available() { return { ok: true, detail: 'fake' }; },
+    };
+    // Sin embedder la recuperación degrada a full-text, que acá alcanza: lo
+    // que se prueba es que preguntar responda, no la calidad del vector.
+    s.deps.embedder = null;
+    await ch.send({ text: 'el deducible de la póliza es de 5 UF por siniestro' });
+
+    const preg = text(await ch.send({ text: '¿cuál es el deducible?' }));
+    expect(preg).toContain('5 UF');
+    expect(preg).toMatch(/\[[0-9a-f]{8}\]/);
+
+    const busq = text(await ch.send({ text: '/buscar deducible' }));
+    expect(busq).toContain('1–1');
+  });
+
+  it('se puede ocultar un resultado sin poder borrarlo', async () => {
+    // El chat oculta; purgar es irreversible y se queda en la terminal.
+    await ch.send({ text: 'la póliza del auto' });
+    await ch.send({ text: '/buscar poliza' });
+    expect(text(await ch.send({ text: 'ocultar:1' }))).toContain('No se borró');
+    expect(text(await ch.send({ text: '/buscar poliza' }))).toContain('No lo tengo');
+
+    // Sigue existiendo: ocultar es un flag, no un borrado.
+    const { rows } = await s.deps.db.query<{ n: string }>('select count(*)::text n from memories');
+    expect(rows[0]!.n).toBe('1');
+  });
+
+  it('un comando que no existe orienta hacia los dos caminos', async () => {
+    const out = text(await ch.send({ text: '/pinguinos' }));
+    expect(out).toContain('/dominios');
+    expect(out).toContain('/ayuda');
+  });
+
+  it('no ofrece exportar, que no existe', async () => {
+    // Prometer un comando que no hace nada es peor que no tenerlo.
+    expect(text(await ch.send({ text: '/ayuda' }))).not.toContain('exportar');
+  });
+});

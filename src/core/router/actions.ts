@@ -15,8 +15,8 @@ export type Action =
   | { kind: 'mas' }
   | { kind: 'ver'; n: number }
   | { kind: 'abrir'; n: number }
-  | { kind: 'exportar' }
   | { kind: 'guardar' }
+  | { kind: 'ocultar'; n: number }
   | { kind: 'si' }
   | { kind: 'no' };
 
@@ -25,6 +25,7 @@ export const encodeAction = (a: Action): string => {
   switch (a.kind) {
     case 'ver': return `ver:${a.n}`;
     case 'abrir': return `abrir:${a.n}`;
+    case 'ocultar': return `ocultar:${a.n}`;
     default: return a.kind;
   }
 };
@@ -41,8 +42,6 @@ const WORDS: Record<string, Action> = {
   mas: { kind: 'mas' },
   siguiente: { kind: 'mas' },
   sigue: { kind: 'mas' },
-  exportar: { kind: 'exportar' },
-  export: { kind: 'exportar' },
   guardar: { kind: 'guardar' },
   guardalo: { kind: 'guardar' },
   si: { kind: 'si' },
@@ -64,10 +63,10 @@ export function parseAction(raw: string | null, hasPending: boolean): Action | n
   const s = normalize(raw);
   if (!s) return null;
 
-  const numbered = /^(ver|abrir):(\d{1,2})$/.exec(s);
+  const numbered = /^(ver|abrir|ocultar):(\d{1,2})$/.exec(s);
   if (numbered) {
     const n = Number(numbered[2]);
-    return n >= 1 && n <= 99 ? { kind: numbered[1] as 'ver' | 'abrir', n } : null;
+    return n >= 1 && n <= 99 ? { kind: numbered[1] as 'ver' | 'abrir' | 'ocultar', n } : null;
   }
 
   const word = WORDS[s];

@@ -64,6 +64,10 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
           '/pendientes      qué me falta por leer',
           '/revisar         lo que quedó dudoso',
           '/dominios        tus categorías, y /<categoría> para ver una',
+          '/crear <nombre>: <descripción>    categoría nueva',
+          '/describir <cat>: <descripción>   la descripción es lo que clasifica',
+          '/renombrar <cat> <nombre>  ·  /archivar <cat>',
+          '/fusionar <de> <a>                mueve sus memorias y archiva la primera',
           'ocultar:N        saca un resultado de las búsquedas, sin borrarlo',
           '/proponer        categorías que te faltan, según lo que guardaste',
           '/ayuda           esto',
@@ -126,6 +130,24 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
         : [];
       return [withOptions(lines.join('\n'), options, caps)];
     }
+
+    case 'dominio': {
+      const d = v.domain;
+      const que = v.que === 'creado' ? 'Creada' : v.que === 'archivado' ? 'Archivada' : 'Actualizada';
+      const extra = v.que === 'archivado'
+        ? ' Sus memorias siguen ahí y siguen buscándose.'
+        : v.que === 'creado'
+          ? ` Mándame algo que calce y va a caer ahí. Para verla: /${d.slug}`
+          : '';
+      return [{ kind: 'text', body: `${que} /${d.slug} — ${d.label}.${extra}` }];
+    }
+
+    case 'fusionado':
+      return [{
+        kind: 'text',
+        body: `Moví ${v.moved} memoria(s) de ${v.from.label} a ${v.into.label}. ` +
+          `${v.from.label} queda archivada; nada se borró.`,
+      }];
 
     case 'ocultada':
       return [{ kind: 'text', body: `Listo, ${v.shortId} ya no aparece en los resultados. No se borró.` }];

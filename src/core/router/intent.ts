@@ -18,6 +18,11 @@ export type Intent =
   | { verb: 'revisar' }
   | { verb: 'dominios' }
   | { verb: 'proponer' }
+  | { verb: 'crearDominio'; label: string; description: string }
+  | { verb: 'describirDominio'; ref: string; description: string }
+  | { verb: 'renombrarDominio'; ref: string; label: string }
+  | { verb: 'archivarDominio'; ref: string }
+  | { verb: 'fusionarDominios'; from: string; into: string }
   | { verb: 'enDominio'; ref: string }
   | { verb: 'ayuda' };
 // 'aclarar' (§5) todavía no existe: no hay clasificador que dude. Llega en F2.
@@ -106,6 +111,33 @@ export function classify(msg: Incoming, session: Session | null): Intent {
     if (cmd === 'ayuda' || cmd === 'help') return { verb: 'ayuda' };
     if (cmd === 'dominios' || cmd === 'categorias') return { verb: 'dominios' };
     if (cmd === 'proponer') return { verb: 'proponer' };
+
+    // CRUD de categorías desde el chat, que es donde §9 lo quiere.
+    //
+    // El separador es `:` y no un segundo argumento posicional porque tanto el
+    // nombre como la descripción llevan espacios, y pedirle comillas a alguien
+    // que escribe desde el teléfono es pedirle que no lo use.
+    if (cmd === 'crear' || cmd === 'nueva') {
+      const [nombre, ...resto] = arg.split(':');
+      return {
+        verb: 'crearDominio',
+        label: (nombre ?? '').trim(),
+        description: resto.join(':').trim(),
+      };
+    }
+    if (cmd === 'describir') {
+      const [ref, ...resto] = arg.split(':');
+      return { verb: 'describirDominio', ref: (ref ?? '').trim(), description: resto.join(':').trim() };
+    }
+    if (cmd === 'renombrar') {
+      const [ref, ...resto] = arg.split(/\s+/);
+      return { verb: 'renombrarDominio', ref: ref ?? '', label: resto.join(' ').trim() };
+    }
+    if (cmd === 'archivar') return { verb: 'archivarDominio', ref: arg };
+    if (cmd === 'fusionar') {
+      const [from, into] = arg.split(/\s+/);
+      return { verb: 'fusionarDominios', from: from ?? '', into: into ?? '' };
+    }
     // Cualquier otro /slug es "muéstrame lo de esa categoría" (§9). Se resuelve
     // contra la tabla, no contra una lista en el código — que es el punto
     // entero de que los dominios sean data.

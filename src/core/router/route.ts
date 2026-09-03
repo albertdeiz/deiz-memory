@@ -8,7 +8,10 @@ import { setHidden } from '../ops/lifecycle.js';
 import { answer, type Answer } from '../recall/answer.js';
 import { redeemPairingCode } from '../ops/identity.js';
 import { listReview, type ReviewItem } from '../ops/review.js';
-import { findDomain, listDomains, type Domain } from '../ops/domains.js';
+import {
+  archiveDomain, createDomain, editDomain, findDomain, listDomains, mergeDomains,
+  type Domain,
+} from '../ops/domains.js';
 import { proposeDomains, type Proposal } from '../classify/emergent.js';
 import { list } from '../ops/query.js';
 import type { Intent } from './intent.js';
@@ -49,6 +52,8 @@ export type Outcome =
   | { kind: 'propuestas'; items: Proposal[] }
   | { kind: 'enDominio'; domain: Domain; items: MemorySummary[] }
   | { kind: 'ocultada'; shortId: string }
+  | { kind: 'dominio'; domain: Domain; que: 'creado' | 'editado' | 'archivado' }
+  | { kind: 'fusionado'; from: Domain; into: Domain; moved: number }
   | { kind: 'ayuda' };
 
 export interface RouteInput {
@@ -87,6 +92,27 @@ export async function route(
 
     case 'dominios':
       return ok({ kind: 'dominios', items: await listDomains(deps.db, actor) });
+
+    case 'crearDominio':
+      return doCreateDomain(deps, actor, input, intent.label, intent.description, false);
+
+    case 'describirDominio': {
+      const r = await editDomain(deps.db, actor, intent.ref, { description: intent.description });
+      return r.ok ? ok({ kind: 'dominio', domain: r.value, que: 'editado' }) : r;
+    }
+
+    case 'renombrarDominio': {
+      const r = await editDomain(deps.db, actor, intent.ref, { label: intent.label });
+      return r.ok ? ok({ kind: 'dominio', domain: r.value, que: 'editado' }) : r;
+    }
+
+    case 'archivarDominio': {
+      const r = await archiveDomain(deps.db, actor, intent.ref);
+      return r.ok ? ok({ kind: 'dominio', domain: r.value, que: 'archivado' }) : r;
+    }
+
+    case 'fusionarDominios':
+      return doMerge(deps, actor, input, intent.from, intent.into, false);
 
     case 'proponer': {
       const r = await proposeDomains(deps, actor);
@@ -139,6 +165,52 @@ export async function route(
     case 'accion':
       return doAction(deps, actor, input, session);
   }
+}
+
+/**
+ * Crear y fusionar comparten forma: intentan, y si el core pide confirmación,
+ * guardan la operación en la sesión para poder repetirla con un "sí".
+ *
+ * Se guarda la operación entera y no un marcador, así que el sí reejecuta
+ * exactamente el mismo camino con `confirm: true`. Un segundo camino que
+ * "aplica lo confirmado" podría divergir del primero sin que nadie lo note.
+ */
+async function doCreateDomain(
+  deps: Deps, actor: Actor, input: RouteInput,
+  label: string, description: string, confirm: boolean,
+): Promise<Result<Outcome>> {
+  const r = await createDomain(deps.db, actor, { label, description, confirm });
+  if (r.ok) {
+    await writeSession(deps.db, input.conv, actor.ownerId, { pending: null }, input.now);
+    return ok({ kind: 'dominio', domain: r.value, que: 'creado' });
+  }
+  if (r.kind === 'requires_confirmation') {
+    await writeSession(deps.db, input.conv, actor.ownerId, {
+      pending: {
+        confirm: { label, op: 'crearDominio', args: { label, description },
+                   askedAt: input.now.toISOString() },
+      },
+    }, input.now);
+  }
+  return r;
+}
+
+async function doMerge(
+  deps: Deps, actor: Actor, input: RouteInput,
+  from: string, into: string, confirm: boolean,
+): Promise<Result<Outcome>> {
+  const r = await mergeDomains(deps, actor, from, into, { confirm });
+  if (r.ok) {
+    await writeSession(deps.db, input.conv, actor.ownerId, { pending: null }, input.now);
+    return ok({ kind: 'fusionado', from: r.value.from, into: r.value.into, moved: r.value.moved });
+  }
+  if (r.kind === 'requires_confirmation') {
+    await writeSession(deps.db, input.conv, actor.ownerId, {
+      pending: { confirm: { label: `${from} → ${into}`, op: 'fusionar', args: { from, into },
+                            askedAt: input.now.toISOString() } },
+    }, input.now);
+  }
+  return r;
 }
 
 async function doCapture(
@@ -284,8 +356,15 @@ async function doAction(
         // cree. Vencerlo es más seguro que adivinar a qué apuntaba.
         return err('invalid', 'No hay nada esperando confirmación.');
       }
+      const c = session!.pending!.confirm!;
       await writeSession(deps.db, conv, actor.ownerId, { pending: null }, now);
-      return err('invalid', 'Todavía no hay acciones que confirmar por chat.');
+      if (a.kind === 'no') return err('invalid', `Listo, no hago nada con "${c.label}".`);
+
+      // Se repite la MISMA operación con confirm activo.
+      if (c.op === 'crearDominio') {
+        return doCreateDomain(deps, actor, input, c.args.label ?? '', c.args.description ?? '', true);
+      }
+      return doMerge(deps, actor, input, c.args.from ?? '', c.args.into ?? '', true);
     }
 
   }

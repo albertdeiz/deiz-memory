@@ -15,8 +15,22 @@ export interface Pending {
   ids?: string[];
   /** Texto que se ofreció guardar tras una búsqueda vacía (§5). */
   save?: string;
-  /** Una confirmación en curso. `askedAt` existe porque un "sí" tardío miente. */
-  confirm?: { label: string; ref: string; op: 'purge'; askedAt: string };
+  /**
+   * Una confirmación en curso: qué operación repetir si dices que sí.
+   *
+   * Se guarda la operación y sus argumentos, no un id de "cosa pendiente":
+   * así el `sí` reejecuta exactamente lo mismo con `confirm: true`, y no hay
+   * un segundo camino que pueda divergir del primero.
+   *
+   * `askedAt` existe porque un "sí" que llega media hora tarde no se refiere a
+   * lo que la persona cree.
+   */
+  confirm?: {
+    label: string;
+    op: 'crearDominio' | 'fusionar';
+    args: Record<string, string>;
+    askedAt: string;
+  };
 }
 
 export interface ChatSession {

@@ -31,8 +31,14 @@ export interface Answer {
   reason: 'sin_resultados' | 'sin_modelo' | 'sin_cita' | 'sin_respaldo' | null;
 }
 
-/** Cuántos pasajes se le dan al modelo. Más que esto diluye y cuesta. */
-const MAX_PASSAGES = 6;
+/**
+ * Cuántos pasajes se le dan al modelo.
+ *
+ * Ocho, que es lo que `retrieve()` devuelve por defecto: cortar en seis dejaba
+ * un acantilado arbitrario entre lo que se recupera y lo que se lee, y una
+ * pregunta cuya respuesta caía séptima se contestaba con un "no lo tengo".
+ */
+const MAX_PASSAGES = 8;
 
 export async function answer(
   deps: Deps,

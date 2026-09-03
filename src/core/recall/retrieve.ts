@@ -53,13 +53,70 @@ export interface Passage {
  * —dominio y fechas— ya recortó el universo, que es lo que evita que el OR traiga
  * medio corpus.
  */
-const anyOf = (q: string): string =>
+const termsOf = (q: string): string[] =>
   q
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
-    .filter((w) => w.length > 2)
-    .join(' | ') || q;
+    .filter((w) => w.length > 2);
+
+const anyOf = (q: string): string => termsOf(q).join(' | ') || q;
+
+/**
+ * Cuántos trozos tuyos contiene cada término. Es la frecuencia documental.
+ */
+async function frequencies(
+  db: Deps['db'],
+  ownerId: string,
+  terms: string[],
+): Promise<Map<string, number>> {
+  const { rows } = await db.query<{ term: string; n: string }>(
+    `select t.term, count(c.*)::text as n
+       from unnest($2::text[]) as t(term)
+       left join memory_chunks c on c.owner_id = $1
+         and to_tsvector('es_unaccent', c.content) @@ to_tsquery('es_unaccent', t.term)
+      group by t.term`,
+    [ownerId, terms],
+  );
+  return new Map(rows.map((r) => [r.term, Number(r.n)]));
+}
+
+/** Un término que aparece muchas más veces que el más raro es tema, no dato. */
+const COMMON_FACTOR = 3;
+
+/**
+ * Con qué términos se **rankea** — que no son los mismos con los que se busca.
+ *
+ * Buscar con OR es correcto (§6): exigir todas las palabras de una pregunta
+ * descarta el párrafo que la responde. Pero rankear con OR le da crédito
+ * completo a las palabras que solo dicen *de qué documento* estamos hablando, y
+ * esas están en todas sus páginas.
+ *
+ * Medido sobre una póliza de auto: a "¿cuánto es mi deducible en el seguro de mi
+ * vehículo?", `seguro` aparece en el 16% de los trozos y `vehiculo` en el 15%,
+ * contra el 4% de `deducible`. Los trozos que solo hablaban del vehículo
+ * empataban en full-text con el único que traía la cifra, y el vector los
+ * empataba también —todo el documento se parece a la pregunta—, así que el que
+ * respondía quedaba **séptimo** y el modelo solo ve los primeros. Sin cifra
+ * delante, la respuesta correcta es no responder, y eso hacía.
+ *
+ * Así que el ranking usa solo los términos raros. Los comunes siguen en el
+ * `where` —suman recall, que es para lo que sirven— pero dejan de decidir el
+ * orden. Es IDF, hecho a mano y con el umbral relativo al término más raro de
+ * la propia pregunta, para que funcione igual con 400 trozos que con 40.
+ */
+async function rankTerms(deps: Deps, ownerId: string, q: string): Promise<string> {
+  const terms = termsOf(q);
+  if (terms.length < 2) return anyOf(q);
+
+  const df = await frequencies(deps.db, ownerId, terms);
+  const presentes = terms.filter((t) => (df.get(t) ?? 0) > 0);
+  if (presentes.length === 0) return anyOf(q);
+
+  const minimo = Math.min(...presentes.map((t) => df.get(t)!));
+  const raros = presentes.filter((t) => df.get(t)! <= minimo * COMMON_FACTOR);
+  return raros.join(' | ') || anyOf(q);
+}
 
 const clampLimit = (n: number | undefined) =>
   !n || !Number.isFinite(n) ? 8 : Math.min(Math.max(Math.trunc(n), 1), 30);
@@ -104,6 +161,8 @@ export async function retrieve(
     domainId = d.id;
   }
 
+  const rank = await rankTerms(deps, actor.ownerId, q);
+
   const filtro = `
     m.owner_id = $1 and not m.hidden
     and ($2::uuid is null or m.domain_id = $2)
@@ -116,7 +175,7 @@ export async function retrieve(
     `select c.memory_id, m.title, m.occurred_at, m.captured_at, d.label as domain_label,
             b.media_type, c.content, c.seq,
             ts_rank(to_tsvector('es_unaccent', c.content),
-                    to_tsquery('es_unaccent', $5)) as score
+                    to_tsquery('es_unaccent', $7)) as score
        from memory_chunks c
        join memories m on m.id = c.memory_id
        left join domains d on d.id = m.domain_id
@@ -124,7 +183,7 @@ export async function retrieve(
       where ${filtro}
         and to_tsvector('es_unaccent', c.content) @@ to_tsquery('es_unaccent', $5)
       order by score desc limit $6`,
-    [...base, anyOf(q), limit * 2],
+    [...base, anyOf(q), limit * 2, rank],
   );
 
   // 3 · Semejanza, si hay con qué. Sin embedder el sistema sigue funcionando:

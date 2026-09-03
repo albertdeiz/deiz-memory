@@ -209,6 +209,16 @@ el título: si los ochenta empiezan con "póliza de auto BCI", ninguno destaca.
 pregunta no — el párrafo que responde dice "deducible" y no dice "auto". Medido sobre una
 póliza real: cero resultados con AND, ocho con la palabra sola.
 
+**Pero el OR tampoco puede decidir el orden.** *"¿Cuánto es mi deducible en el seguro de
+mi vehículo?"* no respondía, y no era el modelo: `seguro` está en el 16% de los trozos y
+`vehiculo` en el 15%, contra el 4% de `deducible`. Rankear con todos los términos hacía
+que los trozos que solo repetían el tema empataran con el único que traía la cifra, y ese
+quedaba séptimo — fuera de lo que el modelo lee.
+
+Ahora se busca con todos los términos y **se rankea solo con los que discriminan**: los
+comunes suman recall pero no ordenan. El umbral es relativo al término más raro de la
+propia pregunta, así que no hay que calibrarlo cuando el corpus crece.
+
 ### Ninguna cifra que no esté en lo que leyó
 
 La verificación de cita comprueba que el documento citado exista. No comprueba que **el

@@ -215,3 +215,46 @@ describe('responder con cita (regla dura 1)', () => {
     expect(r.value.reason).toBeNull();
   });
 });
+
+/**
+ * Buscar con todos los términos, rankear con los que discriminan.
+ *
+ * El OR de una pregunta es correcto —exigir todas las palabras descarta el
+ * párrafo que responde— pero rankear con OR le da crédito completo a las
+ * palabras que solo dicen de qué documento hablamos, y esas están en todas sus
+ * páginas. Medido sobre una póliza real: `seguro` en el 16% de los trozos y
+ * `vehiculo` en el 15%, contra el 4% de `deducible`. El trozo que traía la
+ * cifra quedaba séptimo, y el modelo solo lee los primeros.
+ */
+describe('las palabras de tema no deciden el orden', () => {
+  beforeEach(async () => {
+    // Nueve trozos saturados de las palabras de tema y sin ningún dato. Es lo
+    // que hace una póliza: cada página repite "seguro" y "vehículo".
+    for (let i = 1; i <= 9; i++) {
+      await guardar(`Clausula ${i}. ${'El seguro del vehiculo asegurado. '.repeat(12)}`);
+    }
+    // ...y uno que las menciona UNA vez y trae el dato que responde.
+    await guardar('Tabla de coberturas del seguro de vehiculo: deducible UF 3,0 por siniestro.');
+  });
+
+  it('el trozo con la palabra rara gana, aunque los otros repitan el tema', async () => {
+    const r = await retrieve(s.deps, actor, {
+      query: 'cuanto es mi deducible en el seguro de mi vehiculo',
+    });
+    if (!r.ok) throw new Error('falló');
+    expect(r.value[0]?.content).toContain('deducible UF 3,0');
+  });
+
+  it('con una sola palabra no hay nada que descartar', async () => {
+    const r = await retrieve(s.deps, actor, { query: 'deducible' });
+    if (!r.ok) throw new Error('falló');
+    expect(r.value[0]?.content).toContain('deducible UF 3,0');
+  });
+
+  it('si todas son igual de comunes, siguen contando todas', async () => {
+    // Sin esto, un umbral mal puesto dejaría la consulta sin términos.
+    const r = await retrieve(s.deps, actor, { query: 'seguro vehiculo' });
+    if (!r.ok) throw new Error('falló');
+    expect(r.value.length).toBeGreaterThan(0);
+  });
+});

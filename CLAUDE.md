@@ -142,6 +142,17 @@ sí y ninguno destaca.
 pregunta no — el párrafo que responde dice "deducible" y no dice "auto". Medido sobre una
 póliza real: cero resultados con AND, ocho con la palabra sola.
 
+**Pero el OR tampoco puede decidir el orden.** Rankear con todos los términos le da
+crédito completo a las palabras que solo dicen *de qué documento* hablamos, y esas están
+en todas sus páginas. Medido: a "¿cuánto es mi deducible en el seguro de mi vehículo?",
+`seguro` aparece en el 16% de los trozos y `vehiculo` en el 15%, contra el 4% de
+`deducible` — así que el único trozo con la cifra quedaba **séptimo** y el modelo solo
+leía los primeros. Sin cifra delante, no responder es lo correcto, y eso hacía.
+
+Se busca con todos los términos y **se rankea solo con los raros**: los comunes suman
+recall, que es para lo que sirven, pero dejan de ordenar. El umbral es relativo al
+término más raro de la propia pregunta, para que funcione igual con 400 trozos que con 40.
+
 **Ninguna cifra que no esté en lo que leyó.** La verificación de cita comprueba que el
 documento citado exista; no que el número venga de ahí. Ese hueco dejaba pasar el peor
 caso —cita válida, cifra inventada, más creíble que una respuesta sin cita—, y pasó de

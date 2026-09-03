@@ -49,7 +49,7 @@ Restricciones duras, no aspiraciones:
    vencido, o no se responde.
 4. **Confirmación diferida.** Si el sistema duda, guarda igual y deja la duda en una
    bandeja de revisión. Nunca bloquea la captura con preguntas.
-   _(Construido en F1.6: `dm review` y `/revisar`.)_
+   _(Construido en F1.6: `dm review` y `/review`.)_
 5. **Respuesta útil > respuesta completa.** El dato y su fuente, no un resumen de 400
    palabras.
 6. **El original es sagrado.** El blob crudo nunca se borra ni se sobreescribe. Todo lo
@@ -125,7 +125,7 @@ Todo mensaje entrante se enruta a uno de tres:
 
 | Verbo | Ejemplo | Camino |
 |---|---|---|
-| **Capturar** | foto de una receta, "el mecánico es Juan +569..." | ingest → normalizar → clasificar → guardar |
+| **Capturar** | foto de una receta, `/capture el mecánico es Juan +569...` | ingest → normalizar → clasificar → guardar |
 | **Recordar** | "¿cuál es mi deducible?", "¿qué me recetaron en marzo?" | recuperación + citación |
 | **Aclarar** | respuesta a una pregunta del bot, corrección de un dato | actualizar Memory + marcar verified |
 
@@ -325,7 +325,7 @@ es el único campo que de verdad mueve la precisión.
 
 | Operación | Qué hace |
 |---|---|
-| `/dominios` | lista los activos, con cuántas memorias tiene cada uno |
+| `/domains` | lista los activos, con cuántas memorias tiene cada uno |
 | **crear** | pide una descripción de una línea; queda activo de inmediato |
 | **editar** | cambia label, descripción o aliases. No toca las memorias existentes |
 | **archivar** | `active = false`. Deja de proponerse al clasificar; sus memorias siguen ahí y siguen siendo buscables |
@@ -477,8 +477,10 @@ participantes**: crear, renombrar, fusionar o archivar una categoría del espaci
 propone cualquiera —o el propio bot—, y solo se aplica cuando todos dijeron que sí.
 
 - **Un solo rechazo la mata de inmediato.** No tiene sentido esperar al resto.
-- **Las propuestas pendientes se ven con `/pendientes`** y caducan a los 7 días si alguien
+- **Las propuestas pendientes se ven con `/proposals`** y caducan a los 7 días si alguien
   nunca respondió. Sin caducidad, un espacio de cuatro personas nunca cambia nada.
+  _(Se llamaba `/pendientes`, que ya es el comando de "qué te falta por leer". Dos cosas
+  distintas con el mismo nombre en el mismo bot es una trampa para F5.)_
 - Un espacio de una sola persona no es un caso especial: la unanimidad es contigo mismo.
 
 **Lo que NO requiere unanimidad: usar las categorías que ya existen.** Al compartir algo
@@ -526,7 +528,7 @@ no se acumula.
 
 **F0 — Tubería tonta.** Sin LLM. El bot recibe texto, foto, audio y PDF; guarda el blob
 original con su metadata y responde `guardado ✓ #id`. Búsqueda full-text sobre lo que
-venga en texto. Un comando `/buscar`. Tres cosas que parecen prematuras y no lo son:
+venga en texto. Un comando `/search`. Tres cosas que parecen prematuras y no lo son:
 `owner_id` en todas las tablas, un **módulo único de acceso a blobs** (`put`/`get`, nadie
 más habla con Garage — es lo que hace posible cambiar a R2 con una variable), y el adapter
 de canal con capacidades declaradas (§7.1).
@@ -585,6 +587,26 @@ medir de verdad, con el pulgar.
 > leída por OCR en 2 segundos y encontrada buscando por lo que dice. Telegram entrega
 > las fotos **sin nombre de archivo**, así que hasta F2 el título de una foto del
 > teléfono es el volcado del OCR — que es justo el problema que F2 nombra.
+>
+> **Corregido con el uso real, después de F3.** Cuatro cosas que solo aparecen cuando el
+> pulgar es tuyo, y todas del mismo tipo — algo correcto que nadie conecta, o un número
+> que se resuelve contra el estado equivocado:
+>
+> - **Guardar pasa a ser explícito** (§5): un archivo, o `/capture`. El texto suelto se
+>   consulta. La escotilla de "guardarlo igual" estaba a medio conectar —`pending.save`
+>   no contaba como algo en pantalla— y ahora es lo único que sostiene no perder nada.
+> - **Los comandos son los del CLI, en inglés**: `/search`, `/capture`, `/ask`, `/review`,
+>   `/domains`; y `view:N`, `open:N`, `hide:N`, `more`. Los nombres en español siguen
+>   parseando. La prosa y las etiquetas no se tocaron: son la voz del bot, no su API.
+> - **`view:2` se resolvía contra la lista anterior.** `/<categoría>` numeraba y ofrecía
+>   botones sin registrar los ids. Devolvía un documento real, el equivocado. Numerar
+>   vivía en `present.ts` y registrar en cada rama de `route.ts`; ahora el registro
+>   cuelga de la forma del `Outcome`, en un solo lugar. El mismo bug tenía el botón
+>   "mandarme el original" del detalle, que codificaba `abrir:1`.
+> - **Dos botones por resultado**: `datos` y `archivo`. Bajar algo costaba dos toques y
+>   una pantalla intermedia. Y `view:N` muestra los datos, no la transcripción entera.
+>
+> 291 tests.
 
 **F1.6 — Bandeja de revisión.** La deuda que dejó F1: los carriles ya marcan cosas
 —OCR de baja confianza, transcripción cortada, un formato que no se pudo leer— y no hay

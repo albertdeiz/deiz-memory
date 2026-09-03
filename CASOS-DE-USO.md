@@ -6,9 +6,9 @@ gobiernan.
 
 | ID | Caso de uso | Actor | Disparador | Resultado | Fase |
 |---|---|---|---|---|---|
-| UC-01 | [Capturar desde el chat](#uc-01--capturar-desde-el-chat) | Dueño | Manda texto, foto, audio o PDF | Memory con su blob y su texto | F0–F1 |
+| UC-01 | [Capturar desde el chat](#uc-01--capturar-desde-el-chat) | Dueño | Manda un archivo, o escribe `/capture` | Memory con su blob y su texto | F0–F1 |
 | UC-03 | [Aclarar y revisar](#uc-03--aclarar-y-revisar) | Bot → Dueño | Extracción de baja confianza | Memory verificada o en bandeja | F1–F2 |
-| UC-04 | [Explorar y exportar](#uc-04--explorar-y-exportar) | Dueño | `/buscar` o listar categoría | Página de 5, o un PDF al chat | F0 |
+| UC-04 | [Explorar y exportar](#uc-04--explorar-y-exportar) | Dueño | `/search` o listar categoría | Página de 5, o un PDF al chat | F0 |
 | UC-05 | [Preguntar en lenguaje natural](#uc-05--preguntar-en-lenguaje-natural) | Dueño | Pregunta libre | Dato + cita, o "no lo tengo" | F3 |
 | UC-06 | [Vigente, vencido o en conflicto](#uc-06--vigente-vencido-o-en-conflicto) | Dueño | Pregunta por un dato duro | Dato marcado según su vigencia | F6 |
 | UC-07 | [Playbook de urgencia](#uc-07--playbook-de-urgencia) | Dueño | "Choqué el auto" | Respuesta pre-armada en menos de 2 s | F7 |
@@ -28,11 +28,11 @@ antes de que exista un solo LLM en el pipeline.
 ---
 
 ## UC-01 · Capturar desde el chat
-**Actor:** el dueño · **Disparador:** manda cualquier cosa al bot · **Fase:** F0–F1
+**Actor:** el dueño · **Disparador:** manda un archivo, o escribe `/capture` · **Fase:** F0–F1
 
 ```mermaid
 flowchart LR
-  M["Mensaje<br/>texto · foto · audio · PDF"] --> Q["Cola de ingesta"]
+  M["Archivo<br/>foto · audio · PDF · doc<br/>o /capture texto"] --> Q["Cola de ingesta"]
   Q -.->|"guardado ✓ en menos de 1 s"| M
   Q --> A["markitdown<br/>PDF, docx, xlsx, html"]
   Q --> B["visión LLM<br/>foto o PDF escaneado"]
@@ -41,6 +41,13 @@ flowchart LR
   B --> R
   C --> R
 ```
+
+**Guardar es explícito, y solo en el chat.** Un archivo se guarda con mandarlo —sin
+comando, sin categoría, que es §3.1—; un texto suelto se consulta, y para guardarlo hay
+que escribir `/capture`. Invierte §5 a propósito: en una conversación lo que escribes es
+casi siempre una pregunta, y adivinarlo con una heurística dejaba preguntas guardadas
+como memorias. Si la consulta no encuentra nada, la respuesta ofrece guardar ese texto
+tal cual, a un toque: no se pierde.
 
 **El acuse no espera al trabajo pesado.** La cola responde de inmediato y la
 normalización corre después, por el carril que corresponda (§8.1). Siempre se intenta
@@ -74,11 +81,11 @@ perder algo por fricción es caro.
 ---
 
 ## UC-04 · Explorar y exportar
-**Actor:** el dueño · **Disparador:** `/buscar` o listar una categoría · **Fase:** F0
+**Actor:** el dueño · **Disparador:** `/search` o listar una categoría · **Fase:** F0
 
 ```mermaid
 flowchart LR
-  S["/buscar seguro<br/>o /salud"] --> R["5 resultados<br/>nunca un muro de texto"]
+  S["/search seguro<br/>o /salud"] --> R["5 resultados<br/>nunca un muro de texto"]
   R --> M["más"]
   M --> R
   R --> F["refinar<br/>solo los de 2025"]
@@ -270,7 +277,7 @@ flowchart LR
 
 **Sin dueño del espacio, la estructura se decide entre todos.** Pero la unanimidad
 necesita salida por tiempo o se vuelve parálisis: basta con que uno no lea el chat para
-congelar el espacio para siempre. Las propuestas se ven con `/pendientes`.
+congelar el espacio para siempre. Las propuestas se ven con `/proposals`.
 
 Solo se vota **cambiar** categorías. Usar las que ya existen es libre — si no, compartir
 se vuelve insoportable.

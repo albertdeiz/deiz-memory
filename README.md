@@ -473,7 +473,7 @@ y la duda queda anotada. Eso es §3.4: la captura nunca se bloquea con preguntas
 Para verlas:
 
 ```
-dm review          # y en el chat: /revisar
+dm review          # y en el chat: /review
 ```
 
 Cada línea dice **qué hacer**, no solo qué pasó — una bandeja que enumera

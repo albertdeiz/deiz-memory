@@ -79,6 +79,28 @@ export function ollamaClassifier(cfg: ClassifyConfig = defaultClassifyConfig): C
       return parseLoose(res.choices?.[0]?.message?.content ?? '');
     },
 
+    async complete({ system, user }) {
+      const res = await postJson<ChatResponse>({
+        service: 'clasificador',
+        url: `${base}/chat/completions`,
+        headers,
+        timeoutMs: cfg.timeoutMs,
+        body: JSON.stringify({
+          model: cfg.model,
+          temperature: 0,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        }),
+      });
+      // Se limpia el bloque <think> igual que al clasificar, pero no se busca
+      // JSON: acá la respuesta ES el texto.
+      return (res.choices?.[0]?.message?.content ?? '')
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .trim();
+    },
+
     async available() {
       const state = await probe('clasificador', `${base}/models`, 5_000, headers);
       return state.ok ? { ok: true, detail: `${cfg.model} @ ${base}` } : state;

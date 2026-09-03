@@ -1,5 +1,6 @@
 import type { MemoryDetail, MemorySummary } from '../../core/domain/types.js';
 import type { ReviewItem } from '../../core/ops/review.js';
+import type { Answer } from '../../core/recall/answer.js';
 import type { Result } from '../../core/result.js';
 import { meaningfulName } from '../../core/filenames.js';
 
@@ -130,6 +131,38 @@ export function renderReview(items: ReviewItem[]): string {
           : '\n\nNinguna se arregla reintentando.';
 
   return lines.join('\n\n') + cola;
+}
+
+/**
+ * Una respuesta con sus fuentes.
+ *
+ * Las fuentes NO son opcionales ni decorativas: la regla dura 1 dice que ningún
+ * dato factual se responde sin memoria de respaldo, así que se muestran siempre
+ * —incluso cuando no hubo prosa— y cada una trae su id para poder abrirla.
+ */
+export function renderAnswer(a: Answer): string {
+  const fuentes = a.sources.map((p) => {
+    const cuando = (p.occurredAt ?? p.capturedAt).toISOString().slice(0, 10);
+    const donde = p.domainLabel ? ` · ${p.domainLabel}` : '';
+    const frag = p.content.replace(/\s+/g, ' ').trim();
+    return `  ${p.shortId}  ${cuando}${donde}  ${p.title ?? '(sin título)'}\n` +
+           `      ${frag.length > 160 ? frag.slice(0, 159) + '…' : frag}`;
+  });
+
+  if (a.text) return `${a.text}\n\nfuentes:\n${fuentes.join('\n')}`;
+
+  switch (a.reason) {
+    case 'sin_resultados':
+      return 'No lo tengo.';
+    case 'sin_cita':
+      // Se descartó la prosa a propósito: una respuesta sin cita no cumple la
+      // regla dura 1. Mejor los pasajes crudos que una afirmación sin respaldo.
+      return `No pude responderlo sin inventar, pero esto es lo que encontré:\n${fuentes.join('\n')}`;
+    case 'sin_modelo':
+      return `Sin modelo para redactar. Lo que encontré:\n${fuentes.join('\n')}`;
+    default:
+      return fuentes.join('\n');
+  }
 }
 
 /** Errores y confirmaciones: qué pasó y qué hacer, sin disculpas ni vaguedad. */

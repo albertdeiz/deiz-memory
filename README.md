@@ -5,7 +5,7 @@ Memoria personal externa. Le mandas cualquier cosa y después le preguntas.
 El diseño completo está en [CLAUDE.md](./CLAUDE.md); los flujos, en
 [CASOS-DE-USO.md](./CASOS-DE-USO.md). Esto es lo que hace falta para correrlo.
 
-**Estado: F2.** Captura, normalización por carriles, búsqueda full-text, y un
+**Estado: F3.** Captura, normalización por carriles, búsqueda full-text, y un
 **canal de chat**: Telegram, o un canal en memoria para probar sin token.
 Lo que mandas se lee por dentro: documentos con markitdown, fotos y escaneos con
 OCR, notas de voz con Whisper. Los tres carriles son **servicios en contenedores
@@ -60,6 +60,10 @@ dm in <categoría>                lo de esa categoría, por fecha del hecho
 dm classify [id]                 dominio, título y fecha del hecho, con IA local
 dm domains propose               categorías que te faltan, deducidas de tus datos
     --accept <slug> [--label --desc]
+
+dm ask "<pregunta>"              responde citando lo que guardaste
+    --in <categoría>  --desde <fecha>  --hasta <fecha>  --solo-fuentes
+dm index                         trocea y vectoriza lo que falte
 
 dm ls [--limit N] [--offset N] [--hidden]
 dm search "<consulta>"           comillas para frases, - para excluir
@@ -184,6 +188,52 @@ DM_CLASSIFY_MODEL=qwen2.5:3b
 
 En Docker sobre macOS esto corre en CPU (~12 s por documento). Si quieres que
 vuele en tu Mac, Ollama nativo usa Metal: apunta `DM_CLASSIFY_URL` al host.
+
+## Preguntar
+
+```
+$ dm ask "¿cuál es el deducible de mi seguro de auto?"
+El deducible es de 5 UF por siniestro [e6843426].
+
+fuentes:
+  e6843426  2026-03-01 · Seguros  Póliza de automóvil 4471-2026
+      …Deducible: 5 UF por siniestro. Asistencia en ruta 24/7…
+```
+
+**La cita no es decorativa: es la regla dura 1.** Ningún dato factual se muestra
+sin memoria de respaldo, y eso se verifica **en código** — si el modelo responde
+sin citar, se le pide una vez más y, si insiste, se descarta la prosa y se
+muestran los pasajes crudos. Que el prompt lo pida no garantiza que obedezca.
+
+Las citas se resuelven a ids abribles con `dm show`. Un `[1]` no sirve de nada
+media hora después.
+
+### Cómo busca
+
+Filtro estructurado primero —dominio y ventana de fechas—, y sobre ese
+subconjunto los dos caminos de §6:
+
+- **full-text** sobre los trozos: preciso para lo que se escribe igual, un RUT,
+  una patente, un número de póliza
+- **semejanza** con vectores locales (`nomic-embed-text`, 768d): rescata las
+  preguntas escritas con otras palabras que el documento
+
+Se fusionan normalizando cada lista contra su propio máximo, porque `ts_rank` y
+la similitud coseno viven en escalas distintas. Un trozo que aparece en las dos
+sube: que dos métodos independientes coincidan es la mejor señal que hay.
+
+**Una pregunta no se busca con AND.** `/buscar poliza auto` pide las dos cosas;
+"¿cuál es el deducible de mi seguro de auto?" no — el párrafo que responde dice
+"deducible" y no dice "auto". Medido sobre una póliza real: cero resultados con
+AND, ocho con la palabra sola. Preguntar hace OR y deja que el ranking ordene.
+
+**Se indexa por trozos, no por documento.** Una póliza de 80 mil caracteres
+promediada en un vector no se parece a nada en particular. Y cada trozo se
+embebe **solo**, sin anteponerle el título: si los ochenta empiezan con "póliza
+de auto BCI", los ochenta se parecen entre sí y ninguno destaca.
+
+Todo local: los vectores y la redacción salen de Ollama en el mismo compose.
+Sin embedder el sistema degrada a full-text en vez de fallar.
 
 ## Los tres carriles
 

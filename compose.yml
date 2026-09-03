@@ -1,7 +1,10 @@
 name: deiz-memory
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector y no postgres a secas: §8 siempre dijo "Postgres + pgvector", y
+    # F3 lo necesita. Una sola base para lo estructurado, el full-text y los
+    # vectores — un motor, un backup.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: deiz
       POSTGRES_PASSWORD: deiz

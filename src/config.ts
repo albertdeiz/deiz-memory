@@ -5,6 +5,8 @@ import type { NormalizeConfig, VisionBackend } from './adapters/normalize/index.
 import type { TelegramConfig } from './adapters/chat/telegram/index.js';
 import type { ClassifyConfig } from './adapters/classify/ollama.js';
 import { defaultClassifyConfig } from './adapters/classify/ollama.js';
+import type { EmbedConfig } from './adapters/classify/embed.js';
+import { defaultEmbedConfig } from './adapters/classify/embed.js';
 import {
   defaultDocumentsConfig, defaultOcrConfig, defaultSpeechConfig,
   defaultVisionConfig, defaultVisionHttpConfig, VISION_BACKENDS,
@@ -17,6 +19,7 @@ export interface Config {
   normalize: NormalizeConfig;
   telegram: TelegramConfig | null;
   classify: ClassifyConfig;
+  embed: EmbedConfig;
 }
 
 type VisionEffort = 'low' | 'medium' | 'high';
@@ -95,6 +98,15 @@ export function loadConfig(): Config {
       model: process.env.DM_CLASSIFY_MODEL ?? defaultClassifyConfig.model,
       apiKey: process.env.DM_CLASSIFY_API_KEY ?? null,
       timeoutMs: positive(process.env.DM_CLASSIFY_TIMEOUT_MS, defaultClassifyConfig.timeoutMs),
+    },
+    embed: {
+      baseUrl: process.env.DM_EMBED_URL ?? defaultEmbedConfig.baseUrl,
+      model: process.env.DM_EMBED_MODEL ?? defaultEmbedConfig.model,
+      // Cambiar de modelo cambia esta dimensión y obliga a reindexar: el
+      // esquema declara vector(768) y otro tamaño simplemente no entra.
+      dimensions: positive(process.env.DM_EMBED_DIMS, defaultEmbedConfig.dimensions),
+      apiKey: process.env.DM_EMBED_API_KEY ?? null,
+      timeoutMs: positive(process.env.DM_EMBED_TIMEOUT_MS, defaultEmbedConfig.timeoutMs),
     },
     normalize: {
       documents: {

@@ -180,6 +180,20 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
     detail: { ...(best?.detail ?? {}), attempts, ...(clamped.truncated ? { truncated: true } : {}) },
   });
 
+  // Indexar va acá y no en un paso aparte: los trozos derivan del texto, así
+  // que cada vez que el texto cambia hay que rehacerlos o la búsqueda semántica
+  // queda respondiendo con lo viejo. Que falle no invalida la normalización.
+  if (deps.embedder && finalText) {
+    const owner = await deps.db.query<{ owner_id: string }>(
+      `select owner_id from memories where id = $1`, [id],
+    );
+    const ownerId = owner.rows[0]?.owner_id;
+    if (ownerId) {
+      const { indexMemory } = await import('../recall/index-chunks.js');
+      await indexMemory(deps, { ownerId }, id).catch(() => {});
+    }
+  }
+
   return ok({
     id,
     shortId: short,

@@ -613,6 +613,18 @@ te lista tus consultas ordenadas por fecha real, no por fecha de captura.
 **F3 — Preguntas en lenguaje natural.** Recuperación híbrida (filtro por dominio y fecha
 + semántica) con cita obligatoria a la fuente.
 _Listo cuando:_ confías en la respuesta sin ir a abrir el PDF.
+> **Construido.** pgvector en la misma base, troceado por párrafos, embeddings locales
+> (`nomic-embed-text`, 768d) y fusión de full-text con semejanza sobre un subconjunto ya
+> recortado por dominio y fecha. La cita se verifica en código: sin ella la prosa se
+> descarta. 246 tests.
+>
+> Dos cosas que solo aparecieron al probarlo con una póliza de verdad: preguntar no
+> puede hacer AND de todos los términos (cero resultados contra ocho), y anteponer el
+> título a cada trozo diluye los vectores en vez de darles contexto.
+>
+> Límite conocido: con un modelo de 3B la redacción a veces agrega una unidad que no
+> está en la fuente —vi "$89.990" convertido en "89.990 UF"—. Los números se copian
+> bien; las unidades no siempre. Un modelo mayor lo arregla cambiando `DM_CLASSIFY_MODEL`.
 
 **F5 — Espacios compartidos.** Tabla `memory_space`, participantes, `/invitar` con link
 de un solo uso, categorías del espacio por unanimidad, confirmación al compartir (§10).

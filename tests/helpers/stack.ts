@@ -42,7 +42,7 @@ export async function startStack(
   // inlineIngest en los tests, no la cola: los carriles corren dentro de
   // capture() y una aserción justo después ve el resultado. Con pg-boss de por
   // medio, cada test sería una espera con reintentos.
-  const deps = { db, blobs, clock, converters, classifier: null } as Deps;
+  const deps = { db, blobs, clock, converters, classifier: null, embedder: null } as Deps;
   deps.ingest = inlineIngest(() => deps);
 
   const stack: TestStack = {
@@ -51,7 +51,7 @@ export async function startStack(
     ownerId: '',
     otherOwnerId: '',
     async reset() {
-      await db.query('truncate memories, blobs, audit_log, channel_identities, pairing_codes, chat_sessions, domains, owners restart identity cascade');
+      await db.query('truncate memories, memory_chunks, blobs, audit_log, channel_identities, pairing_codes, chat_sessions, domains, owners restart identity cascade');
       const mine = await createOwner(db, 'yo');
       const other = await createOwner(db, 'alguien más');
       if (!mine.ok || !other.ok) throw new Error('no se pudieron crear los dueños de prueba');

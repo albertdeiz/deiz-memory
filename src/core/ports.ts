@@ -92,7 +92,29 @@ export const noConverters: Converters = { document: null, vision: null, audio: n
  * clasificar, solo que las categorías se llenan a mano.
  */
 export interface Classifier {
+  /** Pide JSON y lo devuelve parseado. Para clasificar. */
   classify(prompt: { system: string; user: string }): Promise<unknown>;
+  /**
+   * Pide prosa y la devuelve tal cual.
+   *
+   * Son dos métodos y no uno porque la salida se trata distinto: clasificar
+   * exige JSON válido y se valida contra la realidad; responder una pregunta es
+   * texto, y lo que se verifica ahí es que traiga cita (regla dura 1).
+   */
+  complete(prompt: { system: string; user: string }): Promise<string>;
+  available(): Promise<{ ok: boolean; detail: string }>;
+}
+
+/**
+ * Convierte texto en vectores. Local por defecto (Ollama en el compose).
+ *
+ * `dimensions` viaja con el puerto porque cambiar de modelo cambia el tamaño
+ * del vector, y eso obliga a reindexar todo — no es un detalle de configuración
+ * que se pueda cambiar sin consecuencias.
+ */
+export interface Embedder {
+  readonly dimensions: number;
+  embed(texts: string[]): Promise<number[][]>;
   available(): Promise<{ ok: boolean; detail: string }>;
 }
 
@@ -103,4 +125,5 @@ export interface Deps {
   ingest: Ingest;
   converters: Converters;
   classifier?: Classifier | null;
+  embedder?: Embedder | null;
 }

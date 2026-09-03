@@ -9,6 +9,7 @@ import { createPool, pgDb } from '../db/postgres/index.js';
 import { s3BlobStore } from '../storage/s3.js';
 import { buildConverters } from '../normalize/index.js';
 import { ollamaClassifier } from '../classify/ollama.js';
+import { ollamaEmbedder } from '../classify/embed.js';
 import { queueIngest, runWorker, startQueue } from '../queue/pgboss.js';
 import { fakeChannel, fileAttachment } from '../chat/fake.js';
 import { serveChannel } from '../chat/serve.js';
@@ -22,10 +23,10 @@ import {
   acceptProposal, archiveDomain, capture, classifyMemory, countReview, createDomain, createOwner, editDomain,
   fetchBlob, findDomain, list, listDomains, listIdentities, listOwners, listReview,
   mergeDomains, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
-  proposeDomains, resolveMemoryId, show, LANES,
+  answer, indexMemory, pendingIndex, proposeDomains, resolveMemoryId, show, unindexed, LANES,
 } from '../../core/index.js';
 import { EXIT, exitCodeFor } from './exit.js';
-import { renderDetail, renderFailure, renderList, renderReview } from './format.js';
+import { renderAnswer, renderDetail, renderFailure, renderList, renderReview } from './format.js';
 
 const program = new Command();
 program
@@ -68,6 +69,7 @@ function buildDeps(pool: pg.Pool, cfg: ReturnType<typeof loadConfig>, boss: PgBo
     clock: systemClock,
     converters: buildConverters(cfg.normalize),
     classifier: ollamaClassifier(cfg.classify),
+    embedder: ollamaEmbedder(cfg.embed),
   } as Deps;
   deps.ingest = boss ? queueIngest(boss) : inlineIngest(() => deps);
   return deps;
@@ -722,6 +724,45 @@ program
       }
       return { ok: true as const, value: hechas };
     }, (ls) => (ls.length === 0 ? 'Nada que clasificar.' : ls.join('\n')));
+  });
+
+program
+  .command('ask')
+  .description('pregunta en lenguaje natural; responde citando lo que guardaste')
+  .argument('<pregunta>')
+  .option('--in <categoria>', 'acotar a una categoría')
+  .option('--desde <fecha>')
+  .option('--hasta <fecha>')
+  .option('--solo-fuentes', 'sin redactar: solo los pasajes que respondieron')
+  .action(async (pregunta: string, opts: Record<string, string | boolean>) => {
+    await run(
+      ({ deps, actor }) =>
+        answer(deps, actor, {
+          query: pregunta,
+          domain: (opts.in as string) ?? null,
+          desde: opts.desde ? new Date(String(opts.desde)) : null,
+          hasta: opts.hasta ? new Date(String(opts.hasta)) : null,
+          synthesize: opts.soloFuentes !== true,
+        }),
+      renderAnswer,
+    );
+  });
+
+program
+  .command('index')
+  .description('trocea y vectoriza lo que falte, para poder preguntar')
+  .option('--limit <n>', 'cuántas', '200')
+  .action(async (opts: Record<string, string>) => {
+    await run(async ({ deps, actor }) => {
+      const ids = await unindexed(deps, actor, Number(opts.limit));
+      const lineas: string[] = [];
+      for (const id of ids) {
+        const r = await indexMemory(deps, actor, id);
+        lineas.push(r.ok ? `✓ ${r.value.memoryId.slice(0, 8)}  ${r.value.chunks} trozos`
+                         : `✗ ${id.slice(0, 8)}  ${r.message}`);
+      }
+      return { ok: true as const, value: lineas };
+    }, (ls) => (ls.length === 0 ? 'Todo indexado.' : ls.join('\n')));
   });
 
 program

@@ -9,6 +9,10 @@
 -- reconstruir después.
 
 create extension if not exists unaccent;
+-- Vectores en la misma base que lo estructurado y el full-text (§8): un motor,
+-- un backup, y la posibilidad de filtrar por dominio ANTES de buscar por
+-- semejanza — que es lo que hace útil la búsqueda híbrida (§6).
+create extension if not exists vector;
 
 -- Búsqueda en español que además ignora tildes: en Chile la gente escribe
 -- "mecanico" y tiene que encontrar "mecánico".
@@ -209,6 +213,37 @@ create table chat_sessions (
   updated_at  timestamptz not null default now(),
   primary key (channel, chat_id)
 );
+
+-- Los trozos en que se parte una memoria para buscarla por semejanza.
+--
+-- Por trozo y no por memoria entera: una póliza de 80 mil caracteres da un solo
+-- vector promediado que no se parece a nada en particular, y la pregunta
+-- "¿cuál es mi deducible?" necesita acertarle al párrafo del deducible, no al
+-- documento completo.
+--
+-- Es tabla aparte y no una columna porque una memoria tiene N trozos, y porque
+-- así el embedding se regenera solo —igual que el texto— sin tocar la memoria.
+create table memory_chunks (
+  id         bigserial primary key,
+  memory_id  uuid not null references memories(id) on delete cascade,
+  owner_id   uuid not null references owners(id) on delete restrict,
+  -- Posición dentro del documento, para poder citar "hacia el final de".
+  seq        integer not null,
+  content    text not null,
+  -- 768 es lo que produce nomic-embed-text. Cambiar de modelo cambia esta
+  -- dimensión, así que cambiar de modelo es reindexar — no es gratis y conviene
+  -- que esté escrito acá.
+  embedding  vector(768),
+  created_at timestamptz not null default now(),
+  unique (memory_id, seq)
+);
+
+-- El índice va sobre el vector, pero la consulta filtra primero por dueño y
+-- dominio: buscar por semejanza en todo el corpus y después descartar es
+-- justamente lo que §6 llama el error clásico.
+create index memory_chunks_owner_idx on memory_chunks (owner_id, memory_id);
+create index memory_chunks_vec_idx on memory_chunks
+  using hnsw (embedding vector_cosine_ops);
 
 -- Lo escribe purge (regla dura 8). Append-only de verdad: purgar es la única
 -- forma de borrar, y queda registrada.

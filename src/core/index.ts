@@ -25,6 +25,10 @@ export {
   proposeDomains, acceptProposal, hasProposals, MIN_CLUSTER,
   type Proposal, type AcceptResult,
 } from './classify/emergent.js';
+export { chunkText, contextualize, TARGET_CHARS } from './recall/chunk.js';
+export { indexMemory, pendingIndex, unindexed, type IndexOutcome } from './recall/index-chunks.js';
+export { retrieve, type Passage, type RetrieveInput } from './recall/retrieve.js';
+export { answer, type Answer, type AnswerInput } from './recall/answer.js';
 export { classifyMemory, LOW_CONFIDENCE, type ClassifyOutcome } from './classify/run.js';
 export { buildPrompt, validate, classifySchema, type Classification } from './classify/prompt.js';
 export { normalizeMemory, type NormalizeOutcome, type Attempt } from './normalize/run.js';

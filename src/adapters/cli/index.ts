@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { basename } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import type pg from 'pg';
@@ -111,6 +112,27 @@ const renderReplies = (replies: Reply[]): string =>
         : `[archivo: ${r.filename} · ${r.mediaType} · ${r.bytes.length} bytes]`,
     )
     .join('\n\n');
+
+/**
+ * Si hay un `dm serve` vivo en esta máquina.
+ *
+ * Mirar la tabla de procesos es tosco, pero es lo único que responde la
+ * pregunta real —¿hay alguien atendiendo?— sin inventar un heartbeat en la
+ * base para un sistema de una persona.
+ */
+const serveActivo = (): boolean => {
+  try {
+    const ps = execFileSync('ps', ['-Ao', 'args'], { encoding: 'utf8' });
+    // Exige `node …index.js serve` y no solo la cadena suelta: buscar el texto
+    // a secas cuenta como un bot vivo cualquier `grep index.js serve` o el
+    // propio `pkill` que lo mató — que es exactamente cómo esta comprobación
+    // se equivocó la primera vez.
+    return ps.split('\n').some((l) => /(^|\/)node\s+\S*index\.js\s+serve(\s|$)/.test(l));
+  } catch {
+    // Sin `ps` no se puede saber, y afirmar que falta sería peor que callar.
+    return true;
+  }
+};
 
 const readStdin = async (): Promise<Buffer> => {
   const chunks: Buffer[] = [];
@@ -444,10 +466,16 @@ program
       (c) => {
         const minutos = Math.round((c.expiresAt.getTime() - Date.now()) / 60000);
         const bot = opts.bot?.replace(/^@/, '');
+        // Un código sin nadie atendiendo es un link que no puede funcionar, y
+        // callarlo manda a la persona a mirar el código —que está bien— en vez
+        // del proceso que falta.
+        const sinBot = !serveActivo()
+          ? '\n\n⚠ No veo "dm serve" corriendo: el bot no va a contestar. Levántalo en otra terminal.'
+          : '';
         // El link es el punto entero de §10: tu mamá lo abre y está adentro. Sin
         // cuenta, sin contraseña, sin instalar nada que no tenga ya.
         const link = bot ? `\n\nhttps://t.me/${bot}?start=${c.code}` : '';
-        return `código  ${c.code}   (vence en ${minutos} min, un solo uso)${link}`;
+        return `código  ${c.code}   (vence en ${minutos} min, un solo uso)${link}${sinBot}`;
       },
     );
   });

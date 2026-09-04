@@ -9,8 +9,47 @@ import type { FactField, FactType, FactValue } from './types.js';
  * todo el diseño de §4 se caería.
  */
 
-/** Un extractor no necesita las 80 páginas: los datos duros viven al principio. */
-export const MAX_CONTEXT_CHARS = 6000;
+/** La cabecera, donde vive la mayoría de los datos duros. */
+export const MAX_CONTEXT_CHARS = 5000;
+
+/** Tope de líneas rescatadas por rótulo, para no rearmar el documento entero. */
+const MAX_ANCHORED_LINES = 40;
+
+/**
+ * Qué parte del documento se le muestra al extractor.
+ *
+ * **No los primeros N caracteres.** Eso decidía la respuesta por accidente: en
+ * una cartola real el `MONTO TOTAL FACTURADO A PAGAR` estaba en el carácter
+ * 6157 y el corte era 6000, así que el modelo nunca vio la cifra correcta y
+ * devolvió la del período anterior, que sí entraba. Ciento cincuenta y siete
+ * caracteres separaban una respuesta buena de una mentira con formato.
+ *
+ * Así que va la cabecera **más cada línea que trae un rótulo declarado**. Es
+ * barato —una pasada sobre las líneas—, cabe en el prompt, y garantiza que la
+ * fila que responde esté delante aunque el documento tenga veinte páginas.
+ */
+export function relevantContext(type: FactType, text: string): string {
+  const t = text.trim();
+  if (t.length <= MAX_CONTEXT_CHARS) return t;
+
+  const cabeza = t.slice(0, MAX_CONTEXT_CHARS);
+  const anclas = type.fields
+    .flatMap((f) => [...(f.near ?? []), ...(f.notNear ?? [])])
+    .map((a) => a.toLowerCase());
+  if (anclas.length === 0) return `${cabeza}\n[…recortado]`;
+
+  const resto = t.slice(MAX_CONTEXT_CHARS);
+  const rescatadas: string[] = [];
+  for (const linea of resto.split('\n')) {
+    const l = linea.toLowerCase();
+    if (anclas.some((a) => l.includes(a))) rescatadas.push(linea);
+    if (rescatadas.length >= MAX_ANCHORED_LINES) break;
+  }
+
+  return rescatadas.length === 0
+    ? `${cabeza}\n[…recortado]`
+    : `${cabeza}\n[…recortado, y estas líneas de más adelante:]\n${rescatadas.join('\n')}`;
+}
 
 const COMO: Record<FactField['kind'], string> = {
   text: 'texto corto, tal como aparece',
@@ -47,7 +86,14 @@ export function buildExtractPrompt(
   doc: { text: string; note: string | null },
 ): { system: string; user: string } {
   const campos = type.fields
-    .map((f) => `- ${f.name}: ${f.label} — ${COMO[f.kind]}`)
+    .map((f) => {
+      // El rótulo que se va a verificar después va también en el prompt: pedirle
+      // al modelo que apunte al lugar correcto es más barato que descartar lo
+      // que trajo del lugar equivocado.
+      const cerca = f.near?.length ? ` — búscalo junto a "${f.near[0]}"` : '';
+      const lejos = f.notNear?.length ? `, NUNCA el de "${f.notNear[0]}"` : '';
+      return `- ${f.name}: ${f.label} — ${COMO[f.kind]}${cerca}${lejos}`;
+    })
     .join('\n');
 
   const system = [
@@ -69,11 +115,10 @@ export function buildExtractPrompt(
     '  inventarlo no. Cada valor se comprueba después contra el texto original.',
   ].join('\n');
 
-  const t = doc.text.trim();
   const partes = [
     ...(doc.note ? [`Nota de la persona: ${doc.note}`] : []),
     'Documento:',
-    t.length > MAX_CONTEXT_CHARS ? `${t.slice(0, MAX_CONTEXT_CHARS)}\n[…recortado]` : t,
+    relevantContext(type, doc.text),
   ];
 
   return { system, user: partes.join('\n\n') };
@@ -115,7 +160,7 @@ export function validateExtraction(
   for (const f of type.fields) {
     const valor = coerce(campos[f.name], f.kind);
     if (valor === null) continue;
-    if (!grounded(valor, f.kind, source)) {
+    if (!grounded(valor, f, source)) {
       descartados.push(f.name);
       continue;
     }

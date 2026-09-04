@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coerce, grounded, normalizeDate } from '../../src/core/facts/values.js';
+import { relevantContext } from '../../src/core/facts/prompt.js';
 
 describe('normalizar una fecha', () => {
   it('acepta la forma chilena y la ISO, y las deja iguales', () => {
@@ -34,33 +35,105 @@ describe('coerce · la forma canónica', () => {
   });
 });
 
+/** Un campo mínimo: solo el `kind` importa salvo que se prueben los rótulos. */
+const campo = (kind: 'text'|'number'|'uf'|'money'|'date'|'phone', over = {}) =>
+  ({ name: 'x', kind, label: 'x', aliases: [], ...over });
+
 describe('grounded · que el documento lo diga', () => {
   const poliza = 'Poliza N° B-VP- 9344586-4 · Patente VHWD58 · Deducible UF 3,0 · vigencia 29-07-2026';
   const cartola = 'MONTO FACTURADO A PAGAR $886.568 — PAGAR HASTA 07/09/2026 — CUPO TOTAL $12.500.000';
 
   it('un monto escrito con puntos es el mismo número', () => {
-    expect(grounded(886568, 'money', cartola)).toBe(true);
+    expect(grounded(886568, campo('money'), cartola)).toBe(true);
   });
 
   it('una fecha ISO se reconoce en su forma local', () => {
-    expect(grounded('2026-09-07', 'date', cartola)).toBe(true);
-    expect(grounded('2026-07-29', 'date', poliza)).toBe(true);
+    expect(grounded('2026-09-07', campo('date'), cartola)).toBe(true);
+    expect(grounded('2026-07-29', campo('date'), poliza)).toBe(true);
   });
 
   it('UF 3,0 respalda un 3', () => {
-    expect(grounded(3, 'uf', poliza)).toBe(true);
+    expect(grounded(3, campo('uf'), poliza)).toBe(true);
   });
 
   it('un número de póliza con separadores distintos igual calza', () => {
     // El documento dice "B-VP- 9344586-4"; el modelo limpia los espacios.
-    expect(grounded('B-VP-9344586-4', 'text', poliza)).toBe(true);
+    expect(grounded('B-VP-9344586-4', campo('text'), poliza)).toBe(true);
   });
 
   it('DESCARTA lo que el documento no dice', () => {
     // Es el punto entero: separa "el modelo dijo" de "el documento dice".
-    expect(grounded(5, 'uf', poliza)).toBe(false);
-    expect(grounded('2026-01-01', 'date', cartola)).toBe(false);
-    expect(grounded(999999, 'money', cartola)).toBe(false);
-    expect(grounded('PATENTE-INVENTADA', 'text', poliza)).toBe(false);
+    expect(grounded(5, campo('uf'), poliza)).toBe(false);
+    expect(grounded('2026-01-01', campo('date'), cartola)).toBe(false);
+    expect(grounded(999999, campo('money'), cartola)).toBe(false);
+    expect(grounded('PATENTE-INVENTADA', campo('text'), poliza)).toBe(false);
+  });
+});
+
+/**
+ * El rótulo, no solo la cifra.
+ *
+ * Una cartola real trae las dos: `MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR)
+ * $886.568` y `MONTO TOTAL FACTURADO A PAGAR $1.747.885`. Las dos cifras están
+ * en el documento y las dos pasaban el chequeo — y la respuesta era la del mes
+ * pasado, con toda la confianza del mundo.
+ */
+describe('grounded · bajo qué rótulo', () => {
+  const cartola = [
+    'MONTO FACTURADO A PAGAR (PERIODO ANTERIOR)  $886.568',
+    'MONTO PAGADO PERIODO ANTERIOR  $-929.414',
+    'MONTO TOTAL FACTURADO A PAGAR  $ 1.747.885',
+    'MONTO MINIMO A PAGAR  $ 1.747.885',
+  ].join('\n');
+
+  const monto = campo('money', {
+    near: ['total facturado a pagar'],
+    notNear: ['anterior', 'minimo', 'pagado'],
+  });
+
+  it('rechaza la cifra del período anterior, aunque esté en el documento', () => {
+    expect(grounded(886568, monto, cartola)).toBe(false);
+  });
+
+  it('acepta la del período actual', () => {
+    expect(grounded(1747885, monto, cartola)).toBe(true);
+  });
+
+  it('basta con que UNA ocurrencia esté bien rotulada', () => {
+    // 1.747.885 aparece dos veces: bajo "total facturado" y bajo "mínimo".
+    // La segunda no descalifica a la primera.
+    expect(grounded(1747885, monto, cartola)).toBe(true);
+  });
+
+  it('un campo sin rótulos se comporta como antes', () => {
+    expect(grounded(886568, campo('money'), cartola)).toBe(true);
+  });
+});
+
+/**
+ * Qué parte del documento ve el extractor.
+ *
+ * En una cartola real el `MONTO TOTAL FACTURADO A PAGAR` estaba en el carácter
+ * 6157 y el recorte era 6000: el modelo nunca vio la cifra correcta y devolvió
+ * la del período anterior, que sí entraba. Ciento cincuenta y siete caracteres
+ * separaban una respuesta buena de una mentira con formato.
+ */
+describe('el contexto del extractor', () => {
+  const tipo = {
+    id: 't', slug: 'x', label: 'X', description: '', kind: 'periodo' as const,
+    domainSlug: null, identityField: null, validFromField: null, validUntilField: null,
+    active: true,
+    fields: [campo('money', { near: ['total facturado a pagar'] })],
+  };
+
+  it('rescata la línea del rótulo aunque esté pasado el corte', () => {
+    const relleno = 'relleno de la cartola. '.repeat(500);
+    const doc = `${relleno}\nMONTO TOTAL FACTURADO A PAGAR  $ 1.747.885\n${relleno}`;
+    const ctx = relevantContext(tipo, doc);
+    expect(ctx).toContain('1.747.885');
+  });
+
+  it('un documento corto se manda entero', () => {
+    expect(relevantContext(tipo, 'dos lineas\ny ya')).toBe('dos lineas\ny ya');
   });
 });

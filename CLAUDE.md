@@ -123,6 +123,20 @@ confidence
 cifras de una respuesta (§6). Un campo que no aparece en el documento se descarta. Eso
 convierte la extracción en algo verificable en vez de confiado al modelo.
 
+**Y se comprueba bajo qué rótulo aparece, no solo que aparezca.** Una cartola trae
+`MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR) $886.568` y `MONTO TOTAL FACTURADO A PAGAR
+$1.747.885`: las dos cifras están en el documento, las dos pasaban el chequeo, y la
+respuesta era la del mes pasado. Por eso un campo puede declarar `near` y `notNear`, y
+`notNear` es la mitad indispensable — el rótulo del señuelo **contiene** al del bueno, así
+que lo que los separa no es lo que tienen sino lo que sobra. El contexto se corta en el
+salto de línea, porque el rótulo de un valor es lo que está a su izquierda en su fila.
+
+**Y el extractor no ve "los primeros N caracteres", ve las líneas que importan.** Ese
+recorte decidía la respuesta por accidente: el monto correcto estaba en el carácter 6157 y
+el corte era 6000. Ciento cincuenta y siete caracteres separaban una respuesta buena de
+una mentira con formato. Ahora se le manda la cabecera **más cada línea que trae un rótulo
+declarado**.
+
 ### `FactType` — el registro, también editable
 
 Un tipo no es un enum, por la misma razón que un dominio no lo es (§3.7): agregar uno no
@@ -500,7 +514,7 @@ con auditoría — el chat solo oculta) y la mantención (`classify`, `index`, `
 Construido y en verde: captura, los tres carriles, canal de chat, bandeja de revisión,
 dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
-`tarjeta_credito` (período). **334 tests.**
+`tarjeta_credito` (período). **340 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.

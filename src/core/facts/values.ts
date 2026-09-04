@@ -1,5 +1,5 @@
 import { normalizeNumber } from '../recall/grounding.js';
-import type { FactValue, FieldKind } from './types.js';
+import type { FactField, FactValue, FieldKind } from './types.js';
 
 /**
  * Validar un valor extraído, y comprobar que de verdad esté en el documento.
@@ -90,46 +90,99 @@ export function coerce(raw: unknown, kind: FieldKind): FactValue | null {
  * Un campo que no pasa por acá no se guarda. Es lo que separa "el modelo dijo"
  * de "el documento dice".
  */
-export function grounded(value: FactValue, kind: FieldKind, source: string): boolean {
-  const texto = sinTildes(source);
+/** Tope de contexto hacia atrás, cuando la fila es larguísima. */
+const VENTANA = 200;
+
+/**
+ * Cada trozo del documento donde aparece este valor, con su rótulo.
+ *
+ * **El contexto se corta en el salto de línea**, y eso no es un detalle de
+ * implementación: markitdown deja cada fila de una tabla en su propia línea, así
+ * que el rótulo de un valor es lo que está a su izquierda *en esa fila*. Con una
+ * ventana que cruzaba líneas, el `MONTO TOTAL FACTURADO A PAGAR` se contaminaba
+ * con el `PERÍODO ANTERIOR` de la fila de arriba y quedaba descalificado el
+ * valor bueno.
+ */
+function occurrences(value: FactValue, kind: FieldKind, texto: string): string[] {
+  const ventanas: string[] = [];
+  const push = (i: number, len: number) => {
+    const salto = texto.lastIndexOf('\n', i);
+    const desde = Math.max(salto + 1, i - VENTANA, 0);
+    const fin = texto.indexOf('\n', i + len);
+    ventanas.push(texto.slice(desde, fin === -1 ? i + len + 40 : fin));
+  };
 
   switch (kind) {
     case 'date': {
       const [y, m, d] = String(value).split('-');
       const dd = String(Number(d));
       const mm = String(Number(m));
-      // ISO, y las dos formas locales con y sin cero a la izquierda.
-      const formas = [
-        `${y}-${m}-${d}`,
-        `${d}/${m}/${y}`, `${dd}/${mm}/${y}`,
-        `${d}-${m}-${y}`, `${dd}-${mm}-${y}`,
-        `${d}.${m}.${y}`,
-      ];
-      return formas.some((f) => texto.includes(f));
+      for (const f of [`${y}-${m}-${d}`, `${d}/${m}/${y}`, `${dd}/${mm}/${y}`,
+                       `${d}-${m}-${y}`, `${dd}-${mm}-${y}`, `${d}.${m}.${y}`]) {
+        let i = texto.indexOf(f);
+        while (i >= 0) { push(i, f.length); i = texto.indexOf(f, i + 1); }
+      }
+      return ventanas;
     }
     case 'phone': {
-      const d = digits(String(value));
-      // El documento lo puede partir con espacios o guiones en cualquier lado.
-      return digits(texto).includes(d);
+      // El documento lo parte con espacios y guiones, así que no hay índice
+      // fiable: se acepta el documento entero como contexto.
+      return digits(texto).includes(digits(String(value))) ? [texto] : [];
     }
     case 'number':
     case 'uf':
     case 'money': {
       const objetivo = normalizeNumber(String(value));
-      // Cada número del documento, normalizado igual. Comparar así hace que
-      // `UF 3,0` case con `3` y `$886.568` con `886568`.
       for (const m of texto.matchAll(/\d[\d.,]*\d|\d/g)) {
-        if (normalizeNumber(m[0]) === objetivo) return true;
+        if (normalizeNumber(m[0]) === objetivo) push(m.index, m[0].length);
       }
-      return false;
+      return ventanas;
     }
     case 'text': {
       const v = sinTildes(String(value)).replace(/\s+/g, ' ').trim();
-      if (v.length < 2) return false;
-      // Los números de póliza y tarjeta vienen con separadores que el modelo
-      // limpia: `B-VP- 9344586-4` → `B-VP-9344586-4`. Se compara sin ruido.
-      const limpio = (t: string) => t.replace(/[\s.\-/]/g, '');
-      return texto.includes(v) || limpio(texto).includes(limpio(v));
+      if (v.length < 2) return [];
+      let i = texto.indexOf(v);
+      while (i >= 0) { push(i, v.length); i = texto.indexOf(v, i + 1); }
+      if (ventanas.length === 0) {
+        const limpio = (t: string) => t.replace(/[\s.\-/]/g, '');
+        if (limpio(texto).includes(limpio(v))) return [texto];
+      }
+      return ventanas;
     }
   }
+}
+
+/**
+ * ¿Este valor está en el documento, y **bajo el rótulo correcto**?
+ *
+ * No se compara carácter a carácter: un monto que el PDF escribe `$886.568` y
+ * el modelo devuelve `886568` es el mismo dato, y `07/09/2026` es la misma
+ * fecha que `2026-09-07`. Se compara el valor normalizado contra todas las
+ * formas en que el documento pudo escribirlo.
+ *
+ * **Y después se mira alrededor**, que es la parte que costó descubrir. Una
+ * cartola trae `MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR) $886.568` y
+ * `MONTO TOTAL FACTURADO A PAGAR $1.747.885`: las dos cifras existen, las dos
+ * pasaban el chequeo, y la respuesta era la del mes pasado. Que el rótulo del
+ * señuelo contenga al del bueno es lo que hace que `notNear` sea la mitad
+ * indispensable — lo que los separa no es lo que tienen, es lo que sobra.
+ *
+ * Un campo sin `near` ni `notNear` se comporta como antes: basta que el valor
+ * esté. La mayoría no necesita más.
+ */
+export function grounded(value: FactValue, field: FactField, source: string): boolean {
+  const texto = sinTildes(source);
+  const ventanas = occurrences(value, field.kind, texto);
+  if (ventanas.length === 0) return false;
+
+  const near = (field.near ?? []).map(sinTildes);
+  const notNear = (field.notNear ?? []).map(sinTildes);
+  if (near.length === 0 && notNear.length === 0) return true;
+
+  // Basta con que UNA ocurrencia esté bien rotulada: el mismo número puede
+  // aparecer diez veces y solo una ser la que responde.
+  return ventanas.some((v) =>
+    (near.length === 0 || near.some((n) => v.includes(n))) &&
+    !notNear.some((n) => v.includes(n)),
+  );
 }

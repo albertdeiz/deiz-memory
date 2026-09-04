@@ -118,13 +118,20 @@ export const SEED_FACT_TYPES: Omit<FactType, 'id' | 'active'>[] = [
       // como alias hacía que toda pregunta sobre la tarjeta arrastrara sus
       // dígitos. La identidad se muestra al lado del dato, que es donde sirve.
       { name: 'tarjeta', kind: 'text', label: 'últimos dígitos de la tarjeta', aliases: [] },
-      { name: 'monto_a_pagar', kind: 'money', label: 'monto facturado a pagar', aliases: ['pagar', 'monto', 'facturado', 'deuda'] },
-      { name: 'pagar_hasta', kind: 'date', label: 'fecha límite de pago', aliases: ['vence', 'vencimiento', 'plazo'] },
+      // El rótulo del señuelo contiene al del bueno —"monto facturado a pagar
+      // (período anterior)"— así que lo que los separa es `notNear`.
+      { name: 'monto_a_pagar', kind: 'money', label: 'monto TOTAL facturado a pagar de este período',
+        aliases: ['pagar', 'monto', 'facturado', 'deuda'],
+        near: ['total facturado a pagar'], notNear: ['anterior', 'minimo', 'pagado', 'cancelado'] },
+      { name: 'pagar_hasta', kind: 'date', label: 'fecha límite de pago', aliases: ['vence', 'vencimiento', 'plazo'],
+        near: ['pagar hasta'] },
       { name: 'cupo_total', kind: 'money', label: 'cupo total', aliases: ['cupo'] },
       { name: 'cupo_disponible', kind: 'money', label: 'cupo disponible', aliases: ['disponible'] },
       { name: 'tasa', kind: 'number', label: 'tasa de interés vigente (%)', aliases: ['tasa', 'interes'] },
-      { name: 'periodo_desde', kind: 'date', label: 'inicio del período facturado', aliases: ['periodo'] },
-      { name: 'periodo_hasta', kind: 'date', label: 'fin del período facturado', aliases: ['periodo'] },
+      { name: 'periodo_desde', kind: 'date', label: 'inicio del período facturado', aliases: ['periodo'],
+        near: ['periodo  facturado', 'periodo facturado'], notNear: ['anterior'] },
+      { name: 'periodo_hasta', kind: 'date', label: 'fin del período facturado', aliases: ['periodo'],
+        near: ['periodo  facturado', 'periodo facturado'], notNear: ['anterior'] },
     ],
   },
 ];

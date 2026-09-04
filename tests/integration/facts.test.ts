@@ -164,7 +164,7 @@ describe('estado y periodo no se tratan igual', () => {
     // La de julio sigue siendo la verdad sobre julio, para siempre. Sin la
     // distinción `periodo`, agosto la habría marcado superada.
     for (const [desde, hasta] of [['24/06/2026', '21/07/2026'], ['24/07/2026', '21/08/2026']]) {
-      const id = await guardar(`TARJETA XXXXX4005 · PERÍODO ${desde} al ${hasta}`, 'finanzas');
+      const id = await guardar(`TARJETA XXXXX4005\nPERIODO FACTURADO ${desde} al ${hasta}`, 'finanzas');
       s.deps.classifier = modelo({
         aplica: true,
         campos: { tarjeta: 'XXXXX4005', periodo_desde: desde, periodo_hasta: hasta },
@@ -238,7 +238,7 @@ describe('el modo hecho responde', () => {
   });
 
   it('en un periodo no existe "vencido": julio sigue siendo julio', async () => {
-    const id = await guardar('TARJETA XXXXX4005 · PERÍODO 24/06/2026 al 21/07/2026', 'finanzas');
+    const id = await guardar('TARJETA XXXXX4005\nPERIODO FACTURADO 24/06/2026 al 21/07/2026', 'finanzas');
     s.deps.classifier = modelo({
       aplica: true,
       campos: { tarjeta: 'XXXXX4005', periodo_desde: '24/06/2026', periodo_hasta: '21/07/2026' },

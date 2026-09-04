@@ -7,7 +7,7 @@ El diseño está en [CLAUDE.md](./CLAUDE.md). Esto es lo que hace falta para cor
 **Estado.** Captura, normalización por tres carriles, búsqueda full-text y semántica,
 clasificación con IA local, preguntas en lenguaje natural con cita verificada, y **datos
 tipados** para los campos que no toleran un ranking. Todo por Telegram o por terminal.
-334 tests.
+340 tests.
 
 El sistema se vació el 3 de septiembre de 2026 para poblarlo desde cero; si vienes de
 antes, hay que **volver a vincular el chat** con `dm pair`.
@@ -282,6 +282,22 @@ El modelo propone; el código verifica. Un campo que no aparece en el texto orig
 descarta, comparando el valor normalizado contra todas las formas en que el documento
 pudo escribirlo: `UF 3,0` respalda un `3`, `$886.568` respalda un `886568`, y `07/09/2026`
 respalda un `2026-09-07`. Sin esa normalización se descartarían justo los valores buenos.
+
+**Y bajo qué rótulo, no solo que exista.** Tu cartola trae dos filas parecidas:
+
+```
+MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR)   $886.568     ← el mes pasado
+MONTO TOTAL FACTURADO A PAGAR                $1.747.885   ← el correcto
+```
+
+Las dos cifras están en el documento y las dos pasaban el chequeo, así que la respuesta
+era la del mes pasado con toda confianza. Ahora un campo declara junto a qué palabras debe
+estar y junto a cuáles **no** — y esto último es lo indispensable, porque el rótulo del
+señuelo contiene al del bueno: lo que los separa no es lo que tienen, es lo que sobra.
+
+Y el extractor ya no ve "los primeros N caracteres" sino **la cabecera más las líneas que
+traen un rótulo declarado**. El recorte estaba decidiendo la respuesta: el monto correcto
+vivía en el carácter 6157 y el corte era 6000.
 
 Y **sin el campo identidad no es de ese tipo**. Eso salió de medir: en el dominio
 `seguros` había una póliza, una liquidación de siniestro y un certificado de cobertura, y

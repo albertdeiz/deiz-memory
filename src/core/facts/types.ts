@@ -29,6 +29,23 @@ export interface FactField {
    * Determinista, como todo lo que decide algo acá.
    */
   aliases: string[];
+  /**
+   * Palabras que tienen que estar **cerca del valor** en el documento.
+   *
+   * Comprobar que la cifra exista no alcanza: una cartola trae
+   * `MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR) $886.568` y
+   * `MONTO TOTAL FACTURADO A PAGAR $1.747.885`, y las dos cifras están en el
+   * texto. Sin mirar el rótulo, el guardarraíl daba por bueno el mes pasado.
+   */
+  near?: string[];
+  /**
+   * Palabras que **descalifican** una ocurrencia.
+   *
+   * Es la mitad que de verdad importa, porque el rótulo del señuelo suele
+   * contener al del bueno: "monto facturado a pagar" está dentro de "monto
+   * facturado a pagar (período anterior)". Lo que los separa es `anterior`.
+   */
+  notNear?: string[];
 }
 
 /**

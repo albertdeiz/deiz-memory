@@ -8,12 +8,12 @@ import type { Outcome } from '../../core/router/route';
 import type { Result } from '../../core/result';
 
 /**
- * El único lugar donde vive la prosa del chat — el gemelo de
+ * The only place the chat's prose lives — the twin of the CLI formatter.
  * `src/adapters/cli/format.ts`.
  *
- * Vive en `adapters/chat/` y no dentro de `telegram/` porque WhatsApp lo va a
- * compartir entero: lo único que cambia entre canales es el transporte y los
- * números de las capacidades.
+ * It sits beside the transports rather than inside one because the next
+ * channel shares it whole: all that changes between channels is the transport
+ * and the capability numbers.
  */
 
 const KINDS: [string, string][] = [
@@ -21,14 +21,14 @@ const KINDS: [string, string][] = [
   ['video/', 'video'], ['text/', 'texto'],
 ];
 
-/** Un tamaño legible: en el teléfono "126 KB" dice más que 129024. */
+/** A readable size: on a phone "126 KB" says more than 129024. */
 const size = (bytes: number): string =>
   bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
 
 const kindOf = (mediaType: string | null): string =>
   KINDS.find(([p]) => mediaType?.startsWith(p))?.[1] ?? 'file';
 
-/** Igual que en el CLI: un nombre de cámara no es un título. */
+/** As in the CLI: a camera filename is not a title. */
 const label = (m: MemorySummary): string =>
   m.title ?? meaningfulName(m.originalFilename) ?? m.excerpt ?? `(${kindOf(m.mediaType)} sin nombre)`;
 
@@ -36,12 +36,12 @@ const day = (d: Date | null): string =>
   d ? new Date(d).toISOString().slice(0, 10) : '—';
 
 /**
- * Botones si el canal los tiene, lista numerada si no — **con las mismas
+ * Buttons where the channel has them, a numbered list where it does not —
  * acciones en los dos casos**.
  *
- * Esta función es toda la degradación de §7.1. No hay dos ramas de lógica:
- * hay una lista de opciones y dos formas de mostrarla, porque la acción del
- * botón y la palabra que se escribe son la misma cadena (`router/actions.ts`).
+ * This function IS the whole degradation. There are not two branches of logic:
+ * there is one list of options and two ways to show it, because the button's
+ * action and the typed word are the same string.
  */
 const withOptions = (body: string, options: Option[], caps: Capabilities): Reply => {
   if (options.length === 0) return { kind: 'text', body };
@@ -55,26 +55,26 @@ const withOptions = (body: string, options: Option[], caps: Capabilities): Reply
 
 
 /**
- * Las acciones de una lista: por cada elemento, los datos y el archivo.
+ * A list's actions: for each item, the data and the file.
  *
- * **Esto es el patrón de TODO listado que entregue el bot** — resultados de
- * búsqueda, categoría, bandeja de revisión y las fuentes de una respuesta. Que
- * cada uno armara sus propios botones es exactamente lo que hizo que preguntar
- * ofreciera solo `view` mientras buscar ofrecía `view` y `open`: no es una
- * decisión distinta por pantalla, es la misma y hay que escribirla una vez.
+ * **This is the pattern for EVERY listing the bot hands over** — search
+ * results, a category, the review inbox and an answer's sources. Each one
+ * building its own buttons is exactly what made asking offer only `view` while
+ * searching offered `view` and `open`: it is not a different decision per
+ * screen, it is the same one, and it belongs in one place.
  *
- * Van los dos juntos porque son las dos cosas que quieres hacer con un
- * resultado, y separarlos —abrir el detalle solo para pedir el original— hacía
- * que bajar un documento costara dos toques y una pantalla intermedia.
+ * Both go together because they are the two things you want to do with a
+ * result, and splitting them — opening the detail just to reach the original —
+ * made downloading a document cost two taps and an intermediate screen.
  *
- * `group` los pone lado a lado donde el canal tiene filas. Donde no, se listan
- * como cualquier otra acción: la degradación no depende de esto.
+ * `group` places them side by side where the channel has rows. Where it does
+ * not, they are listed like any other action: degradation does not depend on it.
  */
 const porItem = (items: readonly { mediaType: string | null }[]): Option[] =>
   items.flatMap((m, i) => {
     const n = i + 1;
     const fila: Option[] = [{ label: `${n} · datos`, action: encodeAction({ kind: 'view', n }), group: n }];
-    // Sin archivo original no se ofrece bajarlo: un botón que sabe que va a
+    // With no original file, downloading is not offered: a button that knows it
     // fallar es peor que no estar.
     if (m.mediaType) {
       fila.push({ label: `${n} · archivo`, action: encodeAction({ kind: 'open', n }), group: n });
@@ -83,10 +83,10 @@ const porItem = (items: readonly { mediaType: string | null }[]): Option[] =>
   });
 
 /**
- * Los datos duros que respondieron.
+ * The hard data that answered.
  *
- * **La advertencia va antes del valor** (regla dura 10). Leer "UF 3" y recién
- * después "vencida en 2024" es exactamente el modo de falla de §1.3: el riesgo
+ * **The warning goes before the value.** Reading "UF 3" and only then
+ * "expired in 2024" is exactly the failure mode this prevents: the risk is not
  * no es olvidar un dato, es leer el viejo sin darte cuenta.
  */
 function factsBody(hits: FactHit[]): string {
@@ -95,7 +95,7 @@ function factsBody(hits: FactHit[]): string {
     return `${aviso ? `⚠ ${aviso}.\n` : ''}${h.ref.field.label}: ${renderValue(h.value, h.ref.field.kind)}\n` +
       `   ${contextOf(h)} · ${h.fact.shortId}`;
   });
-  // Regla dura 3: dos vigentes del mismo dato no se resuelven eligiendo uno.
+  // Two live copies of the same datum are not resolved by picking one.
   const conflicto = conflicting(hits)
     ? '\n\nHay dos vigentes que dicen cosas distintas. No elijo por ti.'
     : '';
@@ -143,8 +143,8 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
     case 'saved': {
       const c = v.capture;
       const dedup = c.deduped ? '\nYa lo tenías: es el mismo archivo, pero queda como memoria aparte.' : '';
-      // El acuse dice el ESTADO, no solo "éxito". Sin esta línea la espera es
-      // invisible; con ella es una espera declarada, que es otra cosa.
+      // The acknowledgement states the STATUS, not just success. Without this line
+      // the wait is invisible; with it, the wait is declared, which is different.
       const leyendo = v.queued
         ? '\nLo estoy leyendo — en un rato lo vas a poder buscar por lo que dice adentro.'
         : '';
@@ -161,16 +161,16 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
 
     case 'answer': {
       const a = v.answer;
-      // Modo hecho (§6): el dato exacto, con su vigencia y su cita. No hay
-      // lista que paginar ni pasajes que ofrecer — hay una respuesta.
+      // Fact mode: the exact datum, with its validity and its citation. There is
+      // no list to page and no passages to offer — there is an answer.
       if (a.facts?.length) return [{ kind: 'text', body: factsBody(a.facts) }];
-      // Las fuentes van siempre, aunque la respuesta sea buena: la regla dura 1
+      // Sources are always shown, even for a good answer: backing is required, and
       // pide respaldo, y en el chat eso significa poder abrir el documento.
       const fuentes = a.sources.map((p, i) =>
         `${i + 1}. ${p.title ?? '(sin título)'}\n   ${day(p.occurredAt ?? p.capturedAt)} · ${p.shortId}`);
-      // Cuando la prosa se descartó por no tener respaldo, se dice — y se
-      // muestran igual las fuentes, que sí son verdad verificable. Callarlo y
-      // listar documentos deja creer que no había nada (reglas duras 1 y 2).
+      // When the prose was discarded for lack of backing, that gets said — and the
+      // sources are shown anyway, since they are verifiable truth. Staying quiet
+      // and listing documents lets you believe there was nothing.
       const cabeza = a.text ?? (a.reason === 'ungrounded'
         ? 'No pude darte la cifra sin inventarla. Lo que encontré:'
         : 'No pude responderlo sin inventar. Lo que encontré:');
@@ -178,9 +178,9 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
     }
 
     case 'detail': {
-      // Los datos de la memoria, no su transcripción. Volcar 1200 caracteres de
-      // una póliza acá era llenar la pantalla con lo que el archivo ya dice
-      // mejor: para eso está el botón de al lado, que te lo manda entero.
+      // The memory's data, not its transcript. Dumping 1200 characters of a policy
+      // here filled the screen with what the file itself says better: that is what
+      // the button next to it is for, which sends the whole thing.
       const m = v.memory;
       const lines = [label(m), `${day(m.occurredAt ?? m.capturedAt)} · ${m.shortId}`];
 
@@ -192,17 +192,17 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       if (ficha.length) lines.push(ficha.join(' · '));
       if (m.tags.length) lines.push(m.tags.map((t) => `#${t}`).join(' '));
 
-      // La cabecera cae al excerpt cuando no hay título, y el excerpt es la
-      // nota: sin esto, una nota suelta se leía dos veces seguidas.
+      // The header falls back to the excerpt when there is no title, and the excerpt
+      // IS the note: without this, a bare note read twice in a row.
       const cabecera = lines[0];
       if (m.note && cabecera !== m.excerpt) lines.push('', `tu nota: ${m.note}`);
       if (m.normalizationError) lines.push('', `⚠ ${m.normalizationError}`);
 
-      // Un asomo de LO LEÍDO, no `excerpt`.
+      // A glimpse of WHAT WAS READ, not the excerpt.
       //
-      // `excerpt` es `note ?? normalized_text` a propósito —en una lista tus
-      // palabras se reconocen mejor que el OCR del papel—, pero acá la nota ya
-      // se mostró arriba, así que usarlo la repetía entera.
+      // The excerpt is note-or-extracted-text on purpose — in a list your own words
+      // are easier to recognise than the OCR of the paper — but here the note was
+      // already shown above, so using it repeated the whole thing.
       const leido = excerptOf(m.normalizedText, 240);
       if (leido) lines.push('', leido);
       else if (m.sha256 && !m.normalizedAt) lines.push('', 'Todavía no lo he leído.');
@@ -244,8 +244,8 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
 
     case 'review': {
       if (v.items.length === 0) return [{ kind: 'text', body: 'No hay nada que revisar.' }];
-      // Cada línea dice qué hacer, no solo qué pasó: una bandeja que enumera
-      // problemas sin salida te deja igual que antes.
+      // Each line says what to do, not just what happened: an inbox that enumerates
+      // problems with no way out leaves you where you started.
       const cuerpo = v.items
         .map((m, i) => {
           const salida =
@@ -267,8 +267,8 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
 
     case 'proposals': {
       if (v.items.length === 0) return [{ kind: 'text', body: 'No veo categorías que te falten.' }];
-      // Se muestran los ejemplos para que puedas decidir mirando, no a ciegas.
-      // Y se propone: crear lo decides tú, desde la terminal (§9).
+      // Examples are shown so you can decide by looking, not blindly.
+      // And it proposes: creating is your call.
       const cuerpo = v.items
         .map((p) => [
           `${p.memoryIds.length} cosas parecen "${p.label}"`,
@@ -287,7 +287,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       if (v.items.length === 0) {
         return [{ kind: 'text', body: `No hay nada en ${v.domain.label} todavía.` }];
       }
-      // Ordenado por cuándo PASÓ, no por cuándo lo guardaste (§3.3).
+      // Ordered by when it HAPPENED, not by when you stored it.
       const cuerpo = v.items
         .map((m, i) => `${i + 1}. ${label(m)}\n   ${day(m.occurredAt ?? m.capturedAt)} · ${m.shortId}`)
         .join('\n');
@@ -303,15 +303,15 @@ function resultados(
   v: Extract<Outcome, { kind: 'results' }>,
   caps: Capabilities,
 ): Reply[] {
-  // La línea de pendientes no es cortesía: una búsqueda que dice "no lo tengo"
-  // mientras un OCR corre está mintiendo, y §15 mide justamente eso.
+  // The pending line is not courtesy: a search that says "I do not have it"
+  // while an OCR pass is running is lying, and that rate is what matters.
   const leyendo = v.pendientes > 0
     ? `\n\n(${v.pendientes === 1 ? 'Falta 1 cosa' : `Faltan ${v.pendientes} cosas`} por leer — si no aparece, pregúntame en un rato.)`
     : '';
 
   if (v.items.length === 0) {
-    // Pedir "más" y que no quede nada no es lo mismo que no tenerlo: lo primero
-    // es el final de una lista, lo segundo una respuesta sobre tu memoria.
+    // Asking for "more" and finding none is not the same as not having it: the
+    // first is the end of a list, the second an answer about your memory.
     if (v.exhausted) return [{ kind: 'text', body: 'No hay más.' }];
     const options: Option[] = v.offerSave
       ? [{ label: 'guardarlo como nota', action: encodeAction({ kind: 'save' }) }]
@@ -333,7 +333,7 @@ function resultados(
   return [withOptions(`${head}\n\n${numbered}${leyendo}`, options, caps)];
 }
 
-/** Errores y confirmaciones. Qué pasó y qué hacer, sin disculpas. */
+/** Errors and confirmations. What happened and what to do, without apology. */
 function failure(
   result: Extract<Result<unknown>, { ok: false }>,
   caps: Capabilities,

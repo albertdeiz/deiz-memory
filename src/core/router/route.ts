@@ -112,7 +112,7 @@ async function registerList(
     return r;
   }
 
-  // Abrir un detalle no cambia la lista: mueve el foco. Se conserva `ids` para
+  // Opening a detail does not change the list: it moves the focus. `ids` is kept
   // so "view 3" still means the third of what you are looking at.
   if (v.kind === 'detail') {
     const prev = await readSession(deps.db, input.conv);
@@ -128,11 +128,11 @@ async function registerList(
 }
 
 /**
- * Los ids de una lista numerada, en el mismo orden en que se muestran.
+ * The ids of a numbered list, in the same order they are shown.
  *
- * Un caso por cada listado que el bot entrega con acciones. `resultados` no
- * está porque `doSearch` escribe la suya —lleva además la query y el offset
- * para que "more" siga paginando—, y duplicarla acá la pisaría.
+ * One case per listing the bot hands over with actions. Search results are
+ * not here because that path writes its own, carrying the query and offset
+ * so paging keeps working; duplicating it here would clobber it.
  */
 function numbered(v: Outcome): string[] | null {
   switch (v.kind) {
@@ -320,7 +320,7 @@ async function doCapture(
     try {
       bytes = await attachment.fetch();
     } catch (e) {
-      // No se crea la memoria: una fila apuntando a un blob que no existe es
+      // The memory is not created: a row pointing at a blob that does not exist is
       // worse than not having the row at all, same as at capture time.
       return err('invalid', `No pude bajar el archivo: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -335,10 +335,10 @@ async function doCapture(
   });
   if (!res.ok) return res;
 
-  // Capturar cierra lo que hubiera en pantalla: la lista vieja ya no aplica.
+  // Capturing closes whatever was on screen: the old list no longer applies.
   await writeSession(deps.db, conv, actor.ownerId, { pending: null }, now);
 
-  // Solo hay algo que leer si vino un archivo; un texto suelto ya es texto.
+  // There is only something to read if a file arrived; bare text is already text.
   const queued = res.value.sha256 !== null;
   return ok({ kind: 'saved', capture: res.value, queued });
 }

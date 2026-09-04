@@ -4,35 +4,35 @@ import type {
 } from '../../../core/channel/types';
 
 /**
- * Telegram. Transporte y nada más.
+ * Telegram. Transport and nothing else.
  *
- * Este archivo es el único del proyecto que sabe qué es un `chat_id` o un
- * `callback_query`. Todo lo que decide algo —qué verbo es un mensaje, cómo se
- * ve una respuesta, quién puede hablar— vive en `core/router` y en
- * `chat/present.ts`, y no cambia cuando entre WhatsApp.
+ * This is the only file in the project that knows what a `chat_id` or a
+ * `callback_query` is. Everything that decides anything — which verb a message
+ * is, how a reply looks, who may speak — lives in the router and the presenter,
+ * and does not change when a second channel arrives.
  *
- * Se mantiene delgado a propósito: es la razón por la que "no tiene tests
- * propios" es una afirmación honesta y no una excusa.
+ * Kept thin on purpose: it is the reason "it has no tests of its own" is an
+ * honest statement rather than an excuse.
  */
 
 export interface TelegramConfig {
   token: string;
   /**
-   * Base de la API. Se puede apuntar a un servidor Bot API local
-   * (`tdlib/telegram-bot-api`), que es la única forma de saltarse el techo de
+   * API base. It can point at a self-hosted Bot API server, which is the only
+   * way to get past the download cap.
    * 20 MB para bajar archivos.
    */
   apiRoot?: string | undefined;
-  /** El mismo techo, declarado. Con servidor local sube a 2000 MB. */
+  /** The same cap, declared. A self-hosted server raises it. */
   maxDownloadBytes?: number;
 }
 
 /**
- * Los números de Telegram, con su fuente.
+ * This platform's numbers, with their source.
  *
- * El de descarga es el que duele: `getFile` no baja más de 20 MB y **no hay
- * workaround del lado del bot**. No es una degradación elegante, es un muro, y
- * por eso el core lo compara antes de intentar nada.
+ * The download one is the one that hurts: the API will not fetch more than
+ * 20 MB and **there is no workaround on the bot's side**. Not a graceful
+ * degradation but a wall, which is why the core compares before trying.
  */
 export const telegramCapabilities = (maxDownloadBytes = 20 * 1024 * 1024): Capabilities => ({
   maxUploadBytes: 50 * 1024 * 1024,
@@ -44,7 +44,7 @@ export const telegramCapabilities = (maxDownloadBytes = 20 * 1024 * 1024): Capab
   canInitiate: true,
 });
 
-/** Telegram parte los mensajes largos; mejor cortar nosotros que que corte él. */
+/** The platform splits long messages; better to cut them ourselves. */
 const MAX_TEXT = 3800;
 
 const chunk = (s: string): string[] => {
@@ -52,8 +52,8 @@ const chunk = (s: string): string[] => {
   const out: string[] = [];
   let rest = s;
   while (rest.length > MAX_TEXT) {
-    // Cortar en un salto de línea si hay uno cerca: partir una palabra por la
-    // mitad se ve como un error, y acá abajo hay transcripciones.
+    // Cut on a line break when one is near: splitting a word in half reads as a
+    // bug, and transcripts live down here.
     const cut = rest.lastIndexOf('\n', MAX_TEXT);
     const at = cut > MAX_TEXT * 0.6 ? cut : MAX_TEXT;
     out.push(rest.slice(0, at));
@@ -86,12 +86,12 @@ function attachmentOf(ctx: Context): Attachment | null {
       };
     }
     if (m.photo?.length) {
-      // El último es el de mayor resolución.
+      // The last one is the highest resolution.
       const p = m.photo[m.photo.length - 1]!;
       return { fileId: p.file_id, name: null, mime: 'image/jpeg', size: p.file_size ?? null };
     }
-    // Una nota de voz sale gratis: Telegram la manda OGG/Opus sin nombre, y
-    // `detectMediaType()` ya reconoce la firma `OggS` por magic bytes.
+    // A voice note comes free: it arrives as OGG/Opus with no name, and media
+    // detection already recognises the signature by magic bytes.
     const media = m.voice ?? m.audio ?? m.video ?? m.video_note;
     if (media) {
       const name = 'file_name' in media && typeof media.file_name === 'string' ? media.file_name : null;
@@ -108,7 +108,7 @@ function attachmentOf(ctx: Context): Attachment | null {
     filename: f.name,
     declaredMediaType: f.mime,
     sizeBytes: f.size,
-    // Perezoso: el core compara el tamaño antes de que esto se llame.
+    // Lazy: the core compares the size before this is ever called.
     fetch: async () => {
       const file = await ctx.api.getFile(f.fileId);
       if (!file.file_path) throw new Error('Telegram no devolvió la ruta del archivo');
@@ -133,7 +133,7 @@ export function telegramChannel(cfg: TelegramConfig): Channel {
     const parts = chunk(r.body);
     for (const [i, part] of parts.entries()) {
       const last = i === parts.length - 1;
-      // Los botones van solo en el último trozo: repetirlos se ve roto.
+      // Buttons go only on the last chunk: repeating them looks broken.
       const markup = last && r.options?.length
         ? { inline_keyboard: rows(r.options) }
         : undefined;
@@ -142,11 +142,11 @@ export function telegramChannel(cfg: TelegramConfig): Channel {
   };
 
 /**
-   * Reparte las opciones en filas respetando su `group`.
+   * Lays the options out in rows, respecting their group.
    *
-   * Telegram apila una fila por botón, y con dos acciones por resultado eso son
-   * once filas en una página de cinco: un muro que hay que scrollear. Las que
-   * comparten `group` van lado a lado; las que no traen ninguno siguen solas,
+   * The platform stacks one row per button, and with two actions per result that
+   * is eleven rows on a page of five: a wall to scroll. Options sharing a group
+   * go side by side; those without one stay alone, as before.
    * como antes.
    */
   const rows = (options: readonly Option[]): { text: string; callback_data: string }[][] => {
@@ -190,16 +190,16 @@ export function telegramChannel(cfg: TelegramConfig): Channel {
 
       bot.on('message', (ctx) => run(ctx, null));
       bot.on('callback_query:data', async (ctx) => {
-        // Sin esto Telegram deja el botón "cargando" para siempre.
+        // Without this the platform leaves the button spinning forever.
         await ctx.answerCallbackQuery().catch(() => {});
         await run(ctx, ctx.callbackQuery.data);
       });
 
       // Nunca el cuerpo del mensaje (§14): un error de red no justifica escribir
-      // una receta médica en un log.
+      // a medical prescription in a log.
       bot.catch((e) => console.error(`[telegram] ${e.message}`));
 
-      // start() no resuelve mientras el bot corre, así que no se espera.
+      // start() does not resolve while the bot runs, so it is not awaited.
       void bot.start({ drop_pending_updates: true });
       return { async stop() { await bot.stop(); } };
     },

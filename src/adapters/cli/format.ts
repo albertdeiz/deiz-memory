@@ -7,8 +7,8 @@ import type { Result } from '../../core/result';
 import { meaningfulName } from '../../core/filenames';
 
 /**
- * El único lugar del proyecto donde vive la prosa. El core no sabe que existe:
- * devuelve datos y este archivo decide cómo se ven.
+ * One of the only two places prose lives. The core does not know it exists:
+ * it returns data and this file decides how it looks.
  */
 const KB = 1024;
 export const humanSize = (bytes: number | null): string => {
@@ -35,8 +35,8 @@ const kindOf = (mediaType: string | null): string => {
 };
 
 /**
- * Un nombre de cámara o de WhatsApp no es un título: antes de caer en él se
- * prefiere el contenido. Y si tampoco hay, se dice qué es en vez de mentir.
+ * A camera or messenger filename is not a title: content is preferred before
+ * falling back to it. With no content either, say what it is instead of lying.
  */
 const label = (m: MemorySummary): string =>
   m.title ?? meaningfulName(m.originalFilename) ?? m.excerpt ?? `(${kindOf(m.mediaType)} sin nombre)`;
@@ -52,7 +52,7 @@ export function renderList(items: MemorySummary[]): string {
     .join('\n');
 }
 
-/** Cómo se leyó el archivo. Sale en dm show porque explica qué esperar del texto. */
+/** How the file was read. Shown in the detail because it sets expectations. */
 const LANE_LABEL: Record<string, string> = {
   text: 'leído tal cual',
   document: 'markitdown',
@@ -81,24 +81,24 @@ export function renderDetail(m: MemoryDetail): string {
     lines.push('carril     todavía sin normalizar — corre dm worker');
   }
 
-  // El error va antes del texto y no después: si lo que sigue está incompleto,
+  // The error goes before the text and not after: if what follows is incomplete,
   // enterarse al final es enterarse tarde.
   if (m.normalizationError) lines.push(`⚠ carril    ${m.normalizationError}`);
 
-  // Las dos fuentes se muestran separadas y etiquetadas. Mezclarlas dejaría a
-  // la persona sin saber qué escribió ella y qué leyó una máquina de un papel —
-  // que es exactamente la diferencia entre un dato y una suposición.
+  // The two sources are shown separately and labelled. Merging them would leave
+  // the person unable to tell what they wrote from what a machine read off paper
+  // — which is exactly the difference between a datum and a guess.
   if (m.note) lines.push('', 'tu nota:', m.note);
   if (m.normalizedText) lines.push('', 'del archivo:', m.normalizedText);
   return lines.join('\n');
 }
 
 /**
- * La bandeja de revisión.
+ * The review inbox.
  *
- * Lo que importa acá no es la lista: es que cada línea diga **qué hacer**. Una
- * bandeja que enumera problemas sin decir cuál se arregla reintentando y cuál
- * necesita otra cosa te deja igual que antes, mirando psql.
+ * What matters here is not the list: it is that each line says **what to do**.
+ * An inbox that enumerates problems without saying which a retry fixes and
+ * which needs something else leaves you exactly where you started.
  */
 export function renderReview(items: ReviewItem[]): string {
   if (items.length === 0) return 'Nada que revisar.';
@@ -120,9 +120,9 @@ export function renderReview(items: ReviewItem[]): string {
   const retryable = items.filter((m) => m.retryable === true).length;
   const unclassified = items.filter((m) => m.retryable === null).length;
 
-  // Decir "ninguna se arregla reintentando" cuando en realidad no se sabe sería
-  // exactamente la clase de afirmación falsa que esta bandeja existe para
-  // evitar. Sin dato, se dice que no hay dato.
+  // Saying "none of these a retry can fix" when it is not actually known would
+  // be exactly the kind of false claim this inbox exists to prevent. With no
+  // datum, it says there is no datum.
   const cola =
     retryable > 0
       ? `\n\n${retryable} de ${items.length} se pueden reintentar: dm reprocess --failed`
@@ -136,14 +136,14 @@ export function renderReview(items: ReviewItem[]): string {
 }
 
 /**
- * Una respuesta con sus fuentes.
+ * An answer with its sources.
  *
- * Las fuentes NO son opcionales ni decorativas: la regla dura 1 dice que ningún
- * dato factual se responde sin memoria de respaldo, así que se muestran siempre
- * —incluso cuando no hubo prosa— y cada una trae su id para poder abrirla.
+ * Sources are NOT optional or decorative: no factual datum is answered without
+ * a memory backing it, so they are always shown — even when there was no prose
+ * — and each carries its id so it can be opened.
  */
 export function renderAnswer(a: Answer): string {
-  // Modo hecho (§6): el dato exacto, no una lista de documentos donde buscarlo.
+  // Fact mode: the exact datum, not a list of documents to look through.
   if (a.facts?.length) return renderFacts(a.facts);
 
   const fuentes = a.sources.map((p) => {
@@ -160,13 +160,13 @@ export function renderAnswer(a: Answer): string {
     case 'no_results':
       return 'No lo tengo.';
     case 'no_citation':
-      // Se descartó la prosa a propósito: una respuesta sin cita no cumple la
-      // regla dura 1. Mejor los pasajes crudos que una afirmación sin respaldo.
+      // The prose was discarded on purpose: an answer with no citation does not
+      // qualify. Raw passages beat an unbacked claim.
       return `No pude responderlo sin inventar, pero esto es lo que encontré:\n${fuentes.join('\n')}`;
     case 'ungrounded':
-      // Había prosa y se descartó: afirmaba una cifra que no está en lo que
-      // leyó. Un número inventado con cita válida es el peor fallo posible acá,
-      // porque nada lo delata (regla dura 2).
+      // There was prose and it was discarded: it asserted a figure absent from
+      // what it read. An invented number with a valid citation is the worst
+      // possible failure here, because nothing gives it away.
       return `No pude darte la cifra sin inventarla. Esto es lo que encontré:\n${fuentes.join('\n')}`;
     case 'no_model':
       return `Sin modelo para redactar. Lo que encontré:\n${fuentes.join('\n')}`;
@@ -176,10 +176,10 @@ export function renderAnswer(a: Answer): string {
 }
 
 /**
- * Los datos duros que respondieron.
+ * The hard data that answered.
  *
- * **La advertencia va antes del valor** (regla dura 10). Leer "3 UF" y recién
- * después "vencida en 2024" es exactamente el modo de falla que §1.3 describe:
+ * **The warning goes before the value.** Reading "3 UF" and only then
+ * "expired in 2024" is exactly the failure mode this exists to prevent:
  * el riesgo no es olvidar un dato, es leer el viejo sin darte cuenta.
  */
 function renderFacts(hits: FactHit[]): string {
@@ -191,14 +191,14 @@ function renderFacts(hits: FactHit[]): string {
       `    ${contextOf(h)} · ${h.fact.shortId}`,
     ].join('\n');
   });
-  // Regla dura 3: dos vigentes del mismo dato no se resuelven eligiendo uno.
+  // Two live copies of the same datum are not resolved by picking one.
   const conflicto = conflicting(hits)
     ? '\n\nHay dos vigentes que dicen cosas distintas. No elijo por ti.'
     : '';
   return lineas.join('\n') + conflicto;
 }
 
-/** Errores y confirmaciones: qué pasó y qué hacer, sin disculpas ni vaguedad. */
+/** Errors and confirmations: what happened and what to do, without apology. */
 export function renderFailure(result: Extract<Result<unknown>, { ok: false }>): string {
   if (result.kind === 'requires_confirmation') {
     const affected = result.affects.map((a) => `  · ${a.label ?? a.id}`).join('\n');

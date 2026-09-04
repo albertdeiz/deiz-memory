@@ -144,7 +144,9 @@ que vuelve.
 
 `aliases` es lo que conecta una pregunta con un campo **sin preguntarle a un modelo**: si
 una palabra de la pregunta calza con un alias, hay camino de hecho. Determinista, como
-todo lo que decide algo acá.
+todo lo que decide algo acá. El calce es **por raíz y por prefijo** —`paga` y `pagar` son
+lo mismo, `vence` llega a `vencimiento`— porque enumerar conjugaciones al definir un tipo
+sería pedirle a quien lo escribe que se acuerde de conjugar.
 
 #### Estado y período no son lo mismo, y confundirlos corrompe datos
 
@@ -498,7 +500,7 @@ con auditoría — el chat solo oculta) y la mantención (`classify`, `index`, `
 Construido y en verde: captura, los tres carriles, canal de chat, bandeja de revisión,
 dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
-`tarjeta_credito` (período). **330 tests.**
+`tarjeta_credito` (período). **334 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.

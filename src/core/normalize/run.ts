@@ -217,11 +217,12 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
  */
 async function finish(deps: Deps, id: Uuid): Promise<string | null> {
   await reindex(deps, id);
-  const domain = await reclassify(deps, id);
-  // Después de clasificar y no antes: qué tipos de hecho intentar depende del
-  // dominio que acaba de quedar puesto (§4).
-  await reextract(deps, id);
-  return domain;
+  const clasificada = await reclassify(deps, id);
+  // Clasificar ya extrae, porque el dominio decide qué extractores aplican
+  // (§4). Acá solo se cubre el caso en que no clasificó —una memoria que ya
+  // tenía categoría, reprocesada— para que reprocesar también rehaga los datos.
+  if (!clasificada.ran) await reextract(deps, id);
+  return clasificada.domain;
 }
 
 /**
@@ -253,17 +254,20 @@ async function reextract(deps: Deps, id: Uuid): Promise<void> {
  * No pisa una categoría que ya está puesta: reprocesar mejora el texto, no
  * revisa decisiones. Para reclasificar a propósito está `dm classify <id>`.
  */
-async function reclassify(deps: Deps, id: Uuid): Promise<string | null> {
-  if (!deps.classifier) return null;
+async function reclassify(
+  deps: Deps,
+  id: Uuid,
+): Promise<{ ran: boolean; domain: string | null }> {
+  if (!deps.classifier) return { ran: false, domain: null };
   const { rows } = await deps.db.query<{ owner_id: string; domain_id: string | null }>(
     `select owner_id, domain_id from memories where id = $1`, [id],
   );
   const m = rows[0];
-  if (!m || m.domain_id) return null;
+  if (!m || m.domain_id) return { ran: false, domain: null };
 
   const { classifyMemory } = await import('../classify/run.js');
   const r = await classifyMemory(deps, { ownerId: m.owner_id }, id).catch(() => null);
-  return r?.ok ? r.value.domain : null;
+  return { ran: true, domain: r?.ok ? r.value.domain : null };
 }
 
 /** Rehace los trozos. Que falle no invalida la normalización. */

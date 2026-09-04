@@ -78,6 +78,13 @@ export async function classifyMemory(
 
   await save(deps, actor, m, c);
 
+  // Reclasificar cambia qué extractores aplican (§4), así que los hechos hay
+  // que rehacerlos. Sin esto, mover una memoria de categoría a mano dejaba los
+  // hechos de la categoría vieja: la tubería completa hacía las dos cosas y
+  // `dm classify` solo una — el mismo tipo de hueco que dejó al clasificador
+  // sin quien lo llamara.
+  await reextract(deps, actor, m.id);
+
   return ok({
     id: m.id,
     domain: c.domain,
@@ -86,6 +93,12 @@ export async function classifyMemory(
     confidence: c.confidence,
     tags: c.tags,
   });
+}
+
+/** Rehace los hechos. Que falle no invalida la clasificación, que ya está guardada. */
+async function reextract(deps: Deps, actor: Actor, id: Uuid): Promise<void> {
+  const { extractFacts } = await import('../facts/extract.js');
+  await extractFacts(deps, actor, id).catch(() => {});
 }
 
 async function save(deps: Deps, actor: Actor, m: Row, c: Classification): Promise<void> {

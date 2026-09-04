@@ -41,5 +41,5 @@ export { listFacts, factsForMemory, askFacts, matchFields, type FactHit } from '
 export {
   listFactTypes, findFactType, typesForDomain, seedFactTypes, SEED_FACT_TYPES,
 } from './facts/registry.js';
-export { contextOf, renderValue, warningFor } from './facts/format.js';
+export { conflicting, contextOf, renderValue, warningFor } from './facts/format.js';
 export type { Fact, FactType, FactField, FactKind, FieldKind } from './facts/types.js';

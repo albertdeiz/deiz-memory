@@ -7,7 +7,7 @@ El diseño está en [CLAUDE.md](./CLAUDE.md). Esto es lo que hace falta para cor
 **Estado.** Captura, normalización por tres carriles, búsqueda full-text y semántica,
 clasificación con IA local, preguntas en lenguaje natural con cita verificada, y **datos
 tipados** para los campos que no toleran un ranking. Todo por Telegram o por terminal.
-330 tests.
+334 tests.
 
 El sistema se vació el 3 de septiembre de 2026 para poblarlo desde cero; si vienes de
 antes, hay que **volver a vincular el chat** con `dm pair`.
@@ -266,6 +266,11 @@ deducible por siniestro: UF 3
 ```
 
 Sin ranking, sin modelo redactando, sin nada que verificar después.
+
+**Se pregunta con tus palabras, no con las del registro.** Los alias de cada campo se
+comparan por raíz: `paga`, `pago`, `pagos` y `pagar` son lo mismo, y `vence` llega a
+`vencimiento`. Enumerar conjugaciones al definir un tipo sería pedirle a quien lo escribe
+que se acuerde de conjugar.
 
 **Qué se extrae es data, no código.** `dm facts types` lo muestra: un tipo declara sus
 campos, de qué categoría intentarlos, y con qué palabras se pregunta por cada uno. Agregar

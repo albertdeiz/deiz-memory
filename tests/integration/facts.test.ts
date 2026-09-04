@@ -184,6 +184,23 @@ describe('el modo hecho responde', () => {
     expect(refs.map((r) => r.field.name)).toContain('deducible');
   });
 
+  it('calza conjugaciones, no solo la palabra exacta', async () => {
+    // "cuánto PAGA mi tarjeta" no calzaba con el alias `pagar`. Pedirle a quien
+    // define un tipo que enumere pagar/paga/pago/pagos es pedirle que conjugue.
+    const types = await listFactTypes(s.deps.db, actor);
+    for (const q of ['cuanto paga la tarjeta', 'cuanto pago', 'cuanto tengo que pagar']) {
+      expect(matchFields(q, types).map((r) => r.field.name), q).toContain('monto_a_pagar');
+    }
+    // Y "vence" tiene que llegar a "vencimiento", que ninguna raíz junta.
+    expect(matchFields('cuando vence', types).map((r) => r.field.name)).toContain('pagar_hasta');
+  });
+
+  it('no confunde palabras que solo comparten dos letras', async () => {
+    const types = await listFactTypes(s.deps.db, actor);
+    // `tasa` y `tarjeta` empiezan igual y no son lo mismo.
+    expect(matchFields('de que tarjeta', types).map((r) => r.field.name)).not.toContain('tasa');
+  });
+
   it('una pregunta sin campo no abre el camino de hechos', async () => {
     const types = await listFactTypes(s.deps.db, actor);
     expect(matchFields('que me recetaron en marzo', types)).toEqual([]);

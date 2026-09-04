@@ -54,11 +54,34 @@ export function warningFor(hit: FactHit): string | null {
 export function contextOf(hit: FactHit): string {
   const desde = day(hit.fact.validFrom);
   const hasta = day(hit.fact.validUntil);
+  // El título del documento antes que la etiqueta del tipo: con dos tarjetas,
+  // "Visa Infinite Scotiabank" distingue y "XXXXX4005" no.
+  const que = hit.fact.memoryTitle ?? hit.fact.typeLabel;
   const cual = hit.fact.identity ? ` ${hit.fact.identity}` : '';
   const ventana = !desde && !hasta
     ? ''
     : hit.fact.kind === 'periodo'
       ? ` · período ${desde ?? '—'} a ${hasta ?? '—'}`
       : ` · vigente ${desde ?? '—'} a ${hasta ?? '—'}`;
-  return `${hit.fact.typeLabel}${cual}${ventana}`;
+  return `${que}${cual}${ventana}`;
+}
+
+/**
+ * ¿Hay un conflicto de verdad? (regla dura 3)
+ *
+ * Dos tarjetas distintas con dos montos distintos **no** son un conflicto: son
+ * dos tarjetas. Un conflicto es el mismo campo, del mismo tipo y de la misma
+ * instancia, vigente dos veces — dos pólizas del mismo auto con deducibles
+ * distintos. Avisar de lo primero enseña a ignorar el aviso, y entonces el
+ * aviso deja de servir para lo segundo.
+ */
+export function conflicting(hits: FactHit[]): boolean {
+  const vivos = hits.filter((h) => !h.expired && !h.superseded);
+  const claves = new Set<string>();
+  for (const h of vivos) {
+    const k = `${h.fact.typeId}|${h.fact.identity ?? ''}|${h.ref.field.name}`;
+    if (claves.has(k)) return true;
+    claves.add(k);
+  }
+  return false;
 }

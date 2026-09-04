@@ -378,3 +378,45 @@ describe('lo vencido se dice antes del dato', () => {
     expect(body).toContain('UF 3');
   });
 });
+
+describe('un conflicto es el mismo dato dos veces, no dos cosas distintas', () => {
+  const base = {
+    ref: {
+      type: {
+        id: 't', slug: 'tarjeta_credito', label: 'Tarjeta', description: '',
+        kind: 'periodo' as const, domainSlug: 'finanzas', fields: [],
+        identityField: 'tarjeta', validFromField: null, validUntilField: null, active: true,
+      },
+      field: { name: 'monto_a_pagar', kind: 'money' as const, label: 'monto', aliases: [] },
+    },
+    expired: false,
+    superseded: false,
+  };
+  const conIdentidad = (identity: string, value: number) => ({
+    ...base,
+    value,
+    fact: {
+      id: `f${identity}`, memoryId: `m${identity}`, typeId: 't', typeSlug: 'tarjeta_credito',
+      typeLabel: 'Tarjeta', kind: 'periodo' as const, payload: {}, identity,
+      validFrom: null, validUntil: null, supersededBy: null, confidence: 1,
+      shortId: identity, memoryTitle: null,
+    },
+  });
+
+  const body = (hits: unknown[]) => bodyOf(present(ok({
+    kind: 'respuesta', consulta: 'x',
+    answer: { text: null, sources: [], reason: null, facts: hits as never },
+  } as Outcome), conBotones));
+
+  it('dos tarjetas distintas NO son un conflicto', () => {
+    // Avisar de esto enseña a ignorar el aviso, y entonces deja de servir para
+    // el caso en que sí importa.
+    expect(body([conIdentidad('4005', 886568), conIdentidad('2527', 84665)]))
+      .not.toMatch(/No elijo/);
+  });
+
+  it('el mismo dato de la misma instancia, dos veces, SÍ lo es', () => {
+    expect(body([conIdentidad('4005', 886568), conIdentidad('4005', 999999)]))
+      .toMatch(/No elijo/);
+  });
+});

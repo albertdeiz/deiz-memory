@@ -1,7 +1,7 @@
 import type { MemoryDetail, MemorySummary } from '../../core/domain/types.js';
 import type { ReviewItem } from '../../core/ops/review.js';
 import type { Answer } from '../../core/recall/answer.js';
-import { contextOf, renderValue, warningFor } from '../../core/facts/format.js';
+import { conflicting, contextOf, renderValue, warningFor } from '../../core/facts/format.js';
 import type { FactHit } from '../../core/facts/query.js';
 import type { Result } from '../../core/result.js';
 import { meaningfulName } from '../../core/filenames.js';
@@ -191,9 +191,9 @@ function renderFacts(hits: FactHit[]): string {
       `    ${contextOf(h)} · ${h.fact.shortId}`,
     ].join('\n');
   });
-  const conflicto = hits.filter((h) => !h.expired && !h.superseded).length > 1
-    // Regla dura 3: dos vigentes no se resuelven eligiendo una.
-    ? '\n\nHay más de uno vigente. No elijo por ti: están los dos arriba.'
+  // Regla dura 3: dos vigentes del mismo dato no se resuelven eligiendo uno.
+  const conflicto = conflicting(hits)
+    ? '\n\nHay dos vigentes que dicen cosas distintas. No elijo por ti.'
     : '';
   return lineas.join('\n') + conflicto;
 }

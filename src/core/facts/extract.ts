@@ -55,6 +55,20 @@ export async function extractFacts(
   }
 
   const tipos = await typesForDomain(deps.db, actor.ownerId, m.domain_slug);
+
+  // Los hechos de un tipo que ya no aplica se van.
+  //
+  // `fact_types.domain_slug` declara "este tipo aplica a documentos de esta
+  // categoría". Si la memoria se movió de categoría, el tipo dejó de aplicarle
+  // por definición del propio registro, y dejar el hecho ahí contradiría lo que
+  // el registro dice. No se pierde nada: un hecho es derivado del blob como los
+  // trozos (§3.6), y `dm facts extract` lo rehace.
+  await deps.db.query(
+    `delete from facts where memory_id = $1 and owner_id = $2
+       and ($3::uuid[] = '{}' or not (type_id = any($3::uuid[])))`,
+    [m.id, actor.ownerId, tipos.map((t) => t.id)],
+  );
+
   const extracted: string[] = [];
   const discarded: string[] = [];
 

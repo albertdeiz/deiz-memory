@@ -69,6 +69,39 @@ const sinTildes = (s: string): string =>
   s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 /**
+ * La raíz aproximada de una palabra en español.
+ *
+ * Sin esto el match era por palabra exacta, y "cuánto **paga** mi tarjeta" no
+ * calzaba con el alias `pagar`. Pedirle a quien define un tipo que enumere
+ * `pagar, paga, pago, pagos` es pedirle que se acuerde de conjugar: el sistema
+ * puede hacerlo solo.
+ *
+ * Se quita el plural y después la terminación verbal o la vocal final, dejando
+ * al menos tres letras: `pagar`, `paga`, `pago` y `pagos` caen todas en `pag`.
+ */
+const stem = (w: string): string => {
+  let x = sinTildes(w);
+  if (x.length > 4 && x.endsWith('es')) x = x.slice(0, -2);
+  else if (x.length > 3 && x.endsWith('s')) x = x.slice(0, -1);
+  if (x.length > 3 && x.endsWith('r')) x = x.slice(0, -1);
+  if (x.length > 3 && /[aeiou]$/.test(x)) x = x.slice(0, -1);
+  return x;
+};
+
+/**
+ * Dos palabras se refieren a lo mismo.
+ *
+ * Por prefijo y no por igualdad, porque `vence` y `vencimiento` son la misma
+ * pregunta y ninguna raíz razonable las junta. Tres letras de mínimo: con dos
+ * empezarían a chocar palabras que no tienen nada que ver.
+ */
+const mismaIdea = (a: string, b: string): boolean => {
+  const [x, y] = [stem(a), stem(b)];
+  const corta = x.length <= y.length ? x : y;
+  return corta.length >= 3 && (x.startsWith(y) || y.startsWith(x));
+};
+
+/**
  * Qué campo está pidiendo esta pregunta, si es que pide alguno.
  *
  * **Sin llamar a un modelo.** Los `aliases` del registro son exactamente para
@@ -91,7 +124,7 @@ export function matchFields(question: string, types: FactType[]): FieldRef[] {
     // Nombrar el tipo acota: "el deducible de mi auto" contra "de mi tarjeta".
     const nombrado = sinTildes(type.label).split(/\s+/).some((w) => w.length > 3 && palabras.has(w));
     for (const field of type.fields) {
-      if (field.aliases.some((a) => palabras.has(sinTildes(a)))) {
+      if (field.aliases.some((a) => [...palabras].some((p) => mismaIdea(p, a)))) {
         out.push({ type, field });
       }
     }

@@ -1,28 +1,28 @@
 /**
- * Partir un documento en trozos buscables.
+ * Splitting a document into searchable chunks.
  *
- * Por qué trozos y no el documento entero: una póliza de 80 mil caracteres
- * promediada en un solo vector no se parece a nada en particular. La pregunta
- * "¿cuál es mi deducible?" necesita acertarle al párrafo del deducible, y para
- * eso ese párrafo tiene que existir como cosa separada.
+ * Why chunks and not whole documents: a policy of eighty thousand characters
+ * averaged into a single vector resembles nothing in particular. The question
+ * "what is my deductible?" needs to hit the deductible paragraph, and for that
+ * the paragraph has to exist as a separate thing.
  *
- * Lógica pura, como el router de carriles: cómo se corta un documento es una
- * decisión del producto y se prueba sin base ni red.
+ * Pure logic, like the lane router: how a document is cut is a product decision
+ * and is tested with no database and no network.
  */
 
-/** Ni tan corto que pierda el contexto, ni tan largo que diluya el vector. */
+/** Not so short it loses context, not so long it dilutes the vector. */
 export const TARGET_CHARS = 900;
 
 /**
- * Un poco de solape entre trozos consecutivos.
+ * A little overlap between consecutive chunks.
  *
- * Sin esto, un dato que cae justo en el corte queda partido en dos mitades y
- * ninguna de las dos se parece a la pregunta. Es barato y evita el modo de
- * falla más tonto del troceado.
+ * Without it, a datum landing exactly on a cut ends up split across two halves
+ * and neither half resembles the question. Cheap, and it avoids the dumbest
+ * failure mode of chunking.
  */
 export const OVERLAP_CHARS = 150;
 
-/** Debajo de esto un trozo no aporta nada y solo ensucia los resultados. */
+/** Below this a chunk contributes nothing and only dirties results. */
 const MIN_CHARS = 40;
 
 export interface Chunk {
@@ -31,62 +31,63 @@ export interface Chunk {
 }
 
 /**
- * Corta por párrafos primero, y solo parte un párrafo si no cabe.
+ * Cuts on paragraphs first, and only splits a paragraph that does not fit.
  *
- * Un documento ya viene con su propia estructura —markitdown preserva los
- * títulos y las tablas— y respetarla produce trozos que significan algo. Cortar
- * cada 900 caracteres a ciegas parte tablas por la mitad.
+ * A document already carries its own structure — the document lane preserves
+ * headings and tables — and respecting it produces chunks that mean something.
+ * Cutting blindly every 900 characters splits tables down the middle.
  */
 export function chunkText(text: string): Chunk[] {
-  const limpio = text.replace(/\r\n/g, '\n').trim();
-  if (limpio.length === 0) return [];
-  if (limpio.length <= TARGET_CHARS) return [{ seq: 0, content: limpio }];
+  const clean = text.replace(/\r\n/g, '\n').trim();
+  if (clean.length === 0) return [];
+  if (clean.length <= TARGET_CHARS) return [{ seq: 0, content: clean }];
 
-  const parrafos = limpio.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
-  const trozos: string[] = [];
-  let actual = '';
+  const paragraphs = clean.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
+  const chunks: string[] = [];
+  let current = '';
 
-  const empujar = () => {
-    const t = actual.trim();
-    if (t.length >= MIN_CHARS) trozos.push(t);
-    else if (t.length > 0 && trozos.length > 0) trozos[trozos.length - 1] += `\n\n${t}`;
-    actual = '';
+  const push = () => {
+    const t = current.trim();
+    if (t.length >= MIN_CHARS) chunks.push(t);
+    else if (t.length > 0 && chunks.length > 0) chunks[chunks.length - 1] += `\n\n${t}`;
+    current = '';
   };
 
-  for (const p of parrafos) {
-    const parrafo = p.trim();
+  for (const p of paragraphs) {
+    const paragraph = p.trim();
 
-    // Un párrafo que por sí solo no cabe se parte duro, pero recién después de
-    // haber intentado respetar la estructura.
-    if (parrafo.length > TARGET_CHARS) {
-      empujar();
-      for (let i = 0; i < parrafo.length; i += TARGET_CHARS - OVERLAP_CHARS) {
-        const pedazo = parrafo.slice(i, i + TARGET_CHARS).trim();
-        if (pedazo.length >= MIN_CHARS) trozos.push(pedazo);
-        if (i + TARGET_CHARS >= parrafo.length) break;
+    // A paragraph that does not fit on its own gets split hard, but only after
+    // trying to respect the structure.
+    if (paragraph.length > TARGET_CHARS) {
+      push();
+      for (let i = 0; i < paragraph.length; i += TARGET_CHARS - OVERLAP_CHARS) {
+        const piece = paragraph.slice(i, i + TARGET_CHARS).trim();
+        if (piece.length >= MIN_CHARS) chunks.push(piece);
+        if (i + TARGET_CHARS >= paragraph.length) break;
       }
       continue;
     }
 
-    if (actual.length + parrafo.length + 2 > TARGET_CHARS) empujar();
-    actual = actual ? `${actual}\n\n${parrafo}` : parrafo;
+    if (current.length + paragraph.length + 2 > TARGET_CHARS) push();
+    current = current ? `${current}\n\n${paragraph}` : paragraph;
   }
-  empujar();
+  push();
 
-  return trozos.map((content, seq) => ({ seq, content }));
+  return chunks.map((content, seq) => ({ seq, content }));
 }
 
 /**
- * Lo que se manda a embeber.
+ * What gets sent to the embedder.
  *
- * **Solo el trozo.** La tentación es anteponer el título y la nota a cada uno
- * para darle contexto, y sale mal: si los ochenta trozos de una póliza empiezan
- * con "póliza de auto BCI", los ochenta se parecen entre sí y ninguno destaca
- * al preguntar por el deducible. El contexto compartido no distingue nada — lo
- * que distingue es lo que cada trozo tiene de propio.
+ * **The chunk alone.** The temptation is to prefix each one with the title and
+ * the note for context, and it backfires: if all eighty chunks of a policy start
+ * with "car policy, insurer X", all eighty resemble each other and none stands
+ * out when asked about the deductible. Shared context distinguishes nothing —
+ * what distinguishes is what each chunk has of its own.
  *
- * El contexto igual llega, por el otro camino: el full-text sí indexa título y
- * nota a peso A, y la fusión de los dos caminos junta las dos señales.
+ * The context arrives anyway, by the other path: full-text search does index
+ * title and note at the highest weight, and fusing the two paths joins both
+ * signals.
  */
 export function contextualize(chunk: string): string {
   return chunk;

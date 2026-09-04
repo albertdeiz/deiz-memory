@@ -4,22 +4,22 @@ import type { Deps } from '../ports';
 import { err, ok, type Result } from '../result';
 
 /**
- * Recuperación híbrida (§6).
+ * Hybrid retrieval.
  *
- * El error clásico que §6 nombra es meter todo a un vector store y esperar que
- * funcione. No funciona para "¿cuál es mi número de póliza?": un número no se
- * parece semánticamente a nada, y el full-text lo encuentra exacto.
+ * The classic mistake is throwing everything into a vector store and hoping.
+ * It does not work for "what is my policy number?": a number resembles nothing
+ * semantically, and full-text finds it exactly.
  *
- * Así que se usan los dos y se fusionan. Y antes de los dos, **el filtro
- * estructurado**: dominio y ventana de fechas recortan el universo primero,
- * que es lo que de verdad baja el ruido.
+ * So both are used and fused. And before either, **the structured filter**:
+ * domain and date window cut the universe down first, which is what actually
+ * lowers the noise.
  */
 export interface RetrieveInput {
   query: string;
-  /** Slug o nombre de un dominio, para acotar. */
+  /** Slug or label of a domain, to narrow. */
   domain?: string | null;
-  desde?: Date | null;
-  hasta?: Date | null;
+  from?: Date | null;
+  until?: Date | null;
   limit?: number;
 }
 
@@ -30,28 +30,24 @@ export interface Passage {
   occurredAt: Date | null;
   capturedAt: Date;
   domainLabel: string | null;
-  /** Para saber si hay archivo que ofrecer. Una nota tuya no tiene original. */
+  /** Whether there is a file to offer. A typed note has no original. */
   mediaType: string | null;
-  /** El trozo concreto que respondió, no el documento entero. Es la cita. */
+  /** The specific chunk that answered, not the whole document. This is the citation. */
   content: string;
   seq: number;
-  /** De dónde vino: útil para entender por qué apareció. */
-  via: 'texto' | 'semejanza' | 'ambos';
+  /** Which path found it: useful for understanding why it showed up. */
+  via: 'text' | 'semantic' | 'both';
   score: number;
 }
 
 /**
- * Una pregunta no se busca con AND.
+ * A question is not searched with AND.
  *
- * `websearch_to_tsquery` exige TODOS los términos, que es lo correcto cuando
- * escribes `/buscar poliza auto` — pediste las dos cosas. Pero al preguntar
- * "¿cuál es el deducible de mi seguro de auto?", el párrafo que responde dice
- * "deducible" y no dice "auto": exigir los dos lo descarta. Medido sobre una
- * póliza real: cero trozos con AND, ocho con la palabra sola.
- *
- * Así que acá se hace OR y se deja que el ranking ordene. El filtro estructurado
- * —dominio y fechas— ya recortó el universo, que es lo que evita que el OR traiga
- * medio corpus.
+ * Requiring EVERY term is right when you type an explicit search — you asked
+ * for both words. But when asking "what is the deductible on my car
+ * insurance?", the paragraph that answers says "deductible" and does not say
+ * "car": requiring both discards it. Measured on a real policy: zero chunks
+ * with AND, eight with the single word.
  */
 const termsOf = (q: string): string[] =>
   q
@@ -62,9 +58,7 @@ const termsOf = (q: string): string[] =>
 
 const anyOf = (q: string): string => termsOf(q).join(' | ') || q;
 
-/**
- * Cuántos trozos tuyos contiene cada término. Es la frecuencia documental.
- */
+/** How many of the owner's chunks contain each term. Document frequency. */
 async function frequencies(
   db: Deps['db'],
   ownerId: string,
@@ -81,52 +75,52 @@ async function frequencies(
   return new Map(rows.map((r) => [r.term, Number(r.n)]));
 }
 
-/** Un término que aparece muchas más veces que el más raro es tema, no dato. */
+/** A term appearing far more often than the rarest one is topic, not datum. */
 const COMMON_FACTOR = 3;
 
 /**
- * Con qué términos se **rankea** — que no son los mismos con los que se busca.
+ * Which terms **rank** — which are not the same ones that match.
  *
- * Buscar con OR es correcto (§6): exigir todas las palabras de una pregunta
- * descarta el párrafo que la responde. Pero rankear con OR le da crédito
- * completo a las palabras que solo dicen *de qué documento* estamos hablando, y
- * esas están en todas sus páginas.
+ * Matching with OR is right: requiring every word of a question discards the
+ * paragraph that answers it. But ranking with OR gives full credit to the words
+ * that only say *which document* we are talking about, and those are on every
+ * page of it.
  *
- * Medido sobre una póliza de auto: a "¿cuánto es mi deducible en el seguro de mi
- * vehículo?", `seguro` aparece en el 16% de los trozos y `vehiculo` en el 15%,
- * contra el 4% de `deducible`. Los trozos que solo hablaban del vehículo
- * empataban en full-text con el único que traía la cifra, y el vector los
- * empataba también —todo el documento se parece a la pregunta—, así que el que
- * respondía quedaba **séptimo** y el modelo solo ve los primeros. Sin cifra
- * delante, la respuesta correcta es no responder, y eso hacía.
+ * Measured on a car policy: asked "how much is my deductible on my vehicle
+ * insurance?", the word for insurance appears in 16% of the chunks and the word
+ * for vehicle in 15%, against 4% for deductible. Chunks that merely mentioned
+ * the vehicle tied in full-text with the only one carrying the figure, and the
+ * vector tied them too — the whole document resembles the question — so the one
+ * that answered came **seventh** and the model only reads the first few. With no
+ * figure in front of it, declining to answer is correct, and that is what it did.
  *
- * Así que el ranking usa solo los términos raros. Los comunes siguen en el
- * `where` —suman recall, que es para lo que sirven— pero dejan de decidir el
- * orden. Es IDF, hecho a mano y con el umbral relativo al término más raro de
- * la propia pregunta, para que funcione igual con 400 trozos que con 40.
+ * So ranking uses only the rare terms. The common ones stay in the `where` —
+ * they add recall, which is what they are for — but stop deciding the order. It
+ * is IDF, by hand, with the threshold relative to the rarest term of the
+ * question itself so it holds at 40 chunks and at 400.
  */
 async function rankTerms(deps: Deps, ownerId: string, q: string): Promise<string> {
   const terms = termsOf(q);
   if (terms.length < 2) return anyOf(q);
 
   const df = await frequencies(deps.db, ownerId, terms);
-  const presentes = terms.filter((t) => (df.get(t) ?? 0) > 0);
-  if (presentes.length === 0) return anyOf(q);
+  const present = terms.filter((t) => (df.get(t) ?? 0) > 0);
+  if (present.length === 0) return anyOf(q);
 
-  const minimo = Math.min(...presentes.map((t) => df.get(t)!));
-  const raros = presentes.filter((t) => df.get(t)! <= minimo * COMMON_FACTOR);
-  return raros.join(' | ') || anyOf(q);
+  const rarest = Math.min(...present.map((t) => df.get(t)!));
+  const rare = present.filter((t) => df.get(t)! <= rarest * COMMON_FACTOR);
+  return rare.join(' | ') || anyOf(q);
 }
 
 const clampLimit = (n: number | undefined) =>
   !n || !Number.isFinite(n) ? 8 : Math.min(Math.max(Math.trunc(n), 1), 30);
 
 /**
- * Cuánto pesa cada camino al fusionar.
+ * How much each path weighs when fusing.
  *
- * El full-text pesa más porque cuando acierta, acierta exacto: un RUT, un
- * número de póliza, una patente. La semejanza es la que rescata las preguntas
- * escritas con otras palabras que las del documento.
+ * Full-text weighs more because when it hits, it hits exactly: a tax id, a
+ * policy number, a plate. Similarity is what rescues questions written in words
+ * other than the document's.
  */
 const W_FTS = 1.0;
 const W_VEC = 0.85;
@@ -152,8 +146,8 @@ export async function retrieve(
   if (!q) return err('invalid', 'Dime qué buscar.');
   const limit = clampLimit(input.limit);
 
-  // 1 · El filtro estructurado, primero. Recortar antes de buscar es lo que
-  //     §6 llama híbrido, y es lo que baja el ruido de verdad.
+  // 1 · The structured filter, first. Cutting before searching is what makes
+  //     this hybrid, and it is what actually lowers the noise.
   let domainId: string | null = null;
   if (input.domain) {
     const d = await findDomain(deps.db, actor, input.domain);
@@ -163,14 +157,14 @@ export async function retrieve(
 
   const rank = await rankTerms(deps, actor.ownerId, q);
 
-  const filtro = `
+  const scope = `
     m.owner_id = $1 and not m.hidden
     and ($2::uuid is null or m.domain_id = $2)
     and ($3::timestamptz is null or coalesce(m.occurred_at, m.captured_at) >= $3)
     and ($4::timestamptz is null or coalesce(m.occurred_at, m.captured_at) <= $4)`;
-  const base = [actor.ownerId, domainId, input.desde ?? null, input.hasta ?? null];
+  const base = [actor.ownerId, domainId, input.from ?? null, input.until ?? null];
 
-  // 2 · Full-text sobre los trozos: preciso para lo que se escribe igual.
+  // 2 · Full-text over the chunks: precise for whatever is written the same way.
   const fts = await deps.db.query<Row>(
     `select c.memory_id, m.title, m.occurred_at, m.captured_at, d.label as domain_label,
             b.media_type, c.content, c.seq,
@@ -180,14 +174,14 @@ export async function retrieve(
        join memories m on m.id = c.memory_id
        left join domains d on d.id = m.domain_id
        left join blobs b on b.sha256 = m.blob_sha256
-      where ${filtro}
+      where ${scope}
         and to_tsvector('es_unaccent', c.content) @@ to_tsquery('es_unaccent', $5)
       order by score desc limit $6`,
     [...base, anyOf(q), limit * 2, rank],
   );
 
-  // 3 · Semejanza, si hay con qué. Sin embedder el sistema sigue funcionando:
-  //     degrada a full-text, que es lo que hacía antes de F3.
+  // 3 · Similarity, when there is something to do it with. With no embedder the
+  //     system keeps working: it degrades to full-text.
   let vec: { rows: Row[] } = { rows: [] };
   if (deps.embedder) {
     const [v] = await deps.embedder.embed([q]);
@@ -199,8 +193,8 @@ export async function retrieve(
            from memory_chunks c
            join memories m on m.id = c.memory_id
            left join domains d on d.id = m.domain_id
-          left join blobs b on b.sha256 = m.blob_sha256
-          where ${filtro} and c.embedding is not null
+           left join blobs b on b.sha256 = m.blob_sha256
+          where ${scope} and c.embedding is not null
           order by c.embedding <=> $5::vector limit $6`,
         [...base, JSON.stringify(v), limit * 2],
       );
@@ -211,14 +205,14 @@ export async function retrieve(
 }
 
 /**
- * Fusiona los dos caminos.
+ * Fuses the two paths.
  *
- * Se normaliza cada lista contra su propio máximo antes de sumar, porque
- * `ts_rank` y la similitud coseno viven en escalas distintas y sumarlas crudas
- * dejaría que una domine a la otra por accidente de unidades.
+ * Each list is normalized against its own maximum before summing, because rank
+ * scores and cosine similarity live on different scales and adding them raw
+ * would let one dominate the other by accident of units.
  *
- * Un trozo que aparece en las dos listas sube: que dos métodos independientes
- * coincidan es la mejor señal que hay acá.
+ * A chunk appearing in both lists rises: two independent methods agreeing is the
+ * best signal available here.
  */
 function merge(fts: Row[], vec: Row[], limit: number): Passage[] {
   const norm = (rows: Row[]) => {
@@ -249,7 +243,7 @@ function merge(fts: Row[], vec: Row[], limit: number): Passage[] {
       mediaType: row.media_type,
       content: row.content,
       seq: row.seq,
-      via: (f > 0 && v > 0 ? 'ambos' : f > 0 ? 'texto' : 'semejanza') as Passage['via'],
+      via: (f > 0 && v > 0 ? 'both' : f > 0 ? 'text' : 'semantic') as Passage['via'],
       score: f * W_FTS + v * W_VEC,
     }))
     .sort((a, b) => b.score - a.score)

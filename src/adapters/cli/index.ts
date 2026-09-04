@@ -786,8 +786,8 @@ program
   .description('pregunta en lenguaje natural; responde citando lo que guardaste')
   .argument('<pregunta>')
   .option('--in <categoria>', 'acotar a una categoría')
-  .option('--desde <fecha>')
-  .option('--hasta <fecha>')
+  .option('--from <date>')
+  .option('--until <date>')
   .option('--solo-fuentes', 'sin redactar: solo los pasajes que respondieron')
   .action(async (pregunta: string, opts: Record<string, string | boolean>) => {
     await run(
@@ -795,8 +795,8 @@ program
         answer(deps, actor, {
           query: pregunta,
           domain: (opts.in as string) ?? null,
-          desde: opts.desde ? new Date(String(opts.desde)) : null,
-          hasta: opts.hasta ? new Date(String(opts.hasta)) : null,
+          from: opts.from ? new Date(String(opts.from)) : null,
+          until: opts.until ? new Date(String(opts.until)) : null,
           synthesize: opts.soloFuentes !== true,
         }),
       renderAnswer,

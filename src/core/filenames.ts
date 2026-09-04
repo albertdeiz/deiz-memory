@@ -1,10 +1,10 @@
 /**
- * La mayoría de los nombres de archivo no dicen nada: los pone la cámara, el
- * escáner o WhatsApp. Mostrar "IMG_20260114_093312.jpg" como si fuera el título
- * de una memoria es peor que no mostrar nada.
+ * Most filenames say nothing: the camera, the scanner or the messaging app put
+ * them there. Showing "IMG_20260114_093312.jpg" as a memory's title is worse
+ * than showing nothing.
  *
- * Esto no adivina de qué se trata el archivo — eso es trabajo del clasificador
- * en F2. Solo decide si el nombre carga información o es ruido.
+ * This does not guess what a file is about — that is the classifier's job. It
+ * only decides whether the name carries information or is noise.
  */
 const NOISE = [
   /^img\b/i, /^dsc\b/i, /^dscn\b/i, /^pxl\b/i, /^gopr\b/i,
@@ -14,9 +14,9 @@ const NOISE = [
   /^scan\b/i, /^scanned/i, /^escaneo\b/i, /^cam\b/i,
   /^(doc|document|documento|file|archivo|image|imagen|video|audio)\s*\(?\d*\)?$/i,
   /^(download|descarga|untitled|sin titulo|nuevo documento|new document|copy|copia)\b/i,
-  /^\d[\d\s]*$/,          // marcas de tiempo y epochs: 20260114 093312
-  /^[0-9a-f]{8,}$/i,      // hashes y uuid
-  /^[^a-záéíóúñü]*$/i,    // ni una sola letra
+  /^\d[\d\s]*$/,          // timestamps and epochs: 20260114 093312
+  /^[0-9a-f]{8,}$/i,      // hashes and uuids
+  /^[^a-záéíóúñü]*$/i,    // not a single letter
 ];
 
 const PREFIXES = /^(copia de|copy of|duplicado de)\s+/i;
@@ -27,8 +27,9 @@ const stripExtension = (name: string): string => {
 };
 
 /**
- * Devuelve el nombre si carga información, o null si es ruido de cámara/escáner.
- * Se limpia primero: "Copia de poliza.pdf" sí significa algo.
+ * Returns the name when it carries information, or null when it is camera or
+ * scanner noise. Cleaned first, because "Copia de poliza.pdf" does mean
+ * something once the prefix is gone.
  */
 export function meaningfulName(filename: string | null | undefined): string | null {
   if (!filename) return null;
@@ -37,8 +38,8 @@ export function meaningfulName(filename: string | null | undefined): string | nu
   while (PREFIXES.test(base)) base = base.replace(PREFIXES, '').trim();
   base = base
     .replace(/[._-]+/g, ' ')
-    // "scan0001" y "IMG20260114" son una palabra pegada a un número: separarlos
-    // es lo que permite reconocerlos con un patrón simple.
+    // "scan0001" and "IMG20260114" are a word glued to a number; splitting them
+    // is what lets a simple pattern recognise them.
     .replace(/([a-záéíóúñü])(\d)/gi, '$1 $2')
     .replace(/\s+/g, ' ')
     .trim();
@@ -46,7 +47,7 @@ export function meaningfulName(filename: string | null | undefined): string | nu
   if (base.length < 3) return null;
   if (NOISE.some((re) => re.test(base))) return null;
 
-  // Debe quedar al menos una palabra de 3+ letras que no sea solo dígitos.
+  // At least one word of 3+ letters has to survive, not just digits.
   const words = base.split(' ').filter((w) => /[a-záéíóúñü]{3,}/i.test(w));
   if (words.length === 0) return null;
 

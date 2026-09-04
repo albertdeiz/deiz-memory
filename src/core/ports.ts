@@ -1,14 +1,14 @@
 /**
- * Los puertos son pocos a propósito. Solo existen los que compran algo:
- * un blob store falso en memoria para tests, un reloj fijo para fechas
- * deterministas, y un punto donde F1 enchufe la cola sin tocar capture().
+ * Ports are few on purpose. Only the ones that buy something exist: a fake blob
+ * store for tests, a fixed clock for deterministic dates, and a seam where the
+ * queue plugs in without capture() knowing.
  */
 export interface BlobStore {
   put(key: string, bytes: Buffer, mediaType: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
-  /** Para `dm doctor`: comprueba que el bucket responde. */
+  /** For the health check: confirms the bucket answers. */
   healthy(): Promise<boolean>;
 }
 
@@ -29,16 +29,17 @@ export interface Db {
 }
 
 /**
- * El punto donde capture() suelta el trabajo pesado. Dos implementaciones:
- * `queueIngest` encola en pg-boss y vuelve en milisegundos (lo normal), e
- * `inlineIngest` corre los carriles ahí mismo (`--wait` y los tests).
- * capture() no sabe cuál le tocó, que era todo el punto del puerto.
+ * Where capture() hands off the heavy work.
+ *
+ * Two implementations: one enqueues and returns in milliseconds (the normal
+ * path), the other runs the lanes inline (`--wait` and tests). capture() cannot
+ * tell which it got, which was the entire point of the port.
  */
 export interface Ingest {
   process(memoryId: string): Promise<void>;
 }
 
-/** Qué se le pidió a un convertidor y qué habría que guardar. */
+/** What a converter was handed, and what is worth recording about the result. */
 export interface ExtractInput {
   bytes: Buffer;
   mediaType: string;
@@ -47,34 +48,33 @@ export interface ExtractInput {
 
 export interface Extraction {
   text: string;
-  /** Modelo, páginas, duración: lo que haga falta para entender un reproceso. */
+  /** Model, pages, duration: whatever makes a later reprocess understandable. */
   detail?: Record<string, unknown>;
   /**
-   * El carril devolvió texto, pero sabe que está incompleto (se cortó por
-   * límite de tokens, el audio se truncó). No es un fallo —el texto sirve— pero
-   * tampoco es un éxito: se guarda y queda marcado para reprocesar.
+   * The lane returned text but knows it is incomplete — cut off by a token
+   * limit, a truncated audio. Not a failure, since the text is useful, but not
+   * a success either: it is stored and flagged for reprocessing.
    *
-   * Existe porque una transcripción parcial que se lee como completa es
-   * exactamente el modo de falla de la regla dura 2.
+   * It exists because a partial transcript that reads as complete is exactly
+   * the failure mode of never inventing anything.
    */
   incomplete?: string;
 }
 
 /**
- * Un carril de normalización (§8.1). Los tres tienen la misma forma —bytes a
- * texto— y ninguno sabe de los otros: el router del core es el que elige.
+ * A normalization lane. All three have the same shape — bytes to text — and
+ * none knows about the others: the core's router is what picks.
  *
- * `available()` existe porque los tres pueden faltar de verdad: sin uv no hay
- * markitdown, sin API key no hay visión, sin binario no hay whisper. Un carril
- * ausente tiene que salir en `dm doctor` como un dato, no como una excepción
- * a medianoche.
+ * `available()` exists because all three can genuinely be missing: no service,
+ * no converter. An absent lane has to show up in the health check as data, not
+ * as an exception at midnight.
  */
 export interface Converter {
   extract(input: ExtractInput): Promise<Extraction>;
   available(): Promise<{ ok: boolean; detail: string }>;
 }
 
-/** Las tres ranuras. `null` es un carril legítimamente no configurado. */
+/** The three slots. `null` is a lane that is legitimately not configured. */
 export interface Converters {
   document: Converter | null;
   vision: Converter | null;
@@ -84,41 +84,42 @@ export interface Converters {
 export const noConverters: Converters = { document: null, vision: null, audio: null };
 
 /**
- * Quien decide dominio, título y fecha del hecho.
+ * Whatever decides domain, title and date of the event.
  *
- * Un puerto y no un cliente concreto por el mismo motivo que los carriles: el
- * modelo es intercambiable y el core no tiene por qué saber si corre en tu
- * máquina o en la nube. `null` es un estado legítimo — el sistema funciona sin
- * clasificar, solo que las categorías se llenan a mano.
+ * A port and not a concrete client for the same reason as the lanes: the model
+ * is interchangeable and the core has no business knowing where it runs. `null`
+ * is a legitimate state — the system works unclassified, categories just get
+ * filled in by hand.
  */
 export interface Classifier {
   /**
-   * Pide JSON y lo devuelve parseado.
+   * Asks for JSON and returns it parsed.
    *
-   * El `schema` lo trae quien llama, y por eso el adapter no sabe qué es una
-   * clasificación ni un hecho: solo sabe pedirle JSON con forma a un modelo.
-   * Cuando el esquema vivía en el adapter, el extractor de hechos recibía la
-   * respuesta del clasificador —dominio, título y tags— sin importar qué
-   * hubiera pedido.
+   * The `schema` comes from the caller, which is why the adapter knows nothing
+   * about classifications or facts: it only knows how to ask a model for shaped
+   * JSON. While the schema lived in the adapter, the fact extractor received
+   * the classifier's own response — domain, title, tags — no matter what it had
+   * asked for.
    */
   classify(prompt: { system: string; user: string; schema: object }): Promise<unknown>;
   /**
-   * Pide prosa y la devuelve tal cual.
+   * Asks for prose and returns it as-is.
    *
-   * Son dos métodos y no uno porque la salida se trata distinto: clasificar
-   * exige JSON válido y se valida contra la realidad; responder una pregunta es
-   * texto, y lo que se verifica ahí es que traiga cita (regla dura 1).
+   * Two methods rather than one because the output is treated differently:
+   * classifying demands valid JSON validated against reality, while answering a
+   * question is text, and what gets verified there is that it carries a
+   * citation.
    */
   complete(prompt: { system: string; user: string }): Promise<string>;
   available(): Promise<{ ok: boolean; detail: string }>;
 }
 
 /**
- * Convierte texto en vectores. Local por defecto (Ollama en el compose).
+ * Turns text into vectors.
  *
- * `dimensions` viaja con el puerto porque cambiar de modelo cambia el tamaño
- * del vector, y eso obliga a reindexar todo — no es un detalle de configuración
- * que se pueda cambiar sin consecuencias.
+ * `dimensions` travels with the port because changing model changes the vector
+ * size, and that forces a full reindex — not a configuration detail that can be
+ * flipped without consequences.
  */
 export interface Embedder {
   readonly dimensions: number;

@@ -1,7 +1,9 @@
 /**
- * El core nunca pregunta ni formatea: devuelve datos.
- * `requires_confirmation` es lo que reemplaza a un diálogo — el llamador
- * decide cómo pedirla (--yes en el CLI, un botón en el chat, un 409 en HTTP).
+ * The core never asks and never formats: it returns data.
+ *
+ * `requires_confirmation` is what replaces a dialog — the caller decides how to
+ * ask for it (`--yes` on the CLI, a button in chat, a 409 over HTTP). That is
+ * what lets a second channel exist without touching any of this.
  */
 export type Affected = { kind: string; id: string; label?: string };
 
@@ -13,6 +15,7 @@ export type NeedsConfirmation = {
   ok: false;
   kind: 'requires_confirmation';
   message: string;
+  /** Named, not counted: a confirmation that says "3 items" tells you nothing. */
   affects: Affected[];
 };
 
@@ -33,17 +36,17 @@ export const needsConfirmation = (message: string, affects: Affected[]): NeedsCo
 export const isOk = <T>(r: Result<T>): r is Ok<T> => r.ok;
 
 /**
- * Un fallo que reintentar no va a arreglar.
+ * A failure that retrying will not fix.
  *
- * La distinción no es cosmética: `dm reprocess --failed` sirve cuando la causa
- * fue transitoria —un servicio apagado, la API limitando el ritmo, un timeout—
- * y no sirve para nada cuando el carril simplemente no sabe leer ese formato.
- * Ofrecer el mismo botón para los dos casos es ofrecer un botón que a veces no
- * hace nada, y eso enseña a desconfiar del botón.
+ * The distinction is not cosmetic: retrying helps when the cause was transient
+ * — a service down, an API throttling, a timeout — and does nothing at all when
+ * the lane simply cannot read that format. Offering the same button for both is
+ * offering a button that sometimes does nothing, which teaches people to
+ * distrust the button.
  *
- * Lo declara quien falla, que es el único que sabe. Todo lo demás se asume
- * transitorio: equivocarse hacia "reintenta" solo cuesta una corrida; hacia
- * "no insistas" esconde una memoria para siempre.
+ * Declared by whatever failed, the only place that knows. Everything else is
+ * assumed transient: erring toward "retry" costs one run, while erring toward
+ * "do not bother" hides a memory forever.
  */
 export class PermanentError extends Error {
   readonly permanent = true;

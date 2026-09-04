@@ -163,7 +163,7 @@ describe('cuando la respuesta se descartó a propósito', () => {
     mediaType: 'application/pdf',
     content: 'UF 3,0 por siniestro',
     seq: 0,
-    via: 'texto' as const,
+    via: 'text' as const,
     score: 1,
   };
 
@@ -306,7 +306,7 @@ describe('todo listado ofrece las mismas acciones', () => {
         sources: [conArchivo, conArchivo2].map((m, i) => ({
           memoryId: m.id, shortId: m.shortId, title: m.title,
           occurredAt: null, capturedAt: m.capturedAt, domainLabel: null,
-          mediaType: m.mediaType, content: 'x', seq: i, via: 'texto' as const, score: 1,
+          mediaType: m.mediaType, content: 'x', seq: i, via: 'text' as const, score: 1,
         })),
       },
     }],

@@ -97,7 +97,7 @@ describe('recuperación híbrida', () => {
     await guardar('consulta antigua con el doctor', { occurredAt: new Date('2024-01-15') });
     await guardar('consulta reciente con el doctor', { occurredAt: new Date('2026-05-20') });
 
-    const r = await retrieve(s.deps, actor, { query: 'consulta doctor', desde: new Date('2025-01-01') });
+    const r = await retrieve(s.deps, actor, { query: 'consulta doctor', from: new Date('2025-01-01') });
     if (!r.ok) throw new Error('falló');
     expect(r.value).toHaveLength(1);
     expect(r.value[0]!.content).toContain('reciente');
@@ -138,7 +138,7 @@ describe('recuperación híbrida', () => {
     const r = await retrieve(s.deps, actor, { query: 'deducible' });
     if (!r.ok) throw new Error('falló');
     expect(r.value.length).toBeGreaterThan(0);
-    expect(r.value[0]!.via).toBe('texto');
+    expect(r.value[0]!.via).toBe('text');
   });
 });
 

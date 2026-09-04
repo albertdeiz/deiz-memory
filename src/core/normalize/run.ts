@@ -5,7 +5,7 @@ import type { Converter, Deps, ExtractInput } from '../ports';
 import { err, isPermanent, ok, type Result } from '../result';
 import { canonical, clamp, isPoor, lanesFor, type Lane } from './lanes';
 
-/** Qué se intentó y cómo salió. Es lo que hace legible un reproceso a los 6 meses. */
+/** What was tried and how it went. This is what makes a reprocess legible months later. */
 export interface Attempt {
   lane: Lane;
   ok: boolean;
@@ -19,14 +19,14 @@ export interface NormalizeOutcome {
   chars: number;
   error: string | null;
   attempts: Attempt[];
-  /** Qué categoría le puso el clasificador, o null si no le puso ninguna. */
+  /** The category the classifier assigned, or null if it assigned none. */
   domain?: string | null;
 }
 
 /**
- * Leer un archivo de texto no necesita herramienta: es el carril más barato y el
- * único que nunca puede faltar. Vive acá y no en capture() para que reprocesar un
- * .txt pase por exactamente el mismo camino que reprocesar un PDF.
+ * Reading a text file needs no tool: the cheapest lane, and the only one that
+ * can never be missing. It lives here rather than in capture() so reprocessing a
+ * .txt takes exactly the same path as reprocessing a PDF.
  */
 const textConverter: Converter = {
   async extract({ bytes }: ExtractInput) {
@@ -59,15 +59,15 @@ interface Row {
 }
 
 /**
- * Corre los carriles sobre una memoria y guarda lo que salga.
+ * Runs the lanes over a memory and stores whatever comes out.
  *
- * No recibe un actor a propósito: la llama el worker, que procesa lo que le
- * toca por id. Todo camino que venga de una persona (dm reprocess) resuelve
- * primero contra su dueño y recién después llega acá.
+ * It takes no actor on purpose: the worker calls it, processing whatever it was
+ * handed by id. Every path that starts with a person resolves against their
+ * owner first and only then arrives here.
  *
- * Nunca lanza por un carril que falla. Un fallo se guarda en la fila —
- * `normalization_error`— y queda esperando a `dm reprocess --failed`. Reventar
- * dejaría la memoria en un limbo donde el worker la reintenta para siempre.
+ * It never throws because a lane failed. A failure is stored on the row and
+ * waits for an explicit reprocess. Throwing would leave the memory in a limbo
+ * where the worker retries it forever.
  */
 export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Result<NormalizeOutcome>> {
   const { rows } = await deps.db.query<Row>(
@@ -82,11 +82,10 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
   const id = row.id;
   const short = shortId(id);
 
-  // Solo nota: no hay blob del cual derivar nada, y eso no es un fallo.
-  //
-  // Pero sí hay que indexarla: lo que escribiste a mano tiene que ser tan
-  // buscable como lo que se extrajo de un PDF. Salir por acá sin indexar dejaba
-  // todas las notas sueltas fuera de `dm ask`, en silencio.
+  // Note only: there is no blob to derive anything from, and that is not a
+  // failure. It still has to be indexed, though — what you typed by hand must be
+  // as searchable as what was read out of a PDF. Leaving through here without
+  // indexing kept every bare note out of the answers, silently.
   if (!row.blob_sha256 || !row.storage_key) {
     await save(deps, id, { text: null, lane: 'none', error: null, detail: { reason: 'memoria sin archivo' } });
     const domain = await finish(deps, id);
@@ -97,8 +96,8 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
   if (candidates.length === 0) {
     const detail = { reason: 'sin carril', mediaType: row.media_type };
     await save(deps, id, { text: null, lane: 'none', error: null, detail });
-    // Sin carril no hay texto extraído, pero puede haber nota tuya — y esa nota
-    // tiene que ser tan buscable y tan clasificable como un PDF.
+    // No lane means no extracted text, but there can still be a note — and that
+    // note has to be as searchable and as classifiable as a PDF.
     const domain = await finish(deps, id);
     return ok({ id, shortId: short, lane: 'none', chars: 0, error: null, attempts: [], domain });
   }
@@ -107,8 +106,8 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
   try {
     bytes = await deps.blobs.get(row.storage_key);
   } catch (e) {
-    // El blob es lo único irrecuperable: si no está, no hay nada que reprocesar
-    // y hay que gritarlo, no anotarlo como un carril fallido más.
+    // The blob is the only irrecoverable thing: if it is gone there is nothing
+    // to reprocess, and that deserves shouting, not another failed-lane note.
     await save(deps, id, { text: null, lane: 'none', error: `no se pudo leer el original: ${message(e)}`, detail: {} });
     return err('not_found', `El original de ${short} no está en el storage: ${message(e)}`);
   }
@@ -122,9 +121,8 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
   const attempts: Attempt[] = [];
   let best: { text: string; lane: Lane; detail: Record<string, unknown>; incomplete?: string } | null = null;
   let unfinished: string | null = null;
-  // Arranca en `true` y solo baja: si CUALQUIER carril falló por algo
-  // transitorio, reintentar puede servir. Se necesita que todos los caminos
-  // estén cerrados para decir que no.
+  // Starts false and only opens up: if ANY lane failed for something transient,
+  // retrying may help. Every path has to be closed before saying it will not.
   let retryable = false;
   let anyFailure = false;
 
@@ -134,9 +132,9 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
       attempts.push({ lane, ok: false, detail: 'carril no configurado' });
       unfinished ??= `el carril "${lane}" no está configurado`;
       anyFailure = true;
-      // Configurar un carril es cambiar el entorno, no volver a intentar. Pero
-      // una vez configurado el reproceso sí sirve, así que cuenta como algo que
-      // se arregla sin tocar código.
+      // Configuring a lane means changing the environment, not retrying. But
+      // once configured a reprocess does help, so it counts as something that
+      // gets fixed without touching code.
       retryable = true;
       continue;
     }
@@ -146,14 +144,14 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
       attempts.push({ lane, ok: true, detail: `${text.trim().length} caracteres` });
       if (!best || text.trim().length > best.text.trim().length) {
         best = { text, lane, detail: out.detail ?? {}, ...(out.incomplete ? { incomplete: out.incomplete } : {}) };
-        // Este carril dio algo mejor que todo lo anterior, así que lo que falló
-        // antes ya no explica el resultado. Sin este olvido, una boleta leída
-        // perfectamente por OCR quedaba marcada con "el carril document no está
-        // configurado" solo porque markitdown no corrió — y markitdown no tenía
-        // nada que aportar sobre un escaneo de todos modos.
+        // This lane beat everything before it, so an earlier failure no longer
+        // explains the result. Without forgetting it, a receipt read perfectly
+        // by OCR stayed flagged "the document lane is not configured" only
+        // because that lane never ran — and it had nothing to contribute to a
+        // scan anyway.
         if (text.trim().length > 0) unfinished = null;
       }
-      // Suficiente texto: no hay razón para pagar el carril siguiente.
+      // Enough text: no reason to pay for the next lane.
       if (!isPoor(text)) {
         unfinished = null;
         break;
@@ -166,14 +164,14 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
     }
   }
 
-  // Un resultado pobre con un carril pendiente no es un éxito: se guarda lo que
-  // hay, pero queda marcado para que dm reprocess --failed lo retome cuando el
-  // carril que faltaba exista.
+  // A poor result with a lane still pending is not a success: what there is gets
+  // stored, but flagged so a later reprocess picks it up once the missing lane
+  // exists.
   const poor = isPoor(best?.text);
   const error = best === null
     ? (unfinished ?? 'ningún carril produjo texto')
-    // Un texto incompleto no es un éxito aunque sea largo: se guarda, se dice, y
-    // queda seleccionable por `dm reprocess --failed`.
+    // Incomplete text is not a success however long it is: stored, stated, and
+    // selectable by a later reprocess.
     : (best.incomplete ?? (poor && unfinished ? unfinished : null));
 
   const clamped = best ? clamp(canonical(best.text)) : { text: '', truncated: false };
@@ -183,19 +181,19 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
     text: finalText,
     lane: best?.lane ?? 'none',
     error,
-    // Un texto incompleto o de poca confianza no falló: el carril hizo lo que
-    // podía. Reintentarlo daría exactamente lo mismo, así que tampoco es
-    // reintentable — lo que necesita es otro carril, u ojos.
+    // Incomplete or low-confidence text did not fail: the lane did what it
+    // could. Retrying would give exactly the same, so it is not retryable
+    // either — what it needs is another lane, or human eyes.
     retryable: error === null ? null : anyFailure ? retryable : false,
     detail: { ...(best?.detail ?? {}), attempts, ...(clamped.truncated ? { truncated: true } : {}) },
   });
 
-  // Indexar va acá y no en un paso aparte: los trozos derivan del texto, así
-  // que cada vez que el texto cambia hay que rehacerlos o la búsqueda queda
-  // respondiendo con lo viejo. Que falle no invalida la normalización.
+  // Indexing belongs here and not in a separate step: chunks derive from the
+  // text, so every time the text changes they have to be rebuilt or search keeps
+  // answering with the old one. Failing does not invalidate normalization.
   //
-  // Se hace haya embedder o no: el full-text de la recuperación corre sobre los
-  // trozos, así que sin ellos no hay nada que buscar por ningún camino.
+  // Done with or without an embedder: full-text search runs over the chunks too,
+  // so without them there is nothing to search by either path.
   const domain = await finish(deps, id);
 
   return ok({
@@ -210,26 +208,26 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
 }
 
 /**
- * Lo que va después de guardar el texto: dejarla buscable y clasificada.
+ * What follows storing the text: making it searchable and classified.
  *
- * Que cualquiera de las dos falle no invalida la normalización — el texto ya
- * está en la fila y es lo caro de recuperar.
+ * Either one failing does not invalidate normalization — the text is already on
+ * the row, and the text is the expensive thing to recover.
  */
 async function finish(deps: Deps, id: Uuid): Promise<string | null> {
   await reindex(deps, id);
-  const clasificada = await reclassify(deps, id);
-  // Clasificar ya extrae, porque el dominio decide qué extractores aplican
-  // (§4). Acá solo se cubre el caso en que no clasificó —una memoria que ya
-  // tenía categoría, reprocesada— para que reprocesar también rehaga los datos.
-  if (!clasificada.ran) await reextract(deps, id);
-  return clasificada.domain;
+  const classified = await reclassify(deps, id);
+  // Classifying already extracts, because the domain decides which extractors
+  // apply. This only covers the case where it did not classify — a memory that
+  // already had a category, being reprocessed — so a reprocess rebuilds facts too.
+  if (!classified.ran) await reextract(deps, id);
+  return classified.domain;
 }
 
 /**
- * Los datos duros, si el documento tiene alguno (§4).
+ * The hard data, if the document has any.
  *
- * Va al final y no invalida nada si falla: un hecho es un derivado más, y el
- * texto —lo caro de recuperar— ya está guardado.
+ * Last, and harmless when it fails: a fact is one more derived thing, and the
+ * text — the expensive part — is already stored.
  */
 async function reextract(deps: Deps, id: Uuid): Promise<void> {
   if (!deps.classifier) return;
@@ -243,16 +241,16 @@ async function reextract(deps: Deps, id: Uuid): Promise<void> {
 }
 
 /**
- * Dominio, título corto y fecha del hecho.
+ * Domain, short title and date of the event.
  *
- * **Esto faltaba, y es la razón por la que ningún dominio tenía memorias.** El
- * clasificador está construido desde F2, pero lo llamaba únicamente
- * `dm classify` a mano: todo lo que entraba por Telegram quedaba normalizado,
- * indexado y sin categoría para siempre. La fase se dio por lista porque el
- * comando funcionaba, y nadie preguntó quién lo corría.
+ * **This call was missing, and it is why no domain had any memories.** The
+ * classifier worked and was tested, but only the manual command ever called it:
+ * everything arriving through chat stayed normalized, indexed and uncategorized
+ * forever. The work was considered done because the command ran, and nobody
+ * asked who ran it.
  *
- * No pisa una categoría que ya está puesta: reprocesar mejora el texto, no
- * revisa decisiones. Para reclasificar a propósito está `dm classify <id>`.
+ * It does not overwrite a category already set: reprocessing improves the text,
+ * it does not revisit decisions. Reclassifying on purpose is its own command.
  */
 async function reclassify(
   deps: Deps,
@@ -270,7 +268,7 @@ async function reclassify(
   return { ran: true, domain: r?.ok ? r.value.domain : null };
 }
 
-/** Rehace los trozos. Que falle no invalida la normalización. */
+/** Rebuilds the chunks. Failing does not invalidate normalization. */
 async function reindex(deps: Deps, id: Uuid): Promise<void> {
   const { rows } = await deps.db.query<{ owner_id: string }>(
     `select owner_id from memories where id = $1`, [id],
@@ -285,32 +283,32 @@ interface Saved {
   text: string | null;
   lane: Lane;
   error: string | null;
-  /** `null` cuando no hubo error; si no, si `dm reprocess` puede ayudar. */
+  /** `null` when there was no error; otherwise, whether a reprocess can help. */
   retryable?: boolean | null;
   detail: Record<string, unknown>;
 }
 
 /**
- * `normalized_at` se escribe pase lo que pase: significa "esto ya se corrió",
- * no "esto salió bien". Sin eso, una memoria que falla se queda en la cola de
- * pendientes y el worker la reintenta hasta el fin de los tiempos.
+ * `normalized_at` is written no matter what: it means "this already ran", not
+ * "this went well". Without that, a memory that fails stays in the pending queue
+ * and the worker retries it until the end of time.
  *
- * Y una corrida que falla **no toca lo que ya había**, ni el texto ni su
- * procedencia. El caso que obliga a esto: una foto transcrita hace meses por el
- * carril de visión, la API key vence, y el reproceso saca 30 caracteres de
- * basura por el carril de documentos. Sin esta guarda, esos 30 caracteres
- * reemplazan la transcripción buena — y "todo lo derivado es regenerable" pasa
- * de ser una red a ser un riesgo. Nadie reprocesa su histórico si puede quedar
- * peor que antes.
+ * And a failed run **does not touch what was already there**, neither the text
+ * nor its provenance. The case that forces this: a photo transcribed months ago
+ * by the vision lane, the credentials expire, and the reprocess pulls 30
+ * characters of garbage through the document lane. Without this guard those 30
+ * characters replace the good transcript — and "everything derived is
+ * regenerable" turns from a safety net into a risk. Nobody reprocesses their
+ * history if it can come out worse than before.
  *
- * El carril, el detalle y la fecha viajan con el texto: quedarse con la
- * transcripción vieja pero marcarla como `lane = none` sería mentir sobre de
- * dónde salió, y `dm reprocess --lane vision` ya no podría encontrarla.
+ * Lane, detail and timestamp travel with the text: keeping the old transcript
+ * but marking it as `lane = none` would lie about where it came from, and a
+ * lane-filtered reprocess could no longer find it.
  */
 async function save(deps: Deps, id: Uuid, s: Saved): Promise<void> {
-  // La condición se evalúa contra los valores ANTERIORES de la fila, que es
-  // justo lo que hace falta, y en una sola sentencia para que dos workers no
-  // puedan pisarse.
+  // The condition is evaluated against the row's PREVIOUS values, which is
+  // exactly what is needed, and in a single statement so two workers cannot
+  // clobber each other.
   const keep = `$4::text is not null and normalized_text is not null`;
   await deps.db.query(
     `update memories
@@ -320,10 +318,9 @@ async function save(deps: Deps, id: Uuid, s: Saved): Promise<void> {
             normalized_at        = case when ${keep} then normalized_at        else $6       end,
             normalization_error  = $4,
             normalization_retryable = $7,
-            -- El estado dice la verdad: lo que necesita una mirada humana
-            -- queda en needs_review. Antes una corrida con error dejaba el
-            -- estado anterior, y una memoria sin una sola letra extraida podia
-            -- figurar como normalizada.
+            -- Status tells the truth: anything needing a human look lands in
+            -- needs_review. A failed run used to leave the previous status, so a
+            -- memory with not one letter extracted could read as normalized.
             status               = case when $4::text is null then 'normalized' else 'needs_review' end,
             updated_at           = now()
       where id = $1`,

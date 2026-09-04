@@ -171,7 +171,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       // Cuando la prosa se descartó por no tener respaldo, se dice — y se
       // muestran igual las fuentes, que sí son verdad verificable. Callarlo y
       // listar documentos deja creer que no había nada (reglas duras 1 y 2).
-      const cabeza = a.text ?? (a.reason === 'sin_respaldo'
+      const cabeza = a.text ?? (a.reason === 'ungrounded'
         ? 'No pude darte la cifra sin inventarla. Lo que encontré:'
         : 'No pude responderlo sin inventar. Lo que encontré:');
       return [withOptions(`${cabeza}\n\nde:\n${fuentes.join('\n')}`, porItem(a.sources), caps)];

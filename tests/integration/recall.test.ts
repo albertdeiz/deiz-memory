@@ -162,7 +162,7 @@ describe('responder con cita (regla dura 1)', () => {
     const r = await answer(s.deps, actor, { query: 'deducible', synthesize: true });
     if (!r.ok) throw new Error('falló');
     expect(r.value.text).toBeNull();
-    expect(r.value.reason).toBe('sin_cita');
+    expect(r.value.reason).toBe('no_citation');
     // Pero los pasajes sí se muestran: son verdad verificable.
     expect(r.value.sources.length).toBeGreaterThan(0);
   });
@@ -172,7 +172,7 @@ describe('responder con cita (regla dura 1)', () => {
     const r = await answer(s.deps, actor, { query: 'deducible', synthesize: true });
     if (!r.ok) throw new Error('falló');
     expect(r.value.text).toBeNull();
-    expect(r.value.reason).toBe('sin_resultados');
+    expect(r.value.reason).toBe('no_results');
   });
 
   it('sin resultados dice que no lo tiene, sin llamar al modelo', async () => {
@@ -180,7 +180,7 @@ describe('responder con cita (regla dura 1)', () => {
     s.deps.classifier = { ...fakeClassifier('algo'), async complete() { llamado = true; return 'x'; } };
     const r = await answer(s.deps, actor, { query: 'pinguinos antarticos', synthesize: true });
     if (!r.ok) throw new Error('falló');
-    expect(r.value.reason).toBe('sin_resultados');
+    expect(r.value.reason).toBe('no_results');
     expect(llamado).toBe(false);
   });
 
@@ -192,7 +192,7 @@ describe('responder con cita (regla dura 1)', () => {
     const r = await answer(s.deps, actor, { query: 'deducible', synthesize: true });
     if (!r.ok) throw new Error('falló');
     expect(r.value.text).toBeNull();
-    expect(r.value.reason).toBe('sin_respaldo');
+    expect(r.value.reason).toBe('ungrounded');
     expect(r.value.sources.length).toBeGreaterThan(0);
   });
 

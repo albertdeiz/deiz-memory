@@ -8,21 +8,21 @@ export interface IndexOutcome {
   chunks: number;
 }
 
-/** Cuántos trozos se embeben por llamada. Ollama aguanta lotes chicos mejor. */
+/** How many chunks are embedded per call. A local model handles small batches better. */
 const BATCH = 16;
 
 /**
- * Trocea una memoria y guarda sus vectores.
+ * Chunks a memory and stores its vectors.
  *
- * **Sin embedder igual trocea**, dejando el vector en null. Parece un detalle y
- * no lo es: el full-text de la recuperación también corre sobre los trozos, así
- * que si no hubiera trozos, no habría degradación a full-text — habría nada.
- * Lo descubrí porque un test con el embedder apagado no encontraba lo que
- * acababa de guardar.
+ * **It still chunks with no embedder**, leaving the vector null. That looks like
+ * a detail and is not: full-text retrieval runs over the chunks too, so with no
+ * chunks there would be no degradation to full-text — there would be nothing.
+ * Found because a test with the embedder off could not find what it had just
+ * stored.
  *
- * Es reemplazable entero: los trozos y sus embeddings son derivados del blob,
- * igual que el texto, así que se borran y se regeneran sin pérdida. Por eso
- * empieza borrando — reindexar dos veces no duplica.
+ * Wholly replaceable: chunks and their embeddings derive from the blob, like the
+ * text, so they are deleted and regenerated with no loss. Hence starting with a
+ * delete — indexing twice does not duplicate.
  */
 export async function indexMemory(
   deps: Deps,
@@ -39,33 +39,33 @@ export async function indexMemory(
   if (rows.length === 0) return err('not_found', `No existe la memoria ${memoryId}.`);
   const m = rows[0]!;
 
-  // Se indexa lo tuyo y lo extraído, en ese orden: si solo escribiste una nota,
-  // esa nota igual tiene que ser encontrable por semejanza.
-  const fuente = [m.note, m.normalized_text].filter(Boolean).join('\n\n');
-  const trozos = chunkText(fuente);
+  // Your words and the extracted text, in that order: if you only wrote a note,
+  // that note still has to be findable by similarity.
+  const source = [m.note, m.normalized_text].filter(Boolean).join('\n\n');
+  const chunks = chunkText(source);
 
   await deps.db.query(`delete from memory_chunks where memory_id = $1`, [m.id]);
-  if (trozos.length === 0) return ok({ memoryId: m.id, chunks: 0 });
+  if (chunks.length === 0) return ok({ memoryId: m.id, chunks: 0 });
 
-  for (let i = 0; i < trozos.length; i += BATCH) {
-    const lote = trozos.slice(i, i + BATCH);
-    const vectores = deps.embedder
-      ? await deps.embedder.embed(lote.map((t) => contextualize(t.content)))
+  for (let i = 0; i < chunks.length; i += BATCH) {
+    const batch = chunks.slice(i, i + BATCH);
+    const vectors = deps.embedder
+      ? await deps.embedder.embed(batch.map((t) => contextualize(t.content)))
       : null;
 
-    for (const [j, t] of lote.entries()) {
+    for (const [j, t] of batch.entries()) {
       await deps.db.query(
         `insert into memory_chunks (memory_id, owner_id, seq, content, embedding)
          values ($1, $2, $3, $4, $5::vector)`,
-        [m.id, actor.ownerId, t.seq, t.content, vectores ? JSON.stringify(vectores[j]) : null],
+        [m.id, actor.ownerId, t.seq, t.content, vectors ? JSON.stringify(vectors[j]) : null],
       );
     }
   }
 
-  return ok({ memoryId: m.id, chunks: trozos.length });
+  return ok({ memoryId: m.id, chunks: chunks.length });
 }
 
-/** Cuántas memorias esperan ser indexadas. Para `dm doctor` y el chat. */
+/** How many memories are waiting to be indexed. For the health check and the chat. */
 export async function pendingIndex(deps: Deps, actor: Actor): Promise<number> {
   const { rows } = await deps.db.query<{ n: string }>(
     `select count(*)::text n from memories m
@@ -77,7 +77,7 @@ export async function pendingIndex(deps: Deps, actor: Actor): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
-/** Las que faltan, para indexarlas en lote. */
+/** The ones still missing, to index in bulk. */
 export async function unindexed(deps: Deps, actor: Actor, limit: number): Promise<Uuid[]> {
   const { rows } = await deps.db.query<{ id: string }>(
     `select m.id from memories m

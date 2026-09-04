@@ -82,7 +82,7 @@ export const SEED_FACT_TYPES: Omit<FactType, 'id' | 'active'>[] = [
   {
     slug: 'poliza_auto',
     label: 'Póliza de auto',
-    kind: 'estado',
+    kind: 'state',
     description:
       'El CONTRATO de seguro de un vehículo: el documento que la aseguradora emite al ' +
       'contratar, con las coberturas, los deducibles y la vigencia. Tiene que nombrar la ' +
@@ -105,7 +105,7 @@ export const SEED_FACT_TYPES: Omit<FactType, 'id' | 'active'>[] = [
   {
     slug: 'tarjeta_credito',
     label: 'Estado de cuenta de tarjeta',
-    kind: 'periodo',
+    kind: 'period',
     description:
       'Estado de cuenta o cartola mensual de una tarjeta de crédito: cupo, monto facturado, ' +
       'fecha de pago y tasas. Un documento por mes.',
@@ -128,9 +128,9 @@ export const SEED_FACT_TYPES: Omit<FactType, 'id' | 'active'>[] = [
       { name: 'cupo_total', kind: 'money', label: 'cupo total', aliases: ['cupo'] },
       { name: 'cupo_disponible', kind: 'money', label: 'cupo disponible', aliases: ['disponible'] },
       { name: 'tasa', kind: 'number', label: 'tasa de interés vigente (%)', aliases: ['tasa', 'interes'] },
-      { name: 'periodo_desde', kind: 'date', label: 'inicio del período facturado', aliases: ['periodo'],
+      { name: 'periodo_desde', kind: 'date', label: 'inicio del período facturado', aliases: ['period'],
         near: ['periodo  facturado', 'periodo facturado'], notNear: ['anterior'] },
-      { name: 'periodo_hasta', kind: 'date', label: 'fin del período facturado', aliases: ['periodo'],
+      { name: 'periodo_hasta', kind: 'date', label: 'fin del período facturado', aliases: ['period'],
         near: ['periodo  facturado', 'periodo facturado'], notNear: ['anterior'] },
     ],
   },

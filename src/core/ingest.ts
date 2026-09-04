@@ -2,13 +2,13 @@ import { normalizeMemory } from './normalize/run';
 import type { Deps, Ingest } from './ports';
 
 /**
- * Corre los carriles ahí mismo y no vuelve hasta terminar. Es lo que usan los
- * tests (deterministas, sin worker de por medio) y `dm capture --wait`, para
- * cuando estás en la terminal mirando y prefieres esperar diez segundos antes
- * que abrir otra ventana.
+ * Runs the lanes inline and does not return until done. Used by tests
+ * (deterministic, no worker in between) and by an explicit `--wait`, for when
+ * you are watching a terminal and would rather wait ten seconds than open
+ * another window.
  *
- * No es el camino normal: ese es la cola (§7, "nunca hacer esperar al usuario
- * por un LLM").
+ * Not the normal path: that one is the queue, because a person should never be
+ * kept waiting on a model.
  */
 export const inlineIngest = (deps: () => Deps): Ingest => ({
   async process(memoryId: string): Promise<void> {

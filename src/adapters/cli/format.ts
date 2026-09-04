@@ -157,18 +157,18 @@ export function renderAnswer(a: Answer): string {
   if (a.text) return `${a.text}\n\nfuentes:\n${fuentes.join('\n')}`;
 
   switch (a.reason) {
-    case 'sin_resultados':
+    case 'no_results':
       return 'No lo tengo.';
-    case 'sin_cita':
+    case 'no_citation':
       // Se descartó la prosa a propósito: una respuesta sin cita no cumple la
       // regla dura 1. Mejor los pasajes crudos que una afirmación sin respaldo.
       return `No pude responderlo sin inventar, pero esto es lo que encontré:\n${fuentes.join('\n')}`;
-    case 'sin_respaldo':
+    case 'ungrounded':
       // Había prosa y se descartó: afirmaba una cifra que no está en lo que
       // leyó. Un número inventado con cita válida es el peor fallo posible acá,
       // porque nada lo delata (regla dura 2).
       return `No pude darte la cifra sin inventarla. Esto es lo que encontré:\n${fuentes.join('\n')}`;
-    case 'sin_modelo':
+    case 'no_model':
       return `Sin modelo para redactar. Lo que encontré:\n${fuentes.join('\n')}`;
     default:
       return fuentes.join('\n');

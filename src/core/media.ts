@@ -1,6 +1,7 @@
 /**
- * Detección de media type por magic bytes, con la extensión como respaldo.
- * Los bytes mandan sobre el nombre: una foto renombrada a .pdf sigue siendo una foto.
+ * Media type detection by magic bytes, with the extension as a fallback.
+ *
+ * Bytes win over the name: a photo renamed to .pdf is still a photo.
  */
 const BY_EXT: Record<string, string> = {
   txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json',
@@ -20,8 +21,8 @@ const OOXML: Record<string, string> = {
 };
 
 /**
- * markitdown y whisper despachan por extensión, y el blob en el storage no
- * tiene ninguna: se guarda por sha256. Este es el camino de vuelta.
+ * The converter services dispatch on extension, and the stored blob has none:
+ * it is keyed by sha256. This is the way back.
  */
 export const extensionForMediaType = (mediaType: string): string => {
   const hit = Object.entries(BY_EXT).find(([, m]) => m === mediaType);
@@ -40,7 +41,7 @@ const starts = (b: Buffer, sig: number[], at = 0): boolean =>
 const ascii = (b: Buffer, s: string, at = 0): boolean =>
   b.length >= at + s.length && b.subarray(at, at + s.length).toString('latin1') === s;
 
-/** Heurística de texto: UTF-8 válido y sin bytes de control raros. */
+/** Text heuristic: valid UTF-8 and no odd control bytes. */
 export const looksLikeText = (b: Buffer): boolean => {
   const head = b.subarray(0, 4096);
   if (head.includes(0)) return false;
@@ -71,7 +72,7 @@ export function detectMediaType(bytes: Buffer, filename?: string | null): string
     if (brand.startsWith('heic') || brand.startsWith('heix') || brand.startsWith('mif1')) return 'image/heic';
     return 'video/mp4';
   }
-  // Los formatos de Office son zip por dentro: sin nombre no se distinguen.
+  // Office formats are zip inside: without a name they are indistinguishable.
   if (starts(bytes, [0x50, 0x4b, 0x03, 0x04])) return OOXML[ext] ?? 'application/zip';
 
   if (ext && BY_EXT[ext]) return BY_EXT[ext]!;

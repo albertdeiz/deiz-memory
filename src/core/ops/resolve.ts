@@ -5,9 +5,10 @@ import { err, ok, type Result } from '../result';
 const REF = /^[0-9a-f-]{4,36}$/i;
 
 /**
- * Resuelve un prefijo de id al estilo git. Acepta con o sin guiones.
- * Filtra por dueño siempre: un prefijo ajeno es not_found, no forbidden —
- * decir "existe pero no es tuyo" ya filtra información.
+ * Resolves an id prefix, git style. Accepts it with or without dashes.
+ *
+ * Always filtered by owner, and someone else's prefix is not_found rather than
+ * forbidden — saying "it exists but is not yours" already leaks information.
  */
 export async function resolveMemoryId(
   db: Db,

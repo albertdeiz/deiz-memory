@@ -25,17 +25,18 @@ export async function createOwner(db: Db, label: string): Promise<Result<Owner>>
     [clean],
   );
   const owner = toOwner(rows[0]!);
-  // Nace con las categorías de §9. Sin esto el clasificador no tendría contra
-  // qué clasificar, y la primera experiencia sería una lista vacía.
+  // Born with the seed categories. Without them the classifier would have
+  // nothing to classify against, and the first experience would be an empty list.
   await seedDomains(db, owner.id);
   await seedFactTypes(db, owner.id);
   return ok(owner);
 }
 
 /**
- * En un sistema de un dueño no tiene sentido escribir --actor en cada comando.
- * Si hay exactamente uno, ese es. Si hay varios, exige elegir: adivinar entre
- * dueños sería justo el tipo de error que la regla dura 9 existe para evitar.
+ * In a single-owner system there is no point typing --actor on every command.
+ * If there is exactly one owner, that is the one. With several it demands a
+ * choice: guessing between owners is exactly the mistake owner isolation exists
+ * to prevent.
  */
 export async function resolveActor(db: Db, explicit?: string | null): Promise<Result<Uuid>> {
   if (explicit) {

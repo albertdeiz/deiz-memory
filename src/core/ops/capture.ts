@@ -25,13 +25,13 @@ export interface CaptureResult {
 }
 
 /**
- * Retorna apenas el blob está persistido y la memoria insertada — no espera a
- * que los carriles corran. Ese acuse ya decía lo correcto en F0 y ahora
- * *significa* algo: detrás hay un OCR que puede tardar diez segundos.
+ * Returns as soon as the blob is persisted and the memory inserted — it does
+ * not wait for the lanes to run. That acknowledgement *means* something: behind
+ * it is an OCR pass that can take ten seconds.
  *
- * Lo que la persona escribió va a `note` y lo que se extraiga del archivo irá a
- * `normalized_text`. Nunca al revés y nunca juntos: la nota no se regenera, y
- * la primera transcripción se la comería (ver migración 003).
+ * What the person wrote goes to `note`, and whatever is read out of the file
+ * goes to `normalized_text`. Never the other way and never together: the note
+ * is not regenerated, and the first transcription would eat it.
  */
 export async function capture(
   deps: Deps,
@@ -68,15 +68,16 @@ export async function capture(
     );
 
     if (existing.rowCount > 0) {
-      // Direccionable por contenido: mismo archivo, mismo blob. Solo nace otra memoria.
+      // Content addressed: same file, same blob. Only another memory is born.
       deduped = true;
       mediaType = existing.rows[0]!.media_type;
       sizeBytes = Number(existing.rows[0]!.size_bytes);
     } else {
       mediaType = detectMediaType(bytes, input.filename);
       sizeBytes = bytes.length;
-      // Subir ANTES de insertar: nunca una fila apuntando a un objeto que no existe.
-      // Al revés dejaría huérfano un objeto, que es recuperable; esto no lo sería.
+      // Upload BEFORE inserting: never a row pointing at an object that does not
+      // exist. The other order leaves an orphan object, which is recoverable; this
+      // would not be.
       await deps.blobs.put(storageKey(sha256), bytes, mediaType);
       await deps.db.query(
         `insert into blobs (sha256, size_bytes, media_type, storage_key)

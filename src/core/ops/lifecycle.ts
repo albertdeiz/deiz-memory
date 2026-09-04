@@ -12,7 +12,7 @@ export interface HideResult {
   hidden: boolean;
 }
 
-/** Ocultar es un flag, nunca un borrado (§14.1, append-only). */
+/** Hiding is a flag, never a delete: the store is append-only. */
 export async function setHidden(
   deps: Deps,
   actor: Actor,
@@ -37,8 +37,8 @@ export interface PurgeResult {
 }
 
 /**
- * La única forma de borrar de verdad. Explícita, confirmada y auditada.
- * El blob solo se va si ninguna otra memoria lo referencia.
+ * The only way to truly delete. Explicit, confirmed and audited.
+ * The blob only goes if no other memory references it.
  */
 export async function purge(
   deps: Deps,
@@ -101,8 +101,9 @@ export async function purge(
     return { storageKeyToDrop: key };
   });
 
-  // Fuera de la transacción a propósito: un delete en S3 no se puede revertir.
-  // Si esto falla queda un objeto huérfano, que es inofensivo y recuperable.
+  // Outside the transaction on purpose: an object-store delete cannot be rolled
+  // back. If this fails an orphan object remains, which is harmless and
+  // recoverable.
   if (storageKeyToDrop) await deps.blobs.delete(storageKeyToDrop);
 
   return { ok: true, value: { id: m.id, shortId: m.shortId, blobDeleted: storageKeyToDrop !== null } };

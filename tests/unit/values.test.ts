@@ -120,7 +120,7 @@ describe('grounded · bajo qué rótulo', () => {
  */
 describe('el contexto del extractor', () => {
   const tipo = {
-    id: 't', slug: 'x', label: 'X', description: '', kind: 'periodo' as const,
+    id: 't', slug: 'x', label: 'X', description: '', kind: 'period' as const,
     domainSlug: null, identityField: null, validFromField: null, validUntilField: null,
     active: true,
     fields: [campo('money', { near: ['total facturado a pagar'] })],

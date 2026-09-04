@@ -16,7 +16,7 @@ create table fact_types (
   -- `estado` tiene uno vigente y sucede; `periodo` coexiste. Confundirlos
   -- marcaría la cartola de julio como superada por la de agosto, que es peor
   -- que no tener el dato.
-  kind           text not null check (kind in ('estado', 'periodo')),
+  kind           text not null check (kind in ('state', 'period')),
   -- De qué categoría intentar extraer. Sin esto habría que llamar al modelo
   -- sobre cada memoria para descubrir que no aplica.
   domain_slug    text,

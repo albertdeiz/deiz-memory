@@ -182,7 +182,7 @@ export async function askFacts(
         value,
         // En un `periodo` no existe "vencido": la cartola de julio no venció,
         // sigue siendo la verdad sobre julio.
-        expired: ref.type.kind === 'estado' && hasta !== null && hasta < hoy,
+        expired: ref.type.kind === 'state' && hasta !== null && hasta < hoy,
         superseded: fact.supersededBy !== null,
       });
     }

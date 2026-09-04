@@ -16,7 +16,7 @@
     "worker": "tsx src/adapters/cli/index.ts worker",
     "up": "docker compose up -d && ./scripts/garage-init.sh",
     "down": "docker compose down",
-    "test": "vitest run",
+    "test": "npm run build && vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:cli": "npm run build && vitest run tests/cli",

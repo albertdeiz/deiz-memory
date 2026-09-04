@@ -48,8 +48,8 @@ export const toSummary = (r: MemoryRow): MemorySummary => ({
   mediaType: r.media_type,
   sizeBytes: r.size_bytes === null ? null : Number(r.size_bytes),
   hidden: r.hidden,
-  // Tus palabras antes que las de la máquina: si escribiste una nota al mandar
-  // la foto, eso es lo que reconoces en una lista, no el OCR del papel.
+  // Your words before the machine's: if you wrote a note when you sent the
+  // photo, that is what you recognise in a list, not the OCR of the paper.
   excerpt: excerptOf(r.note ?? r.normalized_text),
   domainId: r.domain_id,
   domainLabel: r.domain_label,

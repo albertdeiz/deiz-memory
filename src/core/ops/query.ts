@@ -9,7 +9,7 @@ export interface ListInput {
   limit?: number;
   offset?: number;
   includeHidden?: boolean;
-  /** Id de dominio. `list` ordena entonces por fecha del HECHO, no de captura. */
+  /** Domain id. With one set, `list` orders by the date of the EVENT, not of capture. */
   domainId?: string | null;
 }
 
@@ -25,10 +25,9 @@ export async function list(
   actor: Actor,
   input: ListInput = {},
 ): Promise<Result<MemorySummary[]>> {
-  // Dentro de un dominio se ordena por cuándo PASÓ, no por cuándo lo guardaste
-  // (§3.3, y es el criterio de listo de F2). Fuera de un dominio manda la
-  // captura: sin fecha del hecho inferida, ordenar por ella sería ordenar por
-  // nulls.
+  // Inside a domain, order by when it HAPPENED, not when you stored it. Outside
+  // a domain, capture wins: with no inferred event date, ordering by it would be
+  // ordering by nulls.
   const porDominio = input.domainId != null;
   const { rows } = await deps.db.query<MemoryRow>(
     `select ${MEMORY_COLUMNS} ${MEMORY_FROM}
@@ -45,8 +44,9 @@ export async function list(
 }
 
 /**
- * websearch_to_tsquery entiende comillas, OR y - para excluir, que es lo que la
- * gente ya escribe. La config es_unaccent ignora tildes y aplica stemming español.
+ * The search parser understands quotes, OR and `-` to exclude, which is what
+ * people already type. The text config ignores accents and applies Spanish
+ * stemming.
  */
 export async function search(
   deps: Deps,
@@ -106,11 +106,10 @@ export async function fetchBlob(deps: Deps, actor: Actor, ref: string): Promise<
   const bytes = await deps.blobs.get(rows[0]!.storage_key);
   const mediaType = rows[0]!.media_type;
 
-  // Telegram entrega las fotos SIN nombre de archivo, así que sin esto el
-  // original volvía como `a1b2c3d4.bin` y ningún visor lo abría. El media type
-  // se detectó por magic bytes al capturar, o sea que es mejor dato que
-  // cualquier nombre — derivar la extensión de ahí es lo correcto, no un
-  // parche.
+  // Chat platforms deliver photos with NO filename, so without this the original
+  // came back as `a1b2c3d4.bin` and no viewer would open it. The media type was
+  // detected by magic bytes at capture, which makes it better data than any
+  // name — deriving the extension from it is the correct move, not a patch.
   const name = m.originalFilename && extensionOf(m.originalFilename)
     ? m.originalFilename
     : `${m.shortId}.${extensionForMediaType(mediaType)}`;

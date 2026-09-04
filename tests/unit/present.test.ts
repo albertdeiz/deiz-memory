@@ -167,7 +167,7 @@ describe('cuando la respuesta se descartó a propósito', () => {
     score: 1,
   };
 
-  const rechazo = (reason: 'sin_cita' | 'sin_respaldo'): Outcome => ({
+  const rechazo = (reason: 'no_citation' | 'ungrounded'): Outcome => ({
     kind: 'respuesta',
     consulta: '¿cuál es mi deducible?',
     answer: { text: null, sources: [fuente], reason },
@@ -176,18 +176,18 @@ describe('cuando la respuesta se descartó a propósito', () => {
   it('dice que no dio la cifra, en vez de listar y callarse', () => {
     // Listar documentos sin decir nada deja creer que no había respuesta. La
     // verdad es otra: la había y se descartó por no tener respaldo.
-    const r = textReply(present(ok(rechazo('sin_respaldo')), CAPS));
+    const r = textReply(present(ok(rechazo('ungrounded')), CAPS));
     expect(r.body).toMatch(/sin inventarla/i);
     expect(r.body).toContain('a853a71c');
   });
 
   it('y lo mismo cuando el problema fue la falta de cita', () => {
-    const r = textReply(present(ok(rechazo('sin_cita')), CAPS));
+    const r = textReply(present(ok(rechazo('no_citation')), CAPS));
     expect(r.body).toMatch(/sin inventar/i);
   });
 
   it('nunca muestra la palabra null donde iba la respuesta', () => {
-    for (const reason of ['sin_cita', 'sin_respaldo'] as const) {
+    for (const reason of ['no_citation', 'ungrounded'] as const) {
       const r = textReply(present(ok(rechazo(reason)), CAPS));
       expect(r.body).not.toMatch(/\bnull\b/);
     }
@@ -341,14 +341,14 @@ describe('lo vencido se dice antes del dato', () => {
     ref: {
       type: {
         id: 't', slug: 'poliza_auto', label: 'Póliza de auto', description: '',
-        kind: 'estado' as const, domainSlug: 'seguros', fields: [],
+        kind: 'state' as const, domainSlug: 'seguros', fields: [],
         identityField: 'patente', validFromField: null, validUntilField: null, active: true,
       },
       field: { name: 'deducible', kind: 'uf' as const, label: 'deducible', aliases: ['deducible'] },
     },
     fact: {
       id: 'f', memoryId: 'm', typeId: 't', typeSlug: 'poliza_auto', typeLabel: 'Póliza de auto',
-      kind: 'estado' as const, payload: { deducible: 3 }, identity: 'VHWD58',
+      kind: 'state' as const, payload: { deducible: 3 }, identity: 'VHWD58',
       validFrom: new Date('2020-01-01'), validUntil: new Date('2021-01-01'),
       supersededBy: null, confidence: 1, shortId: 'a853a71c', memoryTitle: null,
     },
@@ -394,7 +394,7 @@ describe('un conflicto es el mismo dato dos veces, no dos cosas distintas', () =
     ref: {
       type: {
         id: 't', slug: 'tarjeta_credito', label: 'Tarjeta', description: '',
-        kind: 'periodo' as const, domainSlug: 'finanzas', fields: [],
+        kind: 'period' as const, domainSlug: 'finanzas', fields: [],
         identityField: 'tarjeta', validFromField: null, validUntilField: null, active: true,
       },
       field: { name: 'monto_a_pagar', kind: 'money' as const, label: 'monto', aliases: [] },
@@ -407,7 +407,7 @@ describe('un conflicto es el mismo dato dos veces, no dos cosas distintas', () =
     value,
     fact: {
       id: `f${identity}`, memoryId: `m${identity}`, typeId: 't', typeSlug: 'tarjeta_credito',
-      typeLabel: 'Tarjeta', kind: 'periodo' as const, payload: {}, identity,
+      typeLabel: 'Tarjeta', kind: 'period' as const, payload: {}, identity,
       validFrom: null, validUntil: null, supersededBy: null, confidence: 1,
       shortId: identity, memoryTitle: null,
     },

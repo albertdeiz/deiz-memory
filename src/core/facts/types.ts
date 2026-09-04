@@ -1,19 +1,19 @@
 import type { Uuid } from '../domain/types';
 
 /**
- * Los tipos de hecho (§4).
+ * Fact types.
  *
- * Un tipo no es un enum, por la misma razón que un dominio no lo es (§3.7):
- * agregar `poliza_salud` no puede requerir un deploy. El registro vive en
- * `fact_types` y el prompt de extracción se arma en runtime desde él.
+ * A type is not an enum, for the same reason a domain is not: adding one must
+ * not require a deploy. The registry lives in the database and the extraction
+ * prompt is built from it at runtime.
  */
 
 /**
- * Qué clase de dato es un campo.
+ * What kind of datum a field is.
  *
- * Conjunto cerrado y chico a propósito: cada `kind` hace dos trabajos —le dice
- * al modelo qué forma tiene el campo, y **valida** lo que vuelve—. Uno abierto
- * dejaría la validación sin nada contra qué comprobar.
+ * A small closed set on purpose: each kind does two jobs — it tells the model
+ * what shape the field has, and it **validates** what comes back. An open set
+ * would leave validation with nothing to check against.
  */
 export type FieldKind = 'text' | 'number' | 'uf' | 'money' | 'date' | 'phone';
 
@@ -22,42 +22,41 @@ export interface FactField {
   kind: FieldKind;
   label: string;
   /**
-   * Las palabras con que se pregunta por este campo.
+   * The words people use to ask for this field.
    *
-   * Es lo que conecta una pregunta con un campo **sin llamar a un modelo**: si
-   * una palabra de la pregunta calza con un alias, hay camino de hecho.
-   * Determinista, como todo lo que decide algo acá.
+   * This is what connects a question to a field **without calling a model**: if
+   * a word of the question matches an alias, there is a fact path. Matching is
+   * by stem and prefix, so asking with a different conjugation still lands.
    */
   aliases: string[];
   /**
-   * Palabras que tienen que estar **cerca del valor** en el documento.
+   * Words that have to appear **near the value** in the document.
    *
-   * Comprobar que la cifra exista no alcanza: una cartola trae
-   * `MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR) $886.568` y
-   * `MONTO TOTAL FACTURADO A PAGAR $1.747.885`, y las dos cifras están en el
-   * texto. Sin mirar el rótulo, el guardarraíl daba por bueno el mes pasado.
+   * Checking that the figure exists is not enough: a card statement carries both
+   * `MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR) $886.568` and `MONTO TOTAL
+   * FACTURADO A PAGAR $1.747.885`, and both figures are in the text. Without
+   * looking at the label, the guard accepted last month's.
    */
   near?: string[];
   /**
-   * Palabras que **descalifican** una ocurrencia.
+   * Words that **disqualify** an occurrence.
    *
-   * Es la mitad que de verdad importa, porque el rótulo del señuelo suele
-   * contener al del bueno: "monto facturado a pagar" está dentro de "monto
-   * facturado a pagar (período anterior)". Lo que los separa es `anterior`.
+   * This is the half that actually matters, because the decoy's label usually
+   * contains the good one: "amount billed" sits inside "amount billed (previous
+   * period)". What separates them is the extra word.
    */
   notNear?: string[];
 }
 
 /**
- * `estado` tiene uno vigente: la póliza nueva sucede a la vieja, que sigue
- * existiendo y sigue respondiendo "¿qué cubría el año pasado?".
+ * `state` has one current version: a new policy succeeds the old one, which
+ * still exists and still answers "what did it cover last year?".
  *
- * `periodo` coexiste: la cartola de agosto NO reemplaza a la de julio, porque
- * la de julio sigue siendo la verdad sobre julio para siempre. Sin esta
- * distinción el sistema marcaría julio como superada, que es peor que no tener
- * el dato.
+ * `period` coexists: August's statement does NOT replace July's, because July's
+ * is still the truth about July, permanently. Without this distinction the
+ * system would mark July superseded, which is worse than not having the datum.
  */
-export type FactKind = 'estado' | 'periodo';
+export type FactKind = 'state' | 'period';
 
 export interface FactType {
   id: Uuid;
@@ -65,18 +64,18 @@ export interface FactType {
   label: string;
   description: string;
   kind: FactKind;
-  /** De qué categoría intentar extraer. Null = de cualquiera. */
+  /** Which category to try extracting from. Null means any. */
   domainSlug: string | null;
   fields: FactField[];
-  /** Cuál de los campos distingue dos instancias. */
+  /** Which field distinguishes two instances. */
   identityField: string | null;
-  /** De qué campos salen las fechas de vigencia. El tipo es data, su ventana también. */
+  /** Where the validity dates come from. The type is data; so is its window. */
   validFromField: string | null;
   validUntilField: string | null;
   active: boolean;
 }
 
-/** Un valor extraído, ya validado y normalizado. */
+/** An extracted value, already validated and normalized. */
 export type FactValue = string | number;
 
 export interface Fact {
@@ -92,7 +91,7 @@ export interface Fact {
   validUntil: Date | null;
   supersededBy: Uuid | null;
   confidence: number;
-  /** Para citar. Se resuelve al leer, no se guarda duplicado. */
+  /** For citing. Resolved on read, not stored twice. */
   shortId: string;
   memoryTitle: string | null;
 }

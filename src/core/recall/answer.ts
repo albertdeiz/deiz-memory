@@ -6,46 +6,46 @@ import { checkGrounding } from './grounding';
 import { retrieve, type Passage, type RetrieveInput } from './retrieve';
 
 /**
- * Responder una pregunta con lo que guardaste.
+ * Answering a question with what you stored.
  *
- * Las dos reglas duras que mandan acá:
+ * Two invariants rule here:
  *
- *   1. Nunca responder un dato factual sin `memory_id` de respaldo.
- *   2. Si no está guardado, la respuesta correcta es "no lo tengo" — no una
- *      inferencia plausible.
+ *   1. Never answer a factual question without a memory id backing it.
+ *   2. If it is not stored, the correct answer is "I do not have it" — not a
+ *      plausible inference.
  *
- * Por eso el modelo no responde de su conocimiento: responde **solo** sobre los
- * pasajes recuperados, y cada afirmación tiene que apuntar a uno. Una respuesta
- * sin cita se descarta antes de mostrarse.
+ * So the model does not answer from its own knowledge: it answers **only** over
+ * the retrieved passages, and every claim has to point at one. An answer with
+ * no citation is discarded before it is ever shown.
  */
 export interface AnswerInput extends RetrieveInput {
-  /** Sin esto se devuelven los pasajes crudos, que ya es útil y no cuesta. */
+  /** Without this the raw passages come back, which is already useful and free. */
   synthesize?: boolean;
 }
 
 export interface Answer {
-  /** La respuesta en prosa, o null si no se pudo responder con lo guardado. */
+  /** The prose answer, or null when it could not be answered from what is stored. */
   text: string | null;
-  /** Los pasajes en que se apoya. Siempre presentes, aunque no haya prosa. */
+  /** The passages it rests on. Always present, even with no prose. */
   sources: Passage[];
-  /** Por qué no hay respuesta, cuando no la hay. */
-  reason: 'sin_resultados' | 'sin_modelo' | 'sin_cita' | 'sin_respaldo' | null;
+  /** Why there is no answer, when there is none. */
+  reason: 'no_results' | 'no_model' | 'no_citation' | 'ungrounded' | null;
   /**
-   * Los datos duros que responden, si los hay (§6, modo hecho).
+   * The typed data that answers, when it exists.
    *
-   * Cuando vienen, son **la** respuesta: salen de una consulta, no de un
-   * ranking, y no hay prosa que verificar. La presentación los muestra en vez
-   * de la búsqueda, no además de ella.
+   * When these come back they are **the** answer: they come from a query, not a
+   * ranking, and there is no prose to verify. Presentation shows them instead of
+   * the search, not in addition to it.
    */
   facts?: FactHit[];
 }
 
 /**
- * Cuántos pasajes se le dan al modelo.
+ * How many passages the model gets.
  *
- * Ocho, que es lo que `retrieve()` devuelve por defecto: cortar en seis dejaba
- * un acantilado arbitrario entre lo que se recupera y lo que se lee, y una
- * pregunta cuya respuesta caía séptima se contestaba con un "no lo tengo".
+ * Eight, which is what retrieval returns by default: cutting at six left an
+ * arbitrary cliff between what is retrieved and what is read, and a question
+ * whose answer landed seventh got a "I do not have it".
  */
 const MAX_PASSAGES = 8;
 
@@ -54,9 +54,10 @@ export async function answer(
   actor: Actor,
   input: AnswerInput,
 ): Promise<Result<Answer>> {
-  // 1 · Modo hecho, primero (§6). Si un campo tipado responde, no hay nada que
-  //     rankear: la respuesta es exacta, con su vigencia y su cita. Se cae al
-  //     modo contexto sin ruido cuando no aplica, que es la mayoría de las veces.
+  // 1 · Fact mode first. If a typed field answers, there is nothing to rank:
+  //     the answer is exact, with its validity window and its citation. Falls
+  //     through to search mode silently when it does not apply, which is most
+  //     of the time.
   const hits = await askFacts(deps.db, actor, input.query, deps.clock?.now() ?? new Date());
   if (hits.length > 0) {
     return ok({ text: null, sources: [], reason: null, facts: hits });
@@ -67,120 +68,120 @@ export async function answer(
   const sources = found.value;
 
   if (sources.length === 0) {
-    // "No lo tengo" es una respuesta correcta y frecuente. §15 la mide.
-    return ok({ text: null, sources: [], reason: 'sin_resultados' });
+    // "I do not have it" is a correct and frequent answer, and worth measuring.
+    return ok({ text: null, sources: [], reason: 'no_results' });
   }
   if (!input.synthesize || !deps.classifier) {
-    return ok({ text: null, sources: dedupe(sources), reason: input.synthesize ? 'sin_modelo' : null });
+    return ok({ text: null, sources: dedupe(sources), reason: input.synthesize ? 'no_model' : null });
   }
 
-  const usados = sources.slice(0, MAX_PASSAGES);
-  const contexto = usados
-    .map((p, i) => `[${i + 1}] ${p.title ?? 'sin título'} (${fecha(p)})\n${p.content}`)
+  const used = sources.slice(0, MAX_PASSAGES);
+  const context = used
+    .map((p, i) => `[${i + 1}] ${p.title ?? 'sin título'} (${dateOf(p)})\n${p.content}`)
     .join('\n\n---\n\n');
 
-  // Corto y en orden de importancia, no exhaustivo.
+  // Short and in order of importance, not exhaustive.
   //
-  // La primera versión listaba siete reglas —incluida la de no dar consejo
-  // médico y la de fragmentos contradictorios— y un modelo de 3B respondía
-  // NO_LO_TENGO a una pregunta que los fragmentos contestaban. Con el mismo
-  // contexto y estas cuatro líneas, contesta "el deducible es de 5 UF por
-  // siniestro [1]". A un modelo chico, una lista larga de restricciones le
-  // suena a "mejor no arriesgarse".
+  // The first version listed seven rules — including no medical advice and how
+  // to handle contradictory fragments — and a 3B model answered "I do not have
+  // it" to a question the fragments answered. With the same context and these
+  // four lines it answers correctly. To a small model, a long list of
+  // restrictions reads as "better not to risk it".
   //
-  // Lo que se sacó no se perdió: no inventar y no exceder lo guardado se
-  // verifica en código más abajo, que es donde de verdad se puede garantizar.
+  // What was removed was not lost: not inventing and not exceeding what is
+  // stored are verified in code below, which is where it can actually be
+  // guaranteed.
   const system = [
     'Respondes con los fragmentos que te doy.',
     'Da el dato concreto en una o dos frases, no un resumen.',
     'Copia números, montos y fechas exactos.',
     'Solo si ninguno de los fragmentos toca el tema, responde NO_LO_TENGO.',
     '',
-    // Con el ejemplo puesto y no solo descrito. Sin él, un modelo chico cita en
-    // prosa —"se encuentra en el primer fragmento"— que es una cita para un
-    // humano y no para el código que tiene que resolverla a un id.
+    // The example is shown, not just described. Without it a small model cites
+    // in prose — "it is in the first fragment" — which is a citation for a human
+    // and not for the code that has to resolve it to an id.
     'Termina cada frase con el número del fragmento entre corchetes. Así:',
     'El deducible es de 5 UF por siniestro [1].',
   ].join('\n');
 
-  const texto = (await deps.classifier.complete({
+  const draft = (await deps.classifier.complete({
     system,
-    user: `Fragmentos:\n\n${contexto}\n\n---\n\nPregunta: ${input.query}`,
+    user: `Fragmentos:\n\n${context}\n\n---\n\nPregunta: ${input.query}`,
   })).trim() || null;
-  if (!texto || /NO_LO_TENGO/i.test(texto)) {
-    // El modelo dice que no está. Se le cree: es justo lo que pide la regla 2.
-    return ok({ text: null, sources: dedupe(sources), reason: 'sin_resultados' });
+  if (!draft || /NO_LO_TENGO/i.test(draft)) {
+    // The model says it is not there. Believe it: that is the invariant.
+    return ok({ text: null, sources: dedupe(sources), reason: 'no_results' });
   }
 
-  // Regla dura 1, verificada y no confiada: una respuesta factual sin cita no
-  // se muestra. Que el prompt lo pida no garantiza que el modelo obedezca.
+  // Citation required, verified rather than trusted: a factual answer with no
+  // citation is not shown. The prompt asking for one does not guarantee it.
   //
-  // Antes de descartarla se pide una vez más, porque el fallo típico no es
-  // inventar: es citar en prosa —"según el primer fragmento"— que sirve para
-  // una persona y no para el código que tiene que resolverla a un id.
-  let final = texto;
-  if (!/\[\d+\]/.test(final)) {
-    const reintento = (await deps.classifier.complete({
+  // One retry before discarding, because the typical failure is not inventing:
+  // it is citing in prose, which serves a person and not the code that has to
+  // resolve it to an id.
+  let cited = draft;
+  if (!/\[\d+\]/.test(cited)) {
+    const retry = (await deps.classifier.complete({
       system: 'Reescribe la respuesta poniendo el número del fragmento entre corchetes al final de cada frase. No cambies ningún dato.',
-      user: `Fragmentos:\n\n${contexto}\n\n---\n\nRespuesta a corregir: ${final}`,
+      user: `Fragmentos:\n\n${context}\n\n---\n\nRespuesta a corregir: ${cited}`,
     })).trim();
-    if (/\[\d+\]/.test(reintento)) final = reintento;
-    else return ok({ text: null, sources: dedupe(sources), reason: 'sin_cita' });
+    if (/\[\d+\]/.test(retry)) cited = retry;
+    else return ok({ text: null, sources: dedupe(sources), reason: 'no_citation' });
   }
 
-  const texto2 = resolveCitations(final, usados);
+  const resolved = resolveCitations(cited, used);
 
-  // Las fuentes se reordenan dejando adelante las que la respuesta citó de
-  // verdad. Si no, "ver 1" abre un documento que no es de donde salió el dato —
-  // que es peor que no ofrecer el botón.
-  // Regla dura 2, también verificada y no confiada: una cifra que no está en
-  // lo que se leyó no se muestra, aunque venga con una cita impecable.
-  const respaldo = checkGrounding(texto2, usados.map((p) => p.content));
-  if (!respaldo.ok) {
-    return ok({ text: null, sources: dedupe(usados), reason: 'sin_respaldo' });
+  // Also verified rather than trusted: a figure that is not in what was read is
+  // not shown, however impeccable its citation.
+  const grounding = checkGrounding(resolved, used.map((p) => p.content));
+  if (!grounding.ok) {
+    return ok({ text: null, sources: dedupe(used), reason: 'ungrounded' });
   }
 
-  const citados = new Set(
-    [...texto2.matchAll(/\[([0-9a-f]{8})\]/g)].map((m) => m[1]!),
+  // Sources are reordered so the ones the answer actually cited come first.
+  // Otherwise "view 1" opens a document the datum did not come from, which is
+  // worse than not offering the button.
+  const citedIds = new Set(
+    [...resolved.matchAll(/\[([0-9a-f]{8})\]/g)].map((m) => m[1]!),
   );
-  const ordenadas = [
-    ...usados.filter((p) => citados.has(p.shortId)),
-    ...usados.filter((p) => !citados.has(p.shortId)),
+  const ordered = [
+    ...used.filter((p) => citedIds.has(p.shortId)),
+    ...used.filter((p) => !citedIds.has(p.shortId)),
   ];
 
-  return ok({ text: texto2, sources: dedupe(ordenadas), reason: null });
+  return ok({ text: resolved, sources: dedupe(ordered), reason: null });
 }
 
 /**
- * Una fuente por memoria, quedándose con el mejor pasaje de cada una.
+ * One source per memory, keeping the best passage of each.
  *
- * El modelo sí lee varios trozos del mismo documento —para eso se trocea—, pero
- * mostrarlos como fuentes distintas es mentira de interfaz: la misma póliza
- * aparecía tres veces seguidas, y en el chat eso significa que `ver 1`, `ver 2`
- * y `ver 3` abren exactamente el mismo archivo.
+ * The model does read several chunks of the same document — that is what
+ * chunking is for — but showing them as distinct sources is an interface lie:
+ * the same policy appeared three times in a row, which in chat means "view 1",
+ * "view 2" and "view 3" open exactly the same file.
  *
- * Se hace acá y no en `retrieve()` a propósito: recuperar por trozo es lo
- * correcto, presentar por trozo no. El orden de entrada ya viene resuelto —por
- * puntaje, y con las citadas adelante—, así que quedarse con la primera de cada
- * memoria conserva esa decisión.
+ * Done here and not in retrieval on purpose: retrieving per chunk is right,
+ * presenting per chunk is not. The input order is already decided — by score,
+ * with the cited ones in front — so keeping the first of each memory preserves
+ * that decision.
  */
 function dedupe(passages: Passage[]): Passage[] {
-  const vistas = new Set<string>();
+  const seen = new Set<string>();
   return passages.filter((p) => {
-    if (vistas.has(p.memoryId)) return false;
-    vistas.add(p.memoryId);
+    if (seen.has(p.memoryId)) return false;
+    seen.add(p.memoryId);
     return true;
   });
 }
 
-const fecha = (p: Passage): string =>
+const dateOf = (p: Passage): string =>
   (p.occurredAt ?? p.capturedAt).toISOString().slice(0, 10);
 
 /**
- * Cambia [1] por el id corto de la memoria.
+ * Replaces [1] with the memory's short id.
  *
- * Un número entre corchetes no sirve de nada media hora después; un id sí, y
- * `dm show` lo abre. La cita tiene que llevar al documento (§3.2).
+ * A bracketed number is worth nothing half an hour later; an id is, and it
+ * opens the document. The citation has to lead somewhere.
  */
 function resolveCitations(text: string, sources: Passage[]): string {
   return text.replace(/\[(\d+)\]/g, (m, n) => {

@@ -2,11 +2,11 @@ import type { FactHit } from './query';
 import type { FieldKind } from './types';
 
 /**
- * Cómo se escribe un valor tipado.
+ * How a typed value is written.
  *
- * Está en el core y no en un adapter porque no es prosa: es la forma canónica
- * de un dato —`UF 3,0`, `$886.568`— y tiene que ser la misma en la terminal y
- * en el chat. La prosa que lo rodea sí es de cada adapter.
+ * This lives in the core and not in an adapter because it is not prose: it is
+ * the canonical shape of a datum, and it has to be the same in the terminal and
+ * in chat. The prose around it does belong to each adapter.
  */
 export function renderValue(value: string | number, kind: FieldKind): string {
   switch (kind) {
@@ -28,60 +28,60 @@ export function renderValue(value: string | number, kind: FieldKind): string {
 const day = (d: Date | null): string | null => d?.toISOString().slice(0, 10) ?? null;
 
 /**
- * La advertencia que va **antes** del dato (regla dura 10).
+ * The warning that goes **before** the datum.
  *
- * Devuelve null cuando no hay nada que advertir. Que sea un dato y no una
- * cadena armada en el renderer es lo que permite comprobar en un test que la
- * advertencia precede al valor, en los dos canales.
+ * Returns null when there is nothing to warn about. Keeping it as data rather
+ * than a string assembled in the renderer is what lets a test assert the
+ * warning precedes the value, in both channels.
  */
 export function warningFor(hit: FactHit): string | null {
   if (hit.superseded) return 'Está superado por uno más nuevo';
   if (hit.expired) {
-    const hasta = day(hit.fact.validUntil);
-    return hasta ? `Está vencido desde el ${hasta}` : 'Está vencido';
+    const until = day(hit.fact.validUntil);
+    return until ? `Está vencido desde el ${until}` : 'Está vencido';
   }
   return null;
 }
 
 /**
- * De dónde salió el dato: qué tipo, cuál instancia y de qué ventana.
+ * Where the datum came from: which type, which instance, which window.
  *
- * La identidad va acá y no como un campo más: con dos tarjetas o dos autos,
- * saber cuál es el dato importa tanto como el dato. Y ponerla en la línea de
- * contexto evita tener que preguntarla, que era lo que pasaba cuando su alias
- * la arrastraba a toda respuesta.
+ * The identity goes here and not as another field: with two cards or two cars,
+ * knowing which one the datum belongs to matters as much as the datum. Putting
+ * it on the context line avoids having to ask for it, which is what happened
+ * while its alias dragged it into every answer.
  */
 export function contextOf(hit: FactHit): string {
-  const desde = day(hit.fact.validFrom);
-  const hasta = day(hit.fact.validUntil);
-  // El título del documento antes que la etiqueta del tipo: con dos tarjetas,
-  // "Visa Infinite Scotiabank" distingue y "XXXXX4005" no.
-  const que = hit.fact.memoryTitle ?? hit.fact.typeLabel;
-  const cual = hit.fact.identity ? ` ${hit.fact.identity}` : '';
-  const ventana = !desde && !hasta
+  const from = day(hit.fact.validFrom);
+  const until = day(hit.fact.validUntil);
+  // The document's title before the type's label: with two cards, the title
+  // tells them apart and a masked number does not.
+  const what = hit.fact.memoryTitle ?? hit.fact.typeLabel;
+  const which = hit.fact.identity ? ` ${hit.fact.identity}` : '';
+  const window = !from && !until
     ? ''
-    : hit.fact.kind === 'periodo'
-      ? ` · período ${desde ?? '—'} a ${hasta ?? '—'}`
-      : ` · vigente ${desde ?? '—'} a ${hasta ?? '—'}`;
-  return `${que}${cual}${ventana}`;
+    : hit.fact.kind === 'period'
+      ? ` · período ${from ?? '—'} a ${until ?? '—'}`
+      : ` · vigente ${from ?? '—'} a ${until ?? '—'}`;
+  return `${what}${which}${window}`;
 }
 
 /**
- * ¿Hay un conflicto de verdad? (regla dura 3)
+ * Is this an actual conflict?
  *
- * Dos tarjetas distintas con dos montos distintos **no** son un conflicto: son
- * dos tarjetas. Un conflicto es el mismo campo, del mismo tipo y de la misma
- * instancia, vigente dos veces — dos pólizas del mismo auto con deducibles
- * distintos. Avisar de lo primero enseña a ignorar el aviso, y entonces el
- * aviso deja de servir para lo segundo.
+ * Two different cards with two different amounts are **not** a conflict: they
+ * are two cards. A conflict is the same field, of the same type, of the same
+ * instance, live twice — two policies for the same car with different
+ * deductibles. Warning about the first teaches people to ignore the warning, and
+ * then it stops working for the second.
  */
 export function conflicting(hits: FactHit[]): boolean {
-  const vivos = hits.filter((h) => !h.expired && !h.superseded);
-  const claves = new Set<string>();
-  for (const h of vivos) {
+  const live = hits.filter((h) => !h.expired && !h.superseded);
+  const keys = new Set<string>();
+  for (const h of live) {
     const k = `${h.fact.typeId}|${h.fact.identity ?? ''}|${h.ref.field.name}`;
-    if (claves.has(k)) return true;
-    claves.add(k);
+    if (keys.has(k)) return true;
+    keys.add(k);
   }
   return false;
 }

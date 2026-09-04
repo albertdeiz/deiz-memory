@@ -117,7 +117,7 @@ async function save(
      identity === undefined ? null : String(identity), validFrom, validUntil],
   );
 
-  if (type.kind === 'estado') await supersede(deps, actor, type, rows[0]!.id);
+  if (type.kind === 'state') await supersede(deps, actor, type, rows[0]!.id);
 }
 
 /**

@@ -16,7 +16,7 @@ echo "→ esperando a Garage..."
 for i in $(seq 1 60); do
   if $G status >/dev/null 2>&1; then break; fi
   sleep 1
-  if [ "$i" = "60" ]; then echo "Garage no respondió en 60s"; exit 1; fi
+  if [ "$i" = "60" ]; then echo "the object store did not answer in 60s"; exit 1; fi
 done
 
 if $G status 2>/dev/null | grep -q "NO ROLE ASSIGNED"; then
@@ -40,8 +40,8 @@ KEY_ID="$(echo "$KEYINFO"    | grep -i '^Key ID:'     | awk '{print $3}')"
 KEY_SECRET="$(echo "$KEYINFO"| grep -i '^Secret key:' | awk '{print $3}')"
 
 # Dos buckets sobre el mismo Garage: el tuyo y uno de pruebas. Los tests
-# escriben blobs de verdad —es la única forma de probar el adapter S3— y no
-# tienen por qué dejarlos tirados entre tus documentos.
+# write real blobs - the only way to test the storage adapter - and have no
+# business leaving them lying among your documents.
 for b in "$BUCKET" "$TESTBUCKET"; do
   if ! $G bucket info "$b" >/dev/null 2>&1; then
     echo "→ creando bucket '$b'"
@@ -50,10 +50,10 @@ for b in "$BUCKET" "$TESTBUCKET"; do
   $G bucket allow --read --write --owner "$b" --key "$KEYNAME" >/dev/null
 done
 
-# Este archivo se reescribe entero en cada corrida, así que todo lo que el CLI
-# necesite para hablar con el compose tiene que salir de acá. Lo que NO sale de
-# acá son las llaves de proveedores externos (ANTHROPIC_API_KEY y compañía):
-# esas las pones tú y se conservan aparte, en .env.local.
+# This file is rewritten whole on every run, so everything the CLI needs in
+# order to talk to the compose has to come from here. What does NOT come from
+# here are third-party provider keys: you set those, and they live separately
+# in .env.local.
 cat > "$ENVFILE" <<EOF
 DATABASE_URL=postgres://deiz:deiz@localhost:${PG_PORT}/deiz_memory
 S3_ENDPOINT=http://localhost:${S3_PORT}

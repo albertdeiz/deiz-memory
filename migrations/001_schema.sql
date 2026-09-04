@@ -1,27 +1,27 @@
--- El esquema completo, en un solo archivo.
+-- The complete schema, in a single file.
 --
--- Consolidado de las siete migraciones que lo fueron construyendo mientras el
--- diseño se movía. Nada de eso es historia que valga la pena arrastrar: el
--- proyecto no ha desplegado en ninguna parte, y siete archivos donde el tercero
--- deshace al primero se leen peor que uno solo que dice cómo son las cosas.
+-- Consolidated from the migrations that built it while the design moved. None of
+-- that is history worth dragging along: the project had not deployed anywhere,
+-- and seven files where the third undoes the first read worse than one that says
+-- how things are.
 --
--- Lo que sí se conserva es el **porqué** de cada decisión, que es lo que cuesta
--- reconstruir después.
+-- What is kept is the **why** of each decision, which is the expensive thing to
+-- reconstruct later.
 
 create extension if not exists unaccent;
--- Vectores en la misma base que lo estructurado y el full-text (§8): un motor,
--- un backup, y la posibilidad de filtrar por dominio ANTES de buscar por
--- semejanza — que es lo que hace útil la búsqueda híbrida (§6).
+-- Vectors in the same database as the structured data and full text: one engine,
+-- one backup, and the ability to filter by domain BEFORE searching by similarity
+-- — which is what makes hybrid search useful.
 create extension if not exists vector;
 
--- Búsqueda en español que además ignora tildes: en Chile la gente escribe
--- "mecanico" y tiene que encontrar "mecánico".
+-- Spanish search that also ignores accents: people type without them and still
+-- have to find the accented word.
 --
--- El costo de esto, que conviene saber: el stemmer corta hasta la raíz, y a
--- veces esa raíz la comparten palabras sin relación. Buscar "deducible" trae
--- también un poder notarial que dice "deducir una acción" —presentar una
--- demanda, en español jurídico chileno— porque las dos dan `deduc`. Se acepta:
--- es el mismo mecanismo que hace que "recetas" encuentre "recetó".
+-- The cost, worth knowing: the stemmer cuts to the root, and sometimes unrelated
+-- words share that root, so a search occasionally brings a distant cousin. It is
+-- accepted: it is the same mechanism that makes a plural find its singular and a
+-- noun find its verb.
+--
 do $$
 begin
   if not exists (select 1 from pg_ts_config where cfgname = 'es_unaccent') then
@@ -31,10 +31,10 @@ begin
   end if;
 end $$;
 
--- `array_to_string` está marcada STABLE y una columna generada exige IMMUTABLE.
--- Sobre `text[]` con separador constante lo es de verdad —no depende de locale
--- ni de configuración—, así que declararlo es correcto y no una mentira para
--- que Postgres deje pasar.
+-- The array-joining function is marked STABLE and a generated column demands
+-- IMMUTABLE. Over a text array with a constant separator it genuinely is — it
+-- depends on neither locale nor configuration — so declaring it is correct and
+-- not a lie to get past the checker.
 create function dm_tags_text(text[]) returns text
   language sql immutable strict parallel safe
   as $$ select array_to_string($1, ' ') $$;
@@ -45,8 +45,8 @@ create table owners (
   created_at  timestamptz not null default now()
 );
 
--- Direccionable por contenido: el mismo archivo dos veces = un blob, dos
--- memorias. Compartir una memoria nunca mueve ni copia bytes.
+-- Content addressed: the same file twice is one blob and two memories. Sharing a
+-- memory never moves or copies bytes.
 create table blobs (
   sha256      text primary key,
   size_bytes  bigint not null check (size_bytes >= 0),
@@ -55,26 +55,26 @@ create table blobs (
   created_at  timestamptz not null default now()
 );
 
--- Las categorías son **filas editables, nunca un enum en el código** (§3.7):
--- agregar una no puede requerir un deploy. El prompt del clasificador se arma
--- en runtime leyendo esta tabla.
+-- Categories are **editable rows, never an enum in the code**: adding one must
+-- not require a deploy. The classifier's prompt is assembled at runtime by
+-- reading this table.
 create table domains (
   id          uuid primary key default gen_random_uuid(),
   owner_id    uuid not null references owners(id) on delete restrict,
-  -- Para comandos: /migracion
+  -- For commands: /category-slug
   slug        text not null,
-  -- Para mostrar. Renombrable sin romper nada: la identidad es el id.
+  -- For display. Renamable without breaking anything: the identity is the id.
   label       text not null,
-  -- Esto NO es documentación, es el prompt. Y está medido: con la descripción
-  -- de "Hogar" hablando solo de garantías y gastos comunes, el manual de una
-  -- alarma quedaba sin clasificar con 0,95 de confianza. Ampliarla lo arregló
-  -- sin tocar código.
+  -- This is NOT documentation, it is the prompt. And it is measured: with one
+  -- category's description covering only part of its scope, a document went
+  -- unclassified with 0.95 confidence. Widening the description fixed it with no
+  -- code change.
   description text not null,
   aliases     text[] not null default '{}',
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
-  -- Único por dueño, no global: tus categorías son tuyas.
+  -- Unique per owner, not global: your categories are yours.
   unique (owner_id, slug)
 );
 
@@ -82,44 +82,44 @@ create index domains_owner_active_idx on domains (owner_id) where active;
 
 create table memories (
   id                uuid primary key default gen_random_uuid(),
-  -- En TODA tabla desde el día uno. Meter tenencia después es una migración
-  -- brutal; meterla ahora es una columna.
+  -- In EVERY table from day one. Retrofitting tenancy is a brutal migration;
+  -- adding it now is a column.
   owner_id          uuid not null references owners(id) on delete restrict,
   source            text not null,
   captured_at       timestamptz not null default now(),
-  -- Cuándo pasó el hecho, que no es cuándo lo guardaste (§3.3). Lo infiere el
-  -- clasificador; dentro de un dominio se ordena por esto.
+  -- When the event happened, which is not when you stored it. The classifier
+  -- infers it; inside a domain this is the sort key.
   occurred_at       timestamptz,
   blob_sha256       text references blobs(sha256) on delete restrict,
   original_filename text,
   title             text,
 
-  -- La línea que separa lo tuyo de lo derivado, y que hay que respetar:
+  -- The line separating yours from derived, which has to be respected:
   --
-  --   note             lo que escribiste tú. Nunca se regenera, nunca se pisa.
-  --   normalized_text  lo que se extrajo del blob. Regenerable siempre.
+  -- note             what you wrote. Never regenerated, never overwritten.
+  -- normalized_text  what was read from the blob. Always regenerable.
   --
-  -- En F0 vivían en la misma columna, y la primera transcripción de una foto
-  -- se comía la nota que le habías puesto al mandarla. Es lo que hace posible
-  -- reprocesar sin miedo: todo lo derivado está de un lado, y el otro lado no
-  -- se toca jamás.
+  -- They used to live in one column, and the first transcript of a photo ate the
+  -- note you attached when sending it. This split is what makes reprocessing safe:
+  -- everything derived is on one side, and the other side is never touched.
+  --
   note              text,
   normalized_text   text,
 
-  -- Cómo se leyó el archivo, para poder reprocesar sin adivinar (§8.1).
+  -- How the file was read, so a reprocess does not have to guess.
   --   text · document · vision · audio · none
   normalization_lane text,
   normalized_at      timestamptz,
   normalization_error text,
   normalization_detail jsonb,
-  -- Si reintentar puede servir de algo. Un servicio caído se arregla con
-  -- `dm reprocess`; un formato que ningún carril sabe leer, no. Ofrecer el
-  -- mismo botón para los dos enseña a desconfiar del botón. Lo declara quien
-  -- falla, no una expresión regular sobre el mensaje.
+  -- Whether retrying can help at all. A service being down is fixed by a reprocess;
+  -- a format no lane can read is not. Offering the same button for both teaches
+  -- distrust of the button. Declared by whatever failed, not by a regex over the
+  -- message.
   normalization_retryable boolean,
 
-  -- Un dominio primario mantiene /migracion limpio y el clasificador simple;
-  -- lo que cruza categorías va en tags (§9).
+  -- One primary domain keeps each category listing clean and the classifier simple;
+  -- what crosses categories goes in tags.
   domain_id         uuid references domains(id) on delete set null,
   tags              text[] not null default '{}',
   domain_confidence real,
@@ -129,10 +129,10 @@ create table memories (
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),
 
-  -- Los pesos importan. El título y las etiquetas son lo que la persona
-  -- escribió para encontrar algo, así que van en A. El nombre del archivo casi
-  -- nunca significa nada —IMG_20260114.jpg, scan0001.pdf— pero se indexa igual
-  -- en D, por si acaso lo recuerdas: nunca le gana a una coincidencia real.
+  -- The weights matter. Title and tags are what the person wrote in order to find
+  -- something, so they go in the top band. A filename almost never means anything
+  -- but is indexed in the lowest band just in case you remember it: it never beats
+  -- a real match.
   search_tsv        tsvector generated always as (
     setweight(to_tsvector('es_unaccent'::regconfig, coalesce(title, '')), 'A') ||
     setweight(to_tsvector('es_unaccent'::regconfig, dm_tags_text(tags)), 'A') ||
@@ -159,20 +159,20 @@ create index memories_tags_idx           on memories using gin (tags);
 create index memories_blob_idx           on memories (blob_sha256);
 create index memories_domain_idx         on memories (owner_id, domain_id, occurred_at desc nulls last);
 
--- Los dos índices parciales del día a día. Parciales porque lo normal es que
--- estas dos listas estén vacías: qué falta leer, y qué quedó dudoso.
+-- The two day-to-day partial indexes. Partial because the normal state of both
+-- lists is empty: what is unread, and what came out doubtful.
 create index memories_pending_idx on memories (owner_id, captured_at)
   where blob_sha256 is not null and normalized_at is null;
 create index memories_review_idx on memories (owner_id, captured_at desc)
   where normalization_error is not null;
 
--- La identidad es el user id del canal (§10). No hay cuentas ni contraseñas:
--- tu mamá abre un link y está adentro.
+-- The identity is the channel's own user id. No accounts and no passwords:
+-- someone opens a link and is inside.
 --
--- Y de acá sale algo que vale más que la tabla: toda operación del core exige
--- un Actor, y el Actor sale de acá. Sin vínculo no hay Actor, y sin Actor no
--- existe el camino para llamar a nada. La regla dura 9 deja de depender de que
--- alguien se acuerde de escribir el WHERE.
+-- And from here comes something worth more than the table: every core operation
+-- demands an actor, and the actor comes from here. No link, no actor; no actor,
+-- no path to call anything. Owner isolation stops depending on someone
+-- remembering to write the WHERE.
 create table channel_identities (
   channel          text not null,
   external_user_id text not null,
@@ -183,11 +183,11 @@ create table channel_identities (
   primary key (channel, external_user_id)
 );
 
--- Sin unique en owner_id: la misma persona puede tener Telegram y WhatsApp.
+-- No unique on owner_id: the same person can have two channels.
 create index channel_identities_owner_idx on channel_identities (owner_id);
 
--- El emparejamiento: un código de un solo uso y con vencimiento. Es el mismo
--- mecanismo que F5 va a necesitar para `/invitar casa`.
+-- Pairing: a single-use code with an expiry. The same mechanism a shared-space
+-- invitation would need.
 create table pairing_codes (
   code       text primary key,
   owner_id   uuid not null references owners(id) on delete restrict,
@@ -200,9 +200,9 @@ create table pairing_codes (
 
 create index pairing_codes_open_idx on pairing_codes (owner_id) where used_at is null;
 
--- El estado de una conversación. Vive acá y NO dentro del payload del botón, y
--- esa decisión es la que permite degradar a un canal sin botones: con el estado
--- en la base, el botón "más" y la palabra "más" valen los mismos tres bytes.
+-- The state of a conversation. It lives here and NOT inside the button payload,
+-- and that decision is what allows degrading to a channel without buttons: with
+-- the state in the database, the button and the typed word cost the same.
 create table chat_sessions (
   channel     text not null,
   chat_id     text not null,
@@ -214,39 +214,39 @@ create table chat_sessions (
   primary key (channel, chat_id)
 );
 
--- Los trozos en que se parte una memoria para buscarla por semejanza.
+-- The chunks a memory is split into so it can be found by similarity.
 --
--- Por trozo y no por memoria entera: una póliza de 80 mil caracteres da un solo
--- vector promediado que no se parece a nada en particular, y la pregunta
--- "¿cuál es mi deducible?" necesita acertarle al párrafo del deducible, no al
--- documento completo.
+-- Per chunk and not per whole memory: a policy of eighty thousand characters
+-- yields one averaged vector resembling nothing in particular, and a question
+-- about a deductible needs to hit the deductible paragraph, not the whole
+-- document.
 --
--- Es tabla aparte y no una columna porque una memoria tiene N trozos, y porque
--- así el embedding se regenera solo —igual que el texto— sin tocar la memoria.
+-- A separate table and not a column because a memory has N chunks, and because
+-- this way the embedding regenerates on its own, like the text, untouched memory.
 create table memory_chunks (
   id         bigserial primary key,
   memory_id  uuid not null references memories(id) on delete cascade,
   owner_id   uuid not null references owners(id) on delete restrict,
-  -- Posición dentro del documento, para poder citar "hacia el final de".
+  -- Position within the document, so a citation can say "near the end of".
   seq        integer not null,
   content    text not null,
-  -- 768 es lo que produce nomic-embed-text. Cambiar de modelo cambia esta
-  -- dimensión, así que cambiar de modelo es reindexar — no es gratis y conviene
-  -- que esté escrito acá.
+  -- This width is what the embedding model produces. Changing model changes it, so
+  -- changing model means reindexing — not free, and worth having written here.
+  --
   embedding  vector(768),
   created_at timestamptz not null default now(),
   unique (memory_id, seq)
 );
 
--- El índice va sobre el vector, pero la consulta filtra primero por dueño y
--- dominio: buscar por semejanza en todo el corpus y después descartar es
--- justamente lo que §6 llama el error clásico.
+-- The index is on the vector, but the query filters by owner and domain first:
+-- searching the whole corpus by similarity and discarding afterwards is exactly
+-- the classic mistake.
 create index memory_chunks_owner_idx on memory_chunks (owner_id, memory_id);
 create index memory_chunks_vec_idx on memory_chunks
   using hnsw (embedding vector_cosine_ops);
 
--- Lo escribe purge (regla dura 8). Append-only de verdad: purgar es la única
--- forma de borrar, y queda registrada.
+-- Written by purge. Genuinely append-only: purging is the only way to delete,
+-- and it is recorded.
 create table audit_log (
   id         bigserial primary key,
   owner_id   uuid not null references owners(id) on delete restrict,

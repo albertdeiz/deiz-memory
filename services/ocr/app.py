@@ -1,23 +1,24 @@
 """
 Servicio de OCR: el carril B (§8.1) sin salir del host y sin pagar por foto.
 
-Por qué OCR y no un modelo de visión, que era lo primero que uno piensa:
+Why OCR and not a vision model, which is the first thing one thinks of:
 
-Para documentos IMPRESOS —boletas, pólizas, carnets— el OCR clásico no solo
+For PRINTED documents - receipts, policies, ID cards - classical OCR is not
 alcanza: gana. Los modelos multimodales chicos leen bien el texto corrido y se
 equivocan justo donde no hay que equivocarse, en cadenas que no se pueden
-adivinar por contexto: un número de póliza, un RUT, un monto. Un modelo que
-inventa un dígito con seguridad es exactamente el modo de falla que la regla
+guessed from context: a policy number, a tax id, an amount. A model that
+invents a digit with confidence is exactly the failure mode this system
 dura 2 existe para evitar, y es peor que no transcribir.
 
-Y por qué RapidOCR y no PaddleOCR, que es el nombre conocido: son los mismos
+And why this engine and not the better-known one: they run the same models.
 modelos (PP-OCRv6), pero corriendo sobre ONNXRuntime en vez de PaddlePaddle.
 La diferencia es decisiva para este proyecto: `paddlepaddle` solo publica rueda
-`manylinux1_x86_64` —no hay arm64— mientras que onnxruntime sí tiene
+x86_64 only - there is no arm64 wheel - while the runtime used here does
 `manylinux_2_28_aarch64`. Misma calidad de lectura, y el mismo compose corre en
 un VPS y en una Raspberry Pi.
 
-Lo que este carril NO hace, y por eso el de visión sigue existiendo: manuscrito.
+What this lane does NOT do, and why the model-backed one still exists:
+handwriting.
 Para una receta escrita a mano un modelo multimodal es mejor.
 """
 import os
@@ -45,14 +46,14 @@ def health() -> dict:
 async def ocr(file: UploadFile = File(...)) -> dict:
     raw = await file.read()
     if not raw:
-        raise HTTPException(status_code=400, detail="archivo vacío")
+        raise HTTPException(status_code=400, detail="empty file")
     if len(raw) > MAX_BYTES:
         raise HTTPException(status_code=413, detail=f"el archivo supera {MAX_BYTES} bytes")
 
     try:
         # bytes directo: RapidOCR no acepta BytesIO (str, ndarray, bytes, Path o PIL).
         result = _engine(raw)
-    except Exception as e:  # noqa: BLE001 — el core decide qué hacer con el fallo
+    except Exception as e:  # noqa: BLE001 - the core decides what to do with it
         raise HTTPException(status_code=422, detail=f"el OCR no pudo con la imagen: {e}") from e
 
     txts = list(result.txts or [])
@@ -67,7 +68,7 @@ async def ocr(file: UploadFile = File(...)) -> dict:
         "text": text,
         "lines": lines,
         "mean_confidence": round(mean, 4),
-        # Que el propio servicio diga "esto lo leí mal" es mejor que hacer que
+        # The service saying "I read this badly" beats making the core
         # el core lo adivine desde el largo del texto.
         "low_confidence": bool(scores) and mean < LOW_CONFIDENCE,
         "engine": "rapidocr/PP-OCRv6",
@@ -78,9 +79,9 @@ def _in_reading_order(txts, scores, boxes) -> list[dict]:
     """Ordena los trozos detectados de arriba a abajo y de izquierda a derecha.
 
     RapidOCR ya devuelve algo parecido al orden de lectura, pero en un documento
-    a dos columnas —una póliza, típicamente— el orden crudo mezcla las columnas.
-    Se agrupa por banda vertical usando la altura mediana de línea, que es una
-    heurística simple y predecible; no pretende reconstruir tablas.
+    two-column layout - a policy, typically - the raw order interleaves the
+    columns. Lines are grouped into vertical bands using the median line height:
+    a simple, predictable heuristic that does not try to rebuild tables.
     """
     if not txts:
         return []

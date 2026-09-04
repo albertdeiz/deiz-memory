@@ -67,10 +67,10 @@ export async function listReview(
 
 export interface ReviewCounts {
   total: number;
-  /** Los que un reproceso podría arreglar. */
-  reintentables: number;
-  /** Los que necesitan otra cosa: convertir el archivo, o cambiar de carril. */
-  necesitanAlgoMas: number;
+  /** The ones a reprocess could fix. */
+  retryable: number;
+  /** The ones needing something else: convert the file, or change lane. */
+  needMore: number;
 }
 
 /**
@@ -92,7 +92,7 @@ export async function countReview(db: Db, actor: Actor): Promise<ReviewCounts> {
   const r = rows[0]!;
   return {
     total: Number(r.total),
-    reintentables: Number(r.si),
-    necesitanAlgoMas: Number(r.no),
+    retryable: Number(r.si),
+    needMore: Number(r.no),
   };
 }

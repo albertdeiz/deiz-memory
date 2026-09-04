@@ -94,10 +94,10 @@ describe('recuperación híbrida', () => {
   });
 
   it('el filtro por fecha usa cuándo pasó, no cuándo lo guardaste', async () => {
-    await guardar('consulta antigua con el doctor', { occurredAt: new Date('2024-01-15') });
-    await guardar('consulta reciente con el doctor', { occurredAt: new Date('2026-05-20') });
+    await guardar('query antigua con el doctor', { occurredAt: new Date('2024-01-15') });
+    await guardar('query reciente con el doctor', { occurredAt: new Date('2026-05-20') });
 
-    const r = await retrieve(s.deps, actor, { query: 'consulta doctor', from: new Date('2025-01-01') });
+    const r = await retrieve(s.deps, actor, { query: 'query doctor', from: new Date('2025-01-01') });
     if (!r.ok) throw new Error('falló');
     expect(r.value).toHaveLength(1);
     expect(r.value[0]!.content).toContain('reciente');
@@ -252,7 +252,7 @@ describe('las palabras de tema no deciden el orden', () => {
   });
 
   it('si todas son igual de comunes, siguen contando todas', async () => {
-    // Sin esto, un umbral mal puesto dejaría la consulta sin términos.
+    // Sin esto, un umbral mal puesto dejaría la query sin términos.
     const r = await retrieve(s.deps, actor, { query: 'seguro vehiculo' });
     if (!r.ok) throw new Error('falló');
     expect(r.value.length).toBeGreaterThan(0);

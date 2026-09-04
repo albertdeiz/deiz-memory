@@ -28,33 +28,33 @@ export const PAGE = 5;
  * cadena destinada a una persona — el core devuelve datos y nunca prosa.
  */
 export type Outcome =
-  | { kind: 'pareado'; displayName: string | null }
-  | { kind: 'guardado'; capture: CaptureResult; enCola: boolean }
+  | { kind: 'paired'; displayName: string | null }
+  | { kind: 'saved'; capture: CaptureResult; queued: boolean }
   | {
-      kind: 'resultados';
-      consulta: string;
+      kind: 'results';
+      query: string;
       items: MemorySummary[];
       offset: number;
-      hayMas: boolean;
+      hasMore: boolean;
       /** Lo que todavía no se ha leído. Convierte un "no lo tengo" en verdad. */
       pendientes: number;
       /** Texto que se puede guardar si la búsqueda no encontró nada (§5). */
-      ofreceGuardar: string | null;
+      offerSave: string | null;
       /** Se pidió "más" y ya no queda: distinto de "no lo tengo". */
-      agotado: boolean;
+      exhausted: boolean;
     }
-  | { kind: 'respuesta'; answer: Answer; consulta: string }
-  | { kind: 'detalle'; memory: MemoryDetail }
-  | { kind: 'archivo'; blob: BlobPayload }
-  | { kind: 'pendientes'; sinLeer: number }
-  | { kind: 'revisar'; items: ReviewItem[] }
-  | { kind: 'dominios'; items: Domain[] }
-  | { kind: 'propuestas'; items: Proposal[] }
-  | { kind: 'enDominio'; domain: Domain; items: MemorySummary[] }
-  | { kind: 'ocultada'; shortId: string }
-  | { kind: 'dominio'; domain: Domain; que: 'creado' | 'editado' | 'archivado' }
-  | { kind: 'fusionado'; from: Domain; into: Domain; moved: number }
-  | { kind: 'ayuda' };
+  | { kind: 'answer'; answer: Answer; query: string }
+  | { kind: 'detail'; memory: MemoryDetail }
+  | { kind: 'file'; blob: BlobPayload }
+  | { kind: 'pending'; unread: number }
+  | { kind: 'review'; items: ReviewItem[] }
+  | { kind: 'domains'; items: Domain[] }
+  | { kind: 'proposals'; items: Proposal[] }
+  | { kind: 'inDomain'; domain: Domain; items: MemorySummary[] }
+  | { kind: 'hidden'; shortId: string }
+  | { kind: 'domain'; domain: Domain; que: 'created' | 'updated' | 'archived' }
+  | { kind: 'merged'; from: Domain; into: Domain; moved: number }
+  | { kind: 'help' };
 
 export interface RouteInput {
   conv: Conversation;
@@ -81,7 +81,7 @@ export async function route(
 }
 
 /**
- * Deja anotada la lista que se acaba de mostrar, para que "ver 2" signifique el
+ * Deja anotada la lista que se acaba de shown, para que "ver 2" signifique el
  * segundo de ESA lista.
  *
  * Se hace acá, en un solo lugar, y no en cada rama. `enDominio` numeraba sus
@@ -115,7 +115,7 @@ async function registerList(
 
   // Abrir un detalle no cambia la lista: mueve el foco. Se conserva `ids` para
   // que "ver 3" siga significando el tercero de lo que estás mirando.
-  if (v.kind === 'detalle') {
+  if (v.kind === 'detail') {
     const prev = await readSession(deps.db, input.conv);
     await writeSession(deps.db, input.conv, actor.ownerId,
       {
@@ -132,15 +132,15 @@ async function registerList(
  * Los ids de una lista numerada, en el mismo orden en que se muestran.
  *
  * Un caso por cada listado que el bot entrega con acciones. `resultados` no
- * está porque `doSearch` escribe la suya —lleva además la consulta y el offset
+ * está porque `doSearch` escribe la suya —lleva además la query y el offset
  * para que "more" siga paginando—, y duplicarla acá la pisaría.
  */
 function numbered(v: Outcome): string[] | null {
   switch (v.kind) {
-    case 'enDominio':
-    case 'revisar':
+    case 'inDomain':
+    case 'review':
       return v.items.map((m) => m.id);
-    case 'respuesta':
+    case 'answer':
       return v.answer.sources.map((p) => p.memoryId);
     default:
       return null;
@@ -156,46 +156,46 @@ async function dispatch(
   const { intent } = input;
 
   switch (intent.verb) {
-    case 'ayuda':
-      return ok({ kind: 'ayuda' });
+    case 'help':
+      return ok({ kind: 'help' });
 
-    case 'parear':
+    case 'pair':
       // Ya está adentro; volver a parear no rompe nada pero tampoco hace falta.
-      return ok({ kind: 'pareado', displayName: input.displayName ?? null });
+      return ok({ kind: 'paired', displayName: input.displayName ?? null });
 
-    case 'pendientes':
-      return ok({ kind: 'pendientes', sinLeer: await pendingCount(deps.db, actor.ownerId) });
+    case 'pending':
+      return ok({ kind: 'pending', unread: await pendingCount(deps.db, actor.ownerId) });
 
-    case 'dominios':
-      return ok({ kind: 'dominios', items: await listDomains(deps.db, actor) });
+    case 'domains':
+      return ok({ kind: 'domains', items: await listDomains(deps.db, actor) });
 
-    case 'crearDominio':
+    case 'createDomain':
       return doCreateDomain(deps, actor, input, intent.label, intent.description, false);
 
-    case 'describirDominio': {
+    case 'describeDomain': {
       const r = await editDomain(deps.db, actor, intent.ref, { description: intent.description });
-      return r.ok ? ok({ kind: 'dominio', domain: r.value, que: 'editado' }) : r;
+      return r.ok ? ok({ kind: 'domain', domain: r.value, que: 'updated' }) : r;
     }
 
-    case 'renombrarDominio': {
+    case 'renameDomain': {
       const r = await editDomain(deps.db, actor, intent.ref, { label: intent.label });
-      return r.ok ? ok({ kind: 'dominio', domain: r.value, que: 'editado' }) : r;
+      return r.ok ? ok({ kind: 'domain', domain: r.value, que: 'updated' }) : r;
     }
 
-    case 'archivarDominio': {
+    case 'archiveDomain': {
       const r = await archiveDomain(deps.db, actor, intent.ref);
-      return r.ok ? ok({ kind: 'dominio', domain: r.value, que: 'archivado' }) : r;
+      return r.ok ? ok({ kind: 'domain', domain: r.value, que: 'archived' }) : r;
     }
 
-    case 'fusionarDominios':
+    case 'mergeDomains':
       return doMerge(deps, actor, input, intent.from, intent.into, false);
 
-    case 'proponer': {
+    case 'propose': {
       const r = await proposeDomains(deps, actor);
-      return r.ok ? ok({ kind: 'propuestas', items: r.value }) : r;
+      return r.ok ? ok({ kind: 'proposals', items: r.value }) : r;
     }
 
-    case 'enDominio': {
+    case 'inDomain': {
       const d = await findDomain(deps.db, actor, intent.ref);
       // Cualquier /loquesea cae acá, así que el mensaje tiene que servir tanto
       // a quien se equivocó de categoría como a quien probó un comando que no
@@ -205,25 +205,25 @@ async function dispatch(
           `No conozco "/${intent.ref}". Mira /domains para las categorías, o /help para los comandos.`);
       }
       const r = await list(deps, actor, { domainId: d.id, limit: PAGE });
-      return r.ok ? ok({ kind: 'enDominio', domain: d, items: r.value }) : r;
+      return r.ok ? ok({ kind: 'inDomain', domain: d, items: r.value }) : r;
     }
 
-    case 'revisar': {
+    case 'review': {
       const r = await listReview(deps, actor, { limit: PAGE });
-      return r.ok ? ok({ kind: 'revisar', items: r.value }) : r;
+      return r.ok ? ok({ kind: 'review', items: r.value }) : r;
     }
 
-    case 'capturar':
+    case 'capture':
       return doCapture(deps, actor, input, null);
 
-    case 'recordar': {
+    case 'recall': {
       // Una pregunta se responde; una búsqueda por palabras se lista.
       //
       // La diferencia importa: "¿cuál es mi deducible?" quiere el dato con su
       // cita, no cinco documentos donde buscarlo. `/search poliza` quiere la
       // lista. El clasificador de intención ya distinguió las dos (§5), así que
       // acá solo hay que respetarlo.
-      if (intent.adivinado && deps.classifier) {
+      if (intent.guessed && deps.classifier) {
         const r = await answer(deps, actor, { query: intent.query, synthesize: true });
         if (!r.ok) return r;
         // Sin respuesta redactada se cae a la lista: los pasajes sirven igual,
@@ -237,13 +237,13 @@ async function dispatch(
         const hechos = (r.value.facts?.length ?? 0) > 0;
         // La sesión la escribe `registerList`, como con cualquier otro listado.
         if (r.value.text || rechazada || hechos) {
-          return ok({ kind: 'respuesta', answer: r.value, consulta: intent.query });
+          return ok({ kind: 'answer', answer: r.value, query: intent.query });
         }
       }
-      return doSearch(deps, actor, input, intent.query, 0, intent.adivinado);
+      return doSearch(deps, actor, input, intent.query, 0, intent.guessed);
     }
 
-    case 'accion':
+    case 'action':
       return doAction(deps, actor, input, session);
   }
 }
@@ -263,12 +263,12 @@ async function doCreateDomain(
   const r = await createDomain(deps.db, actor, { label, description, confirm });
   if (r.ok) {
     await writeSession(deps.db, input.conv, actor.ownerId, { pending: null }, input.now);
-    return ok({ kind: 'dominio', domain: r.value, que: 'creado' });
+    return ok({ kind: 'domain', domain: r.value, que: 'created' });
   }
   if (r.kind === 'requires_confirmation') {
     await writeSession(deps.db, input.conv, actor.ownerId, {
       pending: {
-        confirm: { label, op: 'crearDominio', args: { label, description },
+        confirm: { label, op: 'createDomain', args: { label, description },
                    askedAt: input.now.toISOString() },
       },
     }, input.now);
@@ -283,11 +283,11 @@ async function doMerge(
   const r = await mergeDomains(deps, actor, from, into, { confirm });
   if (r.ok) {
     await writeSession(deps.db, input.conv, actor.ownerId, { pending: null }, input.now);
-    return ok({ kind: 'fusionado', from: r.value.from, into: r.value.into, moved: r.value.moved });
+    return ok({ kind: 'merged', from: r.value.from, into: r.value.into, moved: r.value.moved });
   }
   if (r.kind === 'requires_confirmation') {
     await writeSession(deps.db, input.conv, actor.ownerId, {
-      pending: { confirm: { label: `${from} → ${into}`, op: 'fusionar', args: { from, into },
+      pending: { confirm: { label: `${from} → ${into}`, op: 'mergeDomains', args: { from, into },
                             askedAt: input.now.toISOString() } },
     }, input.now);
   }
@@ -301,8 +301,8 @@ async function doCapture(
   overrideText: string | null,
 ): Promise<Result<Outcome>> {
   const { intent, caps, conv, now } = input;
-  const text = overrideText ?? (intent.verb === 'capturar' ? intent.text : null);
-  const attachment = intent.verb === 'capturar' ? intent.attachment : null;
+  const text = overrideText ?? (intent.verb === 'capture' ? intent.text : null);
+  const attachment = intent.verb === 'capture' ? intent.attachment : null;
 
   let bytes: Buffer | null = null;
   let filename: string | null = null;
@@ -340,28 +340,28 @@ async function doCapture(
   await writeSession(deps.db, conv, actor.ownerId, { pending: null }, now);
 
   // Solo hay algo que leer si vino un archivo; un texto suelto ya es texto.
-  const enCola = res.value.sha256 !== null;
-  return ok({ kind: 'guardado', capture: res.value, enCola });
+  const queued = res.value.sha256 !== null;
+  return ok({ kind: 'saved', capture: res.value, queued });
 }
 
 async function doSearch(
   deps: Deps,
   actor: Actor,
   input: RouteInput,
-  consulta: string,
+  query: string,
   offset: number,
-  adivinado: boolean,
+  guessed: boolean,
 ): Promise<Result<Outcome>> {
   const { conv, now } = input;
-  const q = consulta.trim();
+  const q = query.trim();
   if (!q) return err('invalid', 'Dime qué buscar.');
 
-  // Se piden seis para mostrar cinco: el sexto es el que dice si hay más, sin
+  // Se piden seis para shown cinco: el sexto es el que dice si hay más, sin
   // un count(*) ni un cursor de keyset que a esta escala no compran nada.
   const res = await search(deps, actor, { query: q, limit: PAGE + 1, offset });
   if (!res.ok) return res;
 
-  const hayMas = res.value.length > PAGE;
+  const hasMore = res.value.length > PAGE;
   const items = res.value.slice(0, PAGE);
   const pendientes = await pendingCount(deps.db, actor.ownerId);
 
@@ -370,9 +370,9 @@ async function doSearch(
   // era una pregunta. Si escribió /search quería buscar, y si pidió "más"
   // quería la página siguiente: ofrecerle guardar "deducible" como nota sería
   // absurdo, y encima lo haría con un texto que él nunca quiso guardar.
-  const agotado = offset > 0 && items.length === 0;
-  const ofreceGuardar = adivinado && !agotado && items.length === 0 ? q : null;
-  if (ofreceGuardar) pending.save = ofreceGuardar;
+  const exhausted = offset > 0 && items.length === 0;
+  const offerSave = guessed && !exhausted && items.length === 0 ? q : null;
+  if (offerSave) pending.save = offerSave;
 
   await writeSession(
     deps.db, conv, actor.ownerId,
@@ -380,7 +380,7 @@ async function doSearch(
     now,
   );
 
-  return ok({ kind: 'resultados', consulta: q, items, offset, hayMas, pendientes, ofreceGuardar, agotado });
+  return ok({ kind: 'results', query: q, items, offset, hasMore, pendientes, offerSave, exhausted });
 }
 
 async function doAction(
@@ -390,44 +390,44 @@ async function doAction(
   session: ChatSession | null,
 ): Promise<Result<Outcome>> {
   const { intent, conv, now } = input;
-  if (intent.verb !== 'accion') return err('invalid', 'No entendí.');
+  if (intent.verb !== 'action') return err('invalid', 'No entendí.');
   const a = intent.action;
 
   switch (a.kind) {
-    case 'mas': {
+    case 'more': {
       if (!session?.lastQuery) return err('invalid', 'No hay una búsqueda abierta.');
       return doSearch(deps, actor, input, session.lastQuery, session.lastOffset + PAGE, false);
     }
 
-    case 'guardar': {
+    case 'save': {
       const text = session?.pending?.save;
       if (!text) return err('invalid', 'No hay nada pendiente de guardar.');
-      return doCapture(deps, actor, { ...input, intent: { verb: 'capturar', text, attachment: null } }, text);
+      return doCapture(deps, actor, { ...input, intent: { verb: 'capture', text, attachment: null } }, text);
     }
 
-    case 'ocultar': {
+    case 'hide': {
       const ids = session?.pending?.ids ?? [];
       const id = ids[a.n - 1];
       if (!id) return err('invalid', `No hay un ${a.n} en la última lista.`);
       // Ocultar y no purgar: el chat no borra nada de forma irreversible. Para
       // eso está la terminal, con su confirmación y su registro de auditoría.
       const r = await setHidden(deps, actor, id, true);
-      return r.ok ? ok({ kind: 'ocultada', shortId: r.value.shortId }) : r;
+      return r.ok ? ok({ kind: 'hidden', shortId: r.value.shortId }) : r;
     }
 
-    case 'ver':
-    case 'abrir': {
+    case 'view':
+    case 'open': {
       const ids = session?.pending?.ids ?? [];
       const id = ids[a.n - 1];
       if (!id) {
         return err('invalid', `No hay un ${a.n} en la última lista. Busca de nuevo.`);
       }
-      if (a.kind === 'ver') {
+      if (a.kind === 'view') {
         const d = await show(deps, actor, id);
-        return d.ok ? ok({ kind: 'detalle', memory: d.value }) : d;
+        return d.ok ? ok({ kind: 'detail', memory: d.value }) : d;
       }
       const b = await fetchBlob(deps, actor, id);
-      return b.ok ? ok({ kind: 'archivo', blob: b.value }) : b;
+      return b.ok ? ok({ kind: 'file', blob: b.value }) : b;
     }
 
     case 'original': {
@@ -435,10 +435,10 @@ async function doAction(
       const id = session?.pending?.viewing;
       if (!id) return err('invalid', 'No estás mirando nada. Abre algo primero.');
       const b = await fetchBlob(deps, actor, id);
-      return b.ok ? ok({ kind: 'archivo', blob: b.value }) : b;
+      return b.ok ? ok({ kind: 'file', blob: b.value }) : b;
     }
 
-    case 'si':
+    case 'yes':
     case 'no': {
       if (!confirmIsFresh(session?.pending ?? null, now)) {
         // Un "sí" que llega media hora tarde no se refiere a lo que la persona
@@ -450,7 +450,7 @@ async function doAction(
       if (a.kind === 'no') return err('invalid', `Listo, no hago nada con "${c.label}".`);
 
       // Se repite la MISMA operación con confirm activo.
-      if (c.op === 'crearDominio') {
+      if (c.op === 'createDomain') {
         return doCreateDomain(deps, actor, input, c.args.label ?? '', c.args.description ?? '', true);
       }
       return doMerge(deps, actor, input, c.args.from ?? '', c.args.into ?? '', true);
@@ -470,5 +470,5 @@ export async function pair(
 ): Promise<Result<Outcome>> {
   const r = await redeemPairingCode(deps.db, conv.channel, externalUserId, code, now, displayName);
   if (!r.ok) return r;
-  return ok({ kind: 'pareado', displayName: r.value.displayName });
+  return ok({ kind: 'paired', displayName: r.value.displayName });
 }

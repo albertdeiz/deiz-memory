@@ -111,7 +111,7 @@ describe('reintentar sirve o no sirve', () => {
     await capture(s.deps, actor, { bytes: otro, filename: 'b.jpg' });
 
     const c = await countReview(s.deps.db, actor);
-    expect(c).toEqual({ total: 2, reintentables: 1, necesitanAlgoMas: 1 });
+    expect(c).toEqual({ total: 2, retryable: 1, needMore: 1 });
   });
 });
 

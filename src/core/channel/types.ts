@@ -1,28 +1,29 @@
 /**
- * El contrato de §7.1. Lo importante no es enviar y recibir: es **declarar
- * capacidades**, para que el core degrade solo en vez de asumir un canal.
+ * The channel contract. The point is not sending and receiving: it is
+ * **declaring capabilities**, so the core degrades on its own instead of
+ * assuming one platform.
  *
- * Si algo del core lee estas banderas y da por hecho que existen los botones de
- * Telegram, el segundo canal es un rewrite disfrazado de adapter.
+ * If anything in the core reads these flags and takes one platform's buttons for
+ * granted, the second channel becomes a rewrite dressed as an adapter.
  */
 export interface Capabilities {
-  /** Lo que el bot puede MANDAR. Telegram: 50 MB para documentos. */
+  /** What the bot can SEND. */
   maxUploadBytes: number;
   /**
-   * Lo que el bot puede BAJAR. En Telegram son 20 MB y no hay forma de
-   * esquivarlo desde el lado del bot — no es una degradación, es un muro. Por
-   * eso las dos direcciones son campos distintos: no coinciden.
+   * What the bot can DOWNLOAD. On some platforms this is a hard cap with no way
+   * around it from the bot's side — not a degradation, a wall. That is why the
+   * two directions are separate fields: they do not match.
    */
   maxDownloadBytes: number;
   supportsButtons: boolean;
   supportsRichFormatting: boolean;
   /**
-   * Si el canal deja escribir sin que te hablen primero.
+   * Whether the channel allows writing before being written to.
    *
-   * Se declara porque §7.1 lo pide, y hoy **nadie lo lee** — a propósito. §2
-   * dice que el bot nunca inicia conversación, así que no hay nada que
-   * consultar. Está acá para que el día que alguien quiera usarlo tenga que
-   * borrar este comentario primero.
+   * Declared because the contract asks for it, and today **nobody reads it** —
+   * on purpose. The bot never starts a conversation, so there is nothing to
+   * consult. It is here so that whoever wants to use it has to delete this
+   * comment first.
    */
   canInitiate: boolean;
 }
@@ -34,41 +35,41 @@ export interface Conversation {
 
 export interface Attachment {
   filename: string | null;
-  /** Lo que dice el canal. `detectMediaType()` manda igual: los bytes ganan. */
+  /** What the channel claims. Byte sniffing wins anyway: bytes beat names. */
   declaredMediaType: string | null;
   sizeBytes: number | null;
   /**
-   * Perezoso a propósito: primero se compara contra `maxDownloadBytes` y recién
-   * después se pagan los bytes. También es lo que permite armar un `Incoming`
-   * en un test sin red ni archivos.
+   * Lazy on purpose: the size is compared against the download cap first, and
+   * only then are the bytes paid for. It is also what lets a test build an
+   * incoming message with no network and no files.
    */
   fetch(): Promise<Buffer>;
 }
 
 export interface Incoming {
   conversation: Conversation;
-  /** La identidad, según §10: el user id del canal, que no es falsificable. */
+  /** The identity: the channel's own user id, which cannot be forged. */
   externalUserId: string;
   displayName: string | null;
   receivedAt: Date;
-  /** Texto suelto, o el pie de una foto. */
+  /** Bare text, or a photo's caption. */
   text: string | null;
   attachment: Attachment | null;
-  /** Callback de un botón ya presionado, si el canal los tiene. */
+  /** Callback of a button already pressed, when the channel has them. */
   action: string | null;
 }
 
 export interface Option {
   label: string;
-  /** La MISMA cadena que la persona podría escribir. Ver `router/actions.ts`. */
+  /** The SAME string a person could type. See the action vocabulary. */
   action: string;
   /**
-   * Sugerencia de agrupación: las opciones con el mismo `group` van juntas.
+   * Grouping hint: options sharing a `group` belong together.
    *
-   * Es una sugerencia y no una orden porque no todos los canales tienen filas.
-   * Telegram las pone lado a lado; un canal sin botones la ignora entera y
-   * sigue listando qué escribir. Nada de la degradación depende de esto — por
-   * eso es opcional y no cambia las acciones ofrecidas.
+   * A hint and not an instruction, because not every channel has rows. One
+   * places them side by side; a channel without buttons ignores it entirely and
+   * still lists what to type. Nothing about degradation depends on this — hence
+   * optional, and it never changes which actions are offered.
    */
   group?: number;
 }
@@ -78,15 +79,16 @@ export type Reply =
   | { kind: 'file'; filename: string; mediaType: string; bytes: Buffer; caption?: string };
 
 /**
- * Un turno: llega un mensaje, se responde, se cierra.
+ * A turn: a message arrives, it is answered, it closes.
  *
- * `reply()` deja de servir en cuanto el handler retorna, y eso no es prolijidad
- * — es §2 hecha tipo. Al no haber un `send()` suelto en el puerto, el bot no
- * tiene *cómo* iniciar conversación aunque alguien quiera: no existe el método.
- * Una regla que sostiene el compilador no se olvida en seis meses.
+ * `reply()` stops working the moment the handler returns, and that is not
+ * tidiness — it is "the bot never starts a conversation" made into a type. With
+ * no loose `send()` on the port, the bot has no *way* to initiate even if
+ * someone wanted to: the method does not exist. A rule the compiler holds up is
+ * not forgotten in six months.
  *
- * Lo que sí se puede, y es legítimo, es responder varias veces **dentro** del
- * turno: eso sigue siendo contestarle a alguien que acaba de escribir.
+ * What is allowed, and legitimate, is replying several times **within** the
+ * turn: that is still answering someone who just wrote.
  */
 export interface Turn {
   readonly incoming: Incoming;
@@ -98,6 +100,6 @@ export interface Channel {
   readonly id: string;
   readonly capabilities: Capabilities;
   listen(handle: (turn: Turn) => Promise<void>): Promise<{ stop(): Promise<void> }>;
-  /** Para `dm doctor`, igual que los carriles. */
+  /** For the health check, like the lanes. */
   healthy(): Promise<{ ok: boolean; detail: string }>;
 }

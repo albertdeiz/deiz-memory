@@ -37,9 +37,9 @@ describe('search', () => {
   });
 
   it('entiende la sintaxis de websearch: frases y exclusión', async () => {
-    await capture(s.deps, mine(), { text: 'consulta con el doctor Perez por la rodilla' });
-    await capture(s.deps, mine(), { text: 'consulta con el dentista' });
-    expect(unwrap<any[]>(await search(s.deps, mine(), { query: 'consulta -dentista' }))).toHaveLength(1);
+    await capture(s.deps, mine(), { text: 'query con el doctor Perez por la rodilla' });
+    await capture(s.deps, mine(), { text: 'query con el dentista' });
+    expect(unwrap<any[]>(await search(s.deps, mine(), { query: 'query -dentista' }))).toHaveLength(1);
     expect(unwrap<any[]>(await search(s.deps, mine(), { query: '"doctor Perez"' }))).toHaveLength(1);
   });
 
@@ -77,7 +77,7 @@ describe('aislamiento por dueño (regla dura 9)', () => {
   });
 });
 
-describe('ocultar', () => {
+describe('hide', () => {
   it('saca de list y de search sin destruir', async () => {
     const r: any = await capture(s.deps, mine(), { text: 'clave del router' });
     await setHidden(s.deps, mine(), r.value.shortId, true);

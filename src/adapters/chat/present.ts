@@ -26,7 +26,7 @@ const size = (bytes: number): string =>
   bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
 
 const kindOf = (mediaType: string | null): string =>
-  KINDS.find(([p]) => mediaType?.startsWith(p))?.[1] ?? 'archivo';
+  KINDS.find(([p]) => mediaType?.startsWith(p))?.[1] ?? 'file';
 
 /** Igual que en el CLI: un nombre de cámara no es un título. */
 const label = (m: MemorySummary): string =>
@@ -73,11 +73,11 @@ const withOptions = (body: string, options: Option[], caps: Capabilities): Reply
 const porItem = (items: readonly { mediaType: string | null }[]): Option[] =>
   items.flatMap((m, i) => {
     const n = i + 1;
-    const fila: Option[] = [{ label: `${n} · datos`, action: encodeAction({ kind: 'ver', n }), group: n }];
+    const fila: Option[] = [{ label: `${n} · datos`, action: encodeAction({ kind: 'view', n }), group: n }];
     // Sin archivo original no se ofrece bajarlo: un botón que sabe que va a
     // fallar es peor que no estar.
     if (m.mediaType) {
-      fila.push({ label: `${n} · archivo`, action: encodeAction({ kind: 'abrir', n }), group: n });
+      fila.push({ label: `${n} · archivo`, action: encodeAction({ kind: 'open', n }), group: n });
     }
     return fila;
   });
@@ -107,12 +107,12 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
   const v = result.value;
 
   switch (v.kind) {
-    case 'ayuda':
+    case 'help':
       return [{
         kind: 'text',
         body: [
           'Mándame un archivo —foto, PDF, nota de voz— y lo guardo.',
-          'Lo que escribas suelto lo tomo como consulta: te respondo con lo que tengas guardado.',
+          'Lo que escribas suelto lo tomo como query: te respondo con lo que tengas guardado.',
           'Para guardar un texto, /capture.',
           '',
           '/capture <texto>   guarda eso como memoria',
@@ -132,7 +132,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
         ].join('\n'),
       }];
 
-    case 'pareado':
+    case 'paired':
       return [{
         kind: 'text',
         body: v.displayName
@@ -140,26 +140,26 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
           : 'Listo. Mándame lo que quieras y lo guardo.',
       }];
 
-    case 'guardado': {
+    case 'saved': {
       const c = v.capture;
       const dedup = c.deduped ? '\nYa lo tenías: es el mismo archivo, pero queda como memoria aparte.' : '';
       // El acuse dice el ESTADO, no solo "éxito". Sin esta línea la espera es
       // invisible; con ella es una espera declarada, que es otra cosa.
-      const leyendo = v.enCola
+      const leyendo = v.queued
         ? '\nLo estoy leyendo — en un rato lo vas a poder buscar por lo que dice adentro.'
         : '';
       return [{ kind: 'text', body: `Guardado ✓  ${c.shortId}${dedup}${leyendo}` }];
     }
 
-    case 'pendientes':
+    case 'pending':
       return [{
         kind: 'text',
-        body: v.sinLeer === 0
+        body: v.unread === 0
           ? 'No me falta nada por leer.'
-          : `Me faltan ${v.sinLeer} por leer. Pregúntame en un rato.`,
+          : `Me faltan ${v.unread} por leer. Pregúntame en un rato.`,
       }];
 
-    case 'respuesta': {
+    case 'answer': {
       const a = v.answer;
       // Modo hecho (§6): el dato exacto, con su vigencia y su cita. No hay
       // lista que paginar ni pasajes que ofrecer — hay una respuesta.
@@ -177,7 +177,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       return [withOptions(`${cabeza}\n\nde:\n${fuentes.join('\n')}`, porItem(a.sources), caps)];
     }
 
-    case 'detalle': {
+    case 'detail': {
       // Los datos de la memoria, no su transcripción. Volcar 1200 caracteres de
       // una póliza acá era llenar la pantalla con lo que el archivo ya dice
       // mejor: para eso está el botón de al lado, que te lo manda entero.
@@ -213,28 +213,28 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       return [withOptions(lines.join('\n'), options, caps)];
     }
 
-    case 'dominio': {
+    case 'domain': {
       const d = v.domain;
-      const que = v.que === 'creado' ? 'Creada' : v.que === 'archivado' ? 'Archivada' : 'Actualizada';
-      const extra = v.que === 'archivado'
+      const que = v.que === 'created' ? 'Creada' : v.que === 'archived' ? 'Archivada' : 'Actualizada';
+      const extra = v.que === 'archived'
         ? ' Sus memorias siguen ahí y siguen buscándose.'
-        : v.que === 'creado'
+        : v.que === 'created'
           ? ` Mándame algo que calce y va a caer ahí. Para verla: /${d.slug}`
           : '';
       return [{ kind: 'text', body: `${que} /${d.slug} — ${d.label}.${extra}` }];
     }
 
-    case 'fusionado':
+    case 'merged':
       return [{
         kind: 'text',
         body: `Moví ${v.moved} memoria(s) de ${v.from.label} a ${v.into.label}. ` +
           `${v.from.label} queda archivada; nada se borró.`,
       }];
 
-    case 'ocultada':
+    case 'hidden':
       return [{ kind: 'text', body: `Listo, ${v.shortId} ya no aparece en los resultados. No se borró.` }];
 
-    case 'archivo':
+    case 'file':
       return [{
         kind: 'file',
         filename: v.blob.filename,
@@ -242,7 +242,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
         bytes: v.blob.bytes,
       }];
 
-    case 'revisar': {
+    case 'review': {
       if (v.items.length === 0) return [{ kind: 'text', body: 'No hay nada que revisar.' }];
       // Cada línea dice qué hacer, no solo qué pasó: una bandeja que enumera
       // problemas sin salida te deja igual que antes.
@@ -258,14 +258,14 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       return [withOptions(`Esto quedó dudoso:\n\n${cuerpo}`, porItem(v.items), caps)];
     }
 
-    case 'dominios': {
+    case 'domains': {
       const cuerpo = v.items
         .map((d) => `/${d.slug}  ${d.label}${d.count ? `  (${d.count})` : ''}`)
         .join('\n');
       return [{ kind: 'text', body: `Tus categorías:\n\n${cuerpo}` }];
     }
 
-    case 'propuestas': {
+    case 'proposals': {
       if (v.items.length === 0) return [{ kind: 'text', body: 'No veo categorías que te falten.' }];
       // Se muestran los ejemplos para que puedas decidir mirando, no a ciegas.
       // Y se propone: crear lo decides tú, desde la terminal (§9).
@@ -283,7 +283,7 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       }];
     }
 
-    case 'enDominio': {
+    case 'inDomain': {
       if (v.items.length === 0) {
         return [{ kind: 'text', body: `No hay nada en ${v.domain.label} todavía.` }];
       }
@@ -294,13 +294,13 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
       return [withOptions(`${v.domain.label}:\n\n${cuerpo}`, porItem(v.items), caps)];
     }
 
-    case 'resultados':
+    case 'results':
       return resultados(v, caps);
   }
 }
 
 function resultados(
-  v: Extract<Outcome, { kind: 'resultados' }>,
+  v: Extract<Outcome, { kind: 'results' }>,
   caps: Capabilities,
 ): Reply[] {
   // La línea de pendientes no es cortesía: una búsqueda que dice "no lo tengo"
@@ -312,9 +312,9 @@ function resultados(
   if (v.items.length === 0) {
     // Pedir "más" y que no quede nada no es lo mismo que no tenerlo: lo primero
     // es el final de una lista, lo segundo una respuesta sobre tu memoria.
-    if (v.agotado) return [{ kind: 'text', body: 'No hay más.' }];
-    const options: Option[] = v.ofreceGuardar
-      ? [{ label: 'guardarlo como nota', action: encodeAction({ kind: 'guardar' }) }]
+    if (v.exhausted) return [{ kind: 'text', body: 'No hay más.' }];
+    const options: Option[] = v.offerSave
+      ? [{ label: 'guardarlo como nota', action: encodeAction({ kind: 'save' }) }]
       : [];
     return [withOptions(`No lo tengo.${leyendo}`, options, caps)];
   }
@@ -325,10 +325,10 @@ function resultados(
 
   const desde = v.offset + 1;
   const hasta = v.offset + v.items.length;
-  const head = `${desde}–${hasta} de lo que encontré para "${v.consulta}":`;
+  const head = `${desde}–${hasta} de lo que encontré para "${v.query}":`;
 
   const options: Option[] = porItem(v.items);
-  if (v.hayMas) options.push({ label: 'más', action: encodeAction({ kind: 'mas' }) });
+  if (v.hasMore) options.push({ label: 'más', action: encodeAction({ kind: 'more' }) });
 
   return [withOptions(`${head}\n\n${numbered}${leyendo}`, options, caps)];
 }
@@ -339,11 +339,11 @@ function failure(
   caps: Capabilities,
 ): Reply {
   if (result.kind === 'requires_confirmation') {
-    const afectados = result.affects.map((a) => `· ${a.label ?? a.id}`).join('\n');
+    const affected = result.affects.map((a) => `· ${a.label ?? a.id}`).join('\n');
     return withOptions(
-      `${result.message}\n${afectados}`,
+      `${result.message}\n${affected}`,
       [
-        { label: 'sí, hazlo', action: encodeAction({ kind: 'si' }) },
+        { label: 'sí, hazlo', action: encodeAction({ kind: 'yes' }) },
         { label: 'no', action: encodeAction({ kind: 'no' }) },
       ],
       caps,

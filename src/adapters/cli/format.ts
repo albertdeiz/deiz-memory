@@ -31,7 +31,7 @@ const KINDS: [string, string][] = [
 
 const kindOf = (mediaType: string | null): string => {
   const hit = KINDS.find(([prefix]) => mediaType?.startsWith(prefix));
-  return hit ? hit[1] : 'archivo';
+  return hit ? hit[1] : 'file';
 };
 
 /**
@@ -117,19 +117,19 @@ export function renderReview(items: ReviewItem[]): string {
     ].join('\n');
   });
 
-  const reintentables = items.filter((m) => m.retryable === true).length;
-  const sinClasificar = items.filter((m) => m.retryable === null).length;
+  const retryable = items.filter((m) => m.retryable === true).length;
+  const unclassified = items.filter((m) => m.retryable === null).length;
 
   // Decir "ninguna se arregla reintentando" cuando en realidad no se sabe sería
   // exactamente la clase de afirmación falsa que esta bandeja existe para
   // evitar. Sin dato, se dice que no hay dato.
   const cola =
-    reintentables > 0
-      ? `\n\n${reintentables} de ${items.length} se pueden reintentar: dm reprocess --failed`
-      : sinClasificar === items.length
+    retryable > 0
+      ? `\n\n${retryable} de ${items.length} se pueden reintentar: dm reprocess --failed`
+      : unclassified === items.length
         ? '\n\nTodavía no sé cuáles se arreglan reintentando; corre dm reprocess --failed --yes una vez y lo sabré.'
-        : sinClasificar > 0
-          ? `\n\nNinguna de las clasificadas se arregla reintentando (${sinClasificar} sin clasificar).`
+        : unclassified > 0
+          ? `\n\nNinguna de las clasificadas se arregla reintentando (${unclassified} sin clasificar).`
           : '\n\nNinguna se arregla reintentando.';
 
   return lines.join('\n\n') + cola;

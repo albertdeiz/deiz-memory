@@ -32,7 +32,7 @@ const conTags = async (title: string, tags: string[]) => {
   return r.value.id;
 };
 
-describe('proponer', () => {
+describe('propose', () => {
   it('no propone nada cuando no hay racimo', async () => {
     await conTags('una cosa', ['webdox']);
     await conTags('otra cosa', ['cortina']);

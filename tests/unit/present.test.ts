@@ -33,17 +33,17 @@ const item = (n: number): MemorySummary => ({
   tags: [],
 });
 
-type Resultados = Extract<Outcome, { kind: 'resultados' }>;
+type Resultados = Extract<Outcome, { kind: 'results' }>;
 
-const resultados = (n: number, hayMas: boolean): Resultados => ({
-  kind: 'resultados',
-  consulta: 'poliza',
+const resultados = (n: number, hasMore: boolean): Resultados => ({
+  kind: 'results',
+  query: 'poliza',
   items: Array.from({ length: n }, (_, i) => item(i + 1)),
   offset: 0,
-  hayMas,
+  hasMore,
   pendientes: 0,
-  ofreceGuardar: null,
-  agotado: false,
+  offerSave: null,
+  exhausted: false,
 });
 
 const actionsOf = (rs: Reply[]): string[] =>
@@ -95,7 +95,7 @@ describe('degradación · las mismas acciones con y sin botones', () => {
   });
 
   it('sin resultados no se ofrece "más"', () => {
-    const vacio: Outcome = { ...resultados(0, false), ofreceGuardar: 'garantia refrigerador' };
+    const vacio: Outcome = { ...resultados(0, false), offerSave: 'garantia refrigerador' };
     for (const caps of [conBotones, sinBotones]) {
       expect(actionsOf(present(ok(vacio), caps))).toEqual(['save']);
     }
@@ -123,11 +123,11 @@ describe('lo que dice el acuse', () => {
   it('un archivo avisa que se está leyendo; un texto no', () => {
     const base = { id: 'x', shortId: 'ab12cd34', deduped: false, mediaType: null, sizeBytes: null };
     const conArchivo = present(
-      ok({ kind: 'guardado', capture: { ...base, sha256: 'abc' }, enCola: true }),
+      ok({ kind: 'saved', capture: { ...base, sha256: 'abc' }, queued: true }),
       conBotones,
     );
     const soloTexto = present(
-      ok({ kind: 'guardado', capture: { ...base, sha256: null }, enCola: false }),
+      ok({ kind: 'saved', capture: { ...base, sha256: null }, queued: false }),
       conBotones,
     );
     expect(bodyOf(conArchivo)).toContain('Lo estoy leyendo');
@@ -147,8 +147,8 @@ describe('honestidad del "no lo tengo"', () => {
   });
 
   it('distingue el final de una lista de no tener el dato', () => {
-    const agotado: Outcome = { ...resultados(0, false), offset: 5, agotado: true };
-    expect(bodyOf(present(ok(agotado), conBotones))).toBe('No hay más.');
+    const exhausted: Outcome = { ...resultados(0, false), offset: 5, exhausted: true };
+    expect(bodyOf(present(ok(exhausted), conBotones))).toBe('No hay más.');
   });
 });
 
@@ -168,8 +168,8 @@ describe('cuando la respuesta se descartó a propósito', () => {
   };
 
   const rechazo = (reason: 'no_citation' | 'ungrounded'): Outcome => ({
-    kind: 'respuesta',
-    consulta: '¿cuál es mi deducible?',
+    kind: 'answer',
+    query: '¿cuál es mi deducible?',
     answer: { text: null, sources: [fuente], reason },
   });
 
@@ -216,7 +216,7 @@ describe('los dos botones de cada resultado', () => {
     // Codificaba `abrir:1`, que se resuelve contra la lista: abrir el tercero y
     // pedir su original te mandaba el archivo del primero.
     const detalle: Outcome = {
-      kind: 'detalle',
+      kind: 'detail',
       memory: {
         ...item(3), ownerId: 'o', status: 'classified', sha256: 'abc', note: null,
         normalizedText: 'x'.repeat(5000), lane: 'document', normalizedAt: new Date(),
@@ -228,7 +228,7 @@ describe('los dos botones de cada resultado', () => {
 
   it('el detalle muestra los datos, no el documento entero', () => {
     const detalle: Outcome = {
-      kind: 'detalle',
+      kind: 'detail',
       memory: {
         ...item(3), ownerId: 'o', status: 'classified', sha256: 'abc', note: 'mi nota',
         normalizedText: 'z'.repeat(5000), lane: 'document', normalizedAt: new Date(),
@@ -244,7 +244,7 @@ describe('los dos botones de cada resultado', () => {
 
 describe('la nota se muestra una vez', () => {
   const conNota = (over: Partial<MemorySummary> & Record<string, unknown> = {}): Outcome => ({
-    kind: 'detalle',
+    kind: 'detail',
     memory: {
       ...item(1), ownerId: 'o', status: 'classified', sha256: 'abc',
       note: 'póliza N°BP9344586, vigencia 29/07/2026',
@@ -285,21 +285,21 @@ describe('todo listado ofrece las mismas acciones', () => {
   const conArchivo2 = { ...item(2), mediaType: 'application/pdf' };
 
   const listados: [string, Outcome][] = [
-    ['resultados', { ...resultados(2, false), items: [conArchivo, conArchivo2] }],
-    ['enDominio', {
-      kind: 'enDominio',
+    ['results', { ...resultados(2, false), items: [conArchivo, conArchivo2] }],
+    ['inDomain', {
+      kind: 'inDomain',
       domain: { id: 'd', slug: 'salud', label: 'Salud', description: '', aliases: [], active: true },
       items: [conArchivo, conArchivo2],
     }],
-    ['revisar', {
-      kind: 'revisar',
+    ['review', {
+      kind: 'review',
       items: [conArchivo, conArchivo2].map((m) => ({
         ...m, lane: 'vision' as const, error: 'no se pudo leer', retryable: true, chars: 0,
       })),
     }],
-    ['respuesta', {
-      kind: 'respuesta',
-      consulta: 'deducible',
+    ['answer', {
+      kind: 'answer',
+      query: 'deducible',
       answer: {
         text: 'El deducible es de 3 UF [id1].',
         reason: null,
@@ -359,8 +359,8 @@ describe('lo vencido se dice antes del dato', () => {
   });
 
   const respuesta = (hits: unknown[]): Outcome => ({
-    kind: 'respuesta',
-    consulta: 'deducible',
+    kind: 'answer',
+    query: 'deducible',
     answer: { text: null, sources: [], reason: null, facts: hits as never },
   });
 
@@ -414,7 +414,7 @@ describe('un conflicto es el mismo dato dos veces, no dos cosas distintas', () =
   });
 
   const body = (hits: unknown[]) => bodyOf(present(ok({
-    kind: 'respuesta', consulta: 'x',
+    kind: 'answer', query: 'x',
     answer: { text: null, sources: [], reason: null, facts: hits as never },
   } as Outcome), conBotones));
 

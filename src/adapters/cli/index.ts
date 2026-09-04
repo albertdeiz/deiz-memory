@@ -265,7 +265,7 @@ program
       }
 
       try {
-        // Filtrado por dueño como toda consulta del sistema (regla dura 9). Sin
+        // Filtrado por dueño como toda query del sistema (regla dura 9). Sin
         // esto, en cuanto exista una segunda persona `dm doctor` te reportaría
         // su pila de pendientes como si fuera tuya: el `WHERE` olvidado de §14,
         // en el comando cuyo trabajo es justamente detectar problemas.
@@ -288,14 +288,14 @@ program
           const idle = pendientes === '0' && bandeja.total === 0;
           // Se distingue lo que un reproceso arregla de lo que no: mandar a
           // reintentar algo que no puede mejorar enseña a desconfiar del consejo.
-          const consejo = bandeja.reintentables > 0 ? ' — dm reprocess --failed' : ' — dm review';
+          const consejo = bandeja.retryable > 0 ? ' — dm reprocess --failed' : ' — dm review';
           checks.push({
             check: 'normalizar',
             ok: idle,
             detail: idle
               ? 'nada pendiente'
               : `${pendientes} sin procesar, ${bandeja.total} por revisar` +
-                (bandeja.total > 0 ? ` (${bandeja.reintentables} reintentables)` : '') +
+                (bandeja.total > 0 ? ` (${bandeja.retryable} retryable)` : '') +
                 consejo,
             required: false,
           });
@@ -310,13 +310,13 @@ program
                 and (normalized_text is not null or note is not null)`,
             [who.value],
           );
-          const sinDominio = Number(sin[0]!.n);
+          const uncategorized = Number(sin[0]!.n);
           checks.push({
             check: 'clasificar',
-            ok: sinDominio === 0,
-            detail: sinDominio === 0
+            ok: uncategorized === 0,
+            detail: uncategorized === 0
               ? 'todas categorizadas'
-              : `${sinDominio} sin categoría — dm classify`,
+              : `${uncategorized} sin categoría — dm classify`,
             required: false,
           });
         }
@@ -388,12 +388,12 @@ program
     );
   });
 
-// ---------------------------------------------------------------- consulta
+// ---------------------------------------------------------------- query
 
 program
   .command('ls')
   .description('lista lo guardado, de lo más reciente a lo más viejo')
-  .option('--limit <n>', 'cuántas mostrar', '20')
+  .option('--limit <n>', 'cuántas shown', '20')
   .option('--offset <n>', 'desde cuál empezar', '0')
   .option('--hidden', 'incluir las ocultas')
   .action(async (opts: Record<string, string | boolean>) => {
@@ -411,8 +411,8 @@ program
 program
   .command('search')
   .description('busca por texto: entiende comillas, OR y - para excluir')
-  .argument('<consulta>')
-  .option('--limit <n>', 'cuántas mostrar', '20')
+  .argument('<query>')
+  .option('--limit <n>', 'cuántas shown', '20')
   .option('--offset <n>', 'desde cuál empezar', '0')
   .option('--hidden', 'incluir las ocultas')
   .action(async (query: string, opts: Record<string, string | boolean>) => {
@@ -463,7 +463,7 @@ program
 
 program
   .command('unhide')
-  .description('vuelve a mostrar una memoria oculta')
+  .description('vuelve a shown una memoria oculta')
   .argument('<id>')
   .action(async (id: string) => {
     await run(({ deps, actor }) => setHidden(deps, actor, id, false), (r) => `${r.shortId} visible`);
@@ -732,7 +732,7 @@ program
   .command('in')
   .description('lista lo de una categoría, por fecha del hecho')
   .argument('<dominio>')
-  .option('--limit <n>', 'cuántas mostrar', '20')
+  .option('--limit <n>', 'cuántas shown', '20')
   .action(async (ref: string, opts: Record<string, string>) => {
     await run(async ({ deps, actor }) => {
       const d = await findDomain(deps.db, actor, ref);
@@ -823,7 +823,7 @@ program
 program
   .command('review')
   .description('lo que quedó dudoso y qué hacer con cada cosa')
-  .option('--limit <n>', 'cuántas mostrar', '20')
+  .option('--limit <n>', 'cuántas shown', '20')
   .action(async (opts: Record<string, string>) => {
     await run(
       ({ deps, actor }) => listReview(deps, actor, { limit: Number(opts.limit) }),

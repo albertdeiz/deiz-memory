@@ -65,7 +65,7 @@ describe('quién puede hablarle', () => {
   });
 });
 
-describe('capturar', () => {
+describe('capture', () => {
   beforeEach(async () => { await pairMe(); });
 
   it('guarda un texto suelto con /capture, y no promete leerlo', async () => {
@@ -75,7 +75,7 @@ describe('capturar', () => {
     expect(out).not.toContain('Lo estoy leyendo');
   });
 
-  it('un texto SIN /capture no se guarda: se consulta', async () => {
+  it('un texto SIN /capture no se guarda: se query', async () => {
     // En un chat, lo que escribes es casi siempre algo que estás preguntando.
     // Guardar por defecto dejaba preguntas convertidas en memorias.
     const out = text(await ch.send({ text: 'el mecánico es Juan +569 1234 5678' }));
@@ -107,7 +107,7 @@ describe('capturar', () => {
   });
 });
 
-describe('recordar', () => {
+describe('recall', () => {
   beforeEach(async () => { await pairMe(); });
 
   const guardar = async (n: number) => {
@@ -148,7 +148,7 @@ describe('recordar', () => {
   });
 
   it('un número suelto sin lista en pantalla no es "ver el séptimo"', async () => {
-    // Sin lista, un 7 no puede significar una posición. Se consulta, y si no
+    // Sin lista, un 7 no puede significar una posición. Se query, y si no
     // hay nada se ofrece guardarlo: no se pierde.
     const out = text(await ch.send({ text: '7' }));
     expect(out).toContain('No lo tengo');
@@ -158,7 +158,7 @@ describe('recordar', () => {
   it('ofrece guardar una pregunta que no encontró nada', async () => {
     const out = text(await ch.send({ text: '¿dónde está la garantía del refrigerador?' }));
     expect(out).toContain('No lo tengo');
-    expect(out).toContain('guardar');
+    expect(out).toContain('save');
 
     expect(text(await ch.send({ text: 'save' }))).toContain('Guardado');
   });
@@ -168,7 +168,7 @@ describe('recordar', () => {
     // nota sería guardarte un texto que nunca quisiste guardar.
     const out = text(await ch.send({ text: '/search pinguino' }));
     expect(out).toContain('No lo tengo');
-    expect(out).not.toContain('guardar');
+    expect(out).not.toContain('save');
   });
 
   it('dice cuánto falta por leer, para no mentir con un "no lo tengo"', async () => {

@@ -3,41 +3,41 @@ import type { Uuid } from '../domain/types';
 import type { Db } from '../ports';
 
 /**
- * Lo que la conversación está esperando.
+ * What the conversation is waiting for.
  *
- * Vive en la base y no dentro del payload del botón, y esa decisión es la que
- * hace posible degradar: con el estado acá, el botón "más" y la palabra "más"
- * valen los mismos tres bytes. Si el cursor viajara en el `callback_data`, un
- * canal sin botones no podría reproducirlo.
+ * It lives in the database and not inside the button payload, and that decision
+ * is what makes degradation possible: with the state here, the "more" button and
+ * the typed word "more" are worth the same four bytes. If the cursor travelled
+ * in the callback data, a channel without buttons could not reproduce it.
  */
 export interface Pending {
-  /** Ids de la última página, para que "ver 3" signifique el tercero de esos. */
+  /** Ids of the last page, so "view 3" means the third of those. */
   ids?: string[];
-  /** Texto que se ofreció guardar tras una búsqueda vacía (§5). */
+  /** Text offered for saving after an empty search. */
   save?: string;
   /**
-   * La memoria cuyo detalle está en pantalla.
+   * The memory whose detail is on screen.
    *
-   * Separada de `ids` porque no es un elemento de la lista: es *lo que estás
-   * mirando*. El botón "mandarme el original" del detalle codificaba
-   * `abrir:1` y por lo tanto te mandaba el archivo del PRIMERO de la lista,
-   * no el del que abriste. Guardar la lista y el foco por separado es lo que
-   * permite que `ver 3` siga funcionando después de haber abierto el 2.
+   * Separate from `ids` because it is not an element of the list: it is *what
+   * you are looking at*. The detail's "send me the original" button used to
+   * encode position 1, and therefore sent you the FIRST item's file rather than
+   * the one you opened. Keeping the list and the focus apart is what lets
+   * "view 3" still work after opening the second.
    */
   viewing?: string;
   /**
-   * Una confirmación en curso: qué operación repetir si dices que sí.
+   * A confirmation in flight: which operation to repeat if you say yes.
    *
-   * Se guarda la operación y sus argumentos, no un id de "cosa pendiente":
-   * así el `sí` reejecuta exactamente lo mismo con `confirm: true`, y no hay
-   * un segundo camino que pueda divergir del primero.
+   * The operation and its arguments are stored, not an id of some "pending
+   * thing": that way a yes re-runs exactly the same call with confirm set, and
+   * there is no second path that can drift from the first.
    *
-   * `askedAt` existe porque un "sí" que llega media hora tarde no se refiere a
-   * lo que la persona cree.
+   * `askedAt` exists because a yes arriving half an hour late does not refer to
+   * what the person thinks it does.
    */
   confirm?: {
     label: string;
-    op: 'crearDominio' | 'fusionar';
+    op: 'createDomain' | 'mergeDomains';
     args: Record<string, string>;
     askedAt: string;
   };
@@ -50,7 +50,7 @@ export interface ChatSession {
   pending: Pending | null;
 }
 
-/** Diez minutos: pasado eso, un "sí" ya no se refiere a lo que la persona cree. */
+/** Ten minutes: past that, a yes no longer refers to what the person thinks. */
 export const CONFIRM_TTL_MS = 10 * 60 * 1000;
 
 export async function readSession(db: Db, conv: Conversation): Promise<ChatSession | null> {
@@ -97,18 +97,18 @@ export async function writeSession(
   );
 }
 
-/** Una confirmación vencida no vale. Se comprueba al usarla, no al guardarla. */
+/** An expired confirmation does not count. Checked on use, not on write. */
 export const confirmIsFresh = (p: Pending | null, now: Date): boolean => {
   if (!p?.confirm) return false;
   return now.getTime() - Date.parse(p.confirm.askedAt) < CONFIRM_TTL_MS;
 };
 
 /**
- * Cuántas memorias tuyas están esperando que un carril las lea.
+ * How many of your memories are waiting for a lane to read them.
  *
- * No es un dato de cortesía: una búsqueda que responde "no lo tengo" mientras
- * un OCR todavía corre **está mintiendo**. Usa el índice parcial
- * `memories_pending_idx` que la 003 dejó justamente para esto.
+ * Not a courtesy figure: a search that answers "I do not have it" while an OCR
+ * pass is still running **is lying**. Backed by a partial index that exists
+ * exactly for this.
  */
 export async function pendingCount(db: Db, ownerId: Uuid): Promise<number> {
   const { rows } = await db.query<{ n: string }>(

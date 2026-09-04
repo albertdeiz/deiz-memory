@@ -149,10 +149,10 @@ describe('listar una categoría', () => {
     // El criterio de listo de F2, y §3.3: el tiempo es de primera clase.
     const d = await crear('Consultorio', 'Consultas y recetas del doctor');
     const viejo = await capture(s.deps, actor, {
-      text: 'consulta antigua', occurredAt: new Date('2024-01-15T00:00:00Z'),
+      text: 'query antigua', occurredAt: new Date('2024-01-15T00:00:00Z'),
     });
     const nuevo = await capture(s.deps, actor, {
-      text: 'consulta reciente', occurredAt: new Date('2026-05-20T00:00:00Z'),
+      text: 'query reciente', occurredAt: new Date('2026-05-20T00:00:00Z'),
     });
     if (!viejo.ok || !nuevo.ok) throw new Error('no capturó');
     // Se captura el viejo primero pero ocurrió después: si ordenara por captura,
@@ -161,7 +161,7 @@ describe('listar una categoría', () => {
 
     const r = await list(s.deps, actor, { domainId: d.id });
     if (!r.ok) throw new Error('no listó');
-    expect(r.value.map((m) => m.excerpt)).toEqual(['consulta reciente', 'consulta antigua']);
+    expect(r.value.map((m) => m.excerpt)).toEqual(['query reciente', 'query antigua']);
   });
 
   it('no ves las categorías de otro dueño', async () => {

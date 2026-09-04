@@ -79,7 +79,7 @@ describe('capture', () => {
 
   it('guarda la fecha del hecho aparte de la de captura', async () => {
     const occurredAt = new Date('2026-01-15T00:00:00Z');
-    const r = unwrap<any>(await capture(s.deps, actor(), { text: 'consulta', occurredAt }) as any);
+    const r = unwrap<any>(await capture(s.deps, actor(), { text: 'query', occurredAt }) as any);
     const detail = unwrap<any>(await show(s.deps, actor(), r.shortId) as any);
     expect(detail.occurredAt?.toISOString()).toBe(occurredAt.toISOString());
     expect(detail.capturedAt.toISOString()).toBe('2026-03-14T12:00:00.000Z');

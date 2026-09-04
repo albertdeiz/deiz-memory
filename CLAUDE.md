@@ -98,6 +98,88 @@ active        true | false
 
 **`description` no es documentación: es el prompt** (§9).
 
+### `Fact` — el dato duro, extraído una vez
+
+Una búsqueda ordena documentos por parecido. Para *"¿cuánto es mi deducible?"* eso es
+pedirle a la herramienta equivocada: la respuesta es un número exacto, no un ranking.
+
+**Medido.** Los 80 trozos de una póliza de auto tratan, todos, de seguros de auto — y la
+pregunta también. Los ocho que la recuperación traía puntuaban entre 1,62 y 1,77: un 9%
+de diferencia para decidir cuál responde. El vector hacía bien su trabajo; el trabajo era
+el equivocado.
+
+```
+memory_id       de dónde salió. Obligatorio: sin cita no hay respuesta (regla dura 1)
+type_id         → fact_types
+payload         los campos, tipados según el registro
+identity        copia del campo que distingue dos instancias (la patente, la tarjeta)
+valid_from
+valid_until     lo que hace posible responder "vencido" en vez de responder mal
+superseded_by   la póliza nueva no borra a la vieja: la supera
+confidence
+```
+
+**Cada valor pasa por grounding antes de guardarse** — el mismo principio que verifica las
+cifras de una respuesta (§6). Un campo que no aparece en el documento se descarta. Eso
+convierte la extracción en algo verificable en vez de confiado al modelo.
+
+### `FactType` — el registro, también editable
+
+Un tipo no es un enum, por la misma razón que un dominio no lo es (§3.7): agregar uno no
+puede requerir un deploy.
+
+```
+slug            poliza_auto
+kind            estado | periodo        ← ver abajo, no es un detalle
+description     para qué documentos aplica; el modelo la lee
+domain_slug     de qué categoría intentar extraer
+fields          [{ name, kind, label, aliases[] }]
+identity_field  cuál de los campos distingue dos instancias
+active
+```
+
+El `kind` de cada campo es un conjunto cerrado y chico —`text · number · uf · money ·
+date · phone`— porque hace dos trabajos: describe el campo en el prompt y **valida** lo
+que vuelve.
+
+`aliases` es lo que conecta una pregunta con un campo **sin preguntarle a un modelo**: si
+una palabra de la pregunta calza con un alias, hay camino de hecho. Determinista, como
+todo lo que decide algo acá.
+
+#### Estado y período no son lo mismo, y confundirlos corrompe datos
+
+Un tipo `estado` tiene **uno vigente**: la póliza nueva sucede a la vieja, que sigue
+existiendo y sigue respondiendo *"¿qué cubría el año pasado?"*. Un tipo `periodo`
+**coexiste**: la cartola de agosto no reemplaza a la de julio — la de julio sigue siendo
+la verdad sobre julio, para siempre.
+
+```
+poliza_auto (estado)                tarjeta_credito (periodo)
+────────────────────                ─────────────────────────
+2023 ──────✕ superada               julio      ← sigue siendo verdad
+2026 ──────● vigente                agosto     ← sigue siendo verdad
+"¿cuál es mi deducible?"            "¿cuánto pagué en julio?"
+ → una respuesta                     → la de julio, no la última
+```
+
+Sin esta distinción el sistema marcaría la cartola de julio como superada por la de
+agosto, que es **peor que no tener el dato**. Por eso el `kind` va en el registro y no se
+infiere.
+
+**La supersesión distingue sucesión de conflicto.** En un tipo `estado`, mismo tipo y
+misma identidad con vigencias que **no** se solapan: la posterior supera a la anterior. Si
+**sí** se solapan, no es sucesión sino conflicto, y se muestran las dos (regla dura 3).
+En un tipo `periodo` no hay supersesión, y punto.
+
+#### Lo que NO es un Fact
+
+Esa cartola trae **53 líneas de transacción**. Eso no es un `payload`: es una tabla, y
+*"¿cuánto gasté en delivery?"* necesita sumar filas, no leer un campo.
+
+Queda fuera **por diseño, no por fase**: agregar gastos por comercio es una app de
+finanzas, y §2 dice que esto no es eso. La línea honesta es responder *"tienes que pagar
+$886.568 antes del 7 de septiembre"* y no *"gastaste 12% más que el mes pasado"*.
+
 ### Las otras tablas
 
 `owners` · `blobs` (direccionables por sha256) · `memory_chunks` (trozos con su vector) ·
@@ -122,6 +204,21 @@ sin comando ni categoría. Y no perder nada también: si la consulta no encuentr
 respuesta ofrece guardar ese texto tal cual, a un toque.
 
 ## 6. Recuperación
+
+**Dos modos, y el orden importa.**
+
+**Modo hecho** — si una palabra de la pregunta calza con el alias de un campo de un
+`FactType`, la respuesta sale de una consulta SQL sobre `facts`: exacta, con su vigencia y
+con el `memory_id` que la respalda. No hay ranking que pueda fallar.
+
+**Modo contexto** — todo lo demás, que es la mayoría: recuperación híbrida sobre los
+trozos. Es lo correcto cuando no hay schema posible (*"¿qué me recetaron en marzo?"*).
+
+El modo hecho se intenta primero y **cae al modo contexto sin ruido** si no hay un hecho
+que responda. Nunca al revés: una búsqueda que ordena 458 trozos no puede ganarle a una
+fila que dice el número.
+
+### Modo contexto: la recuperación híbrida
 
 - **Filtro estructurado primero** — dominio y ventana de fechas recortan el universo.
   Es lo que de verdad baja el ruido.
@@ -362,6 +459,7 @@ mismo es una que hay que mantener sincronizada con la otra para siempre.
 /pending             qué falta por leer
 /review              lo que quedó dudoso
 /domains             tus categorías · /<slug> para ver una
+/facts               los datos duros extraídos, con su vigencia
 /create <n>: <desc>  ·  /describe <n>: <d>  ·  /rename <n> <nuevo>
 /archive <n>         ·  /merge <a> <b>      ·  /propose
 /help
@@ -382,6 +480,7 @@ dm init · dm doctor · dm serve · dm worker · dm chat "<msg>"
 dm capture <archivo> | --text "..." | -        --title --occurred --wait
 dm ls · dm search · dm ask · dm show · dm open · dm in <categoría>
 dm domains [create|edit|archive|merge|propose] · dm classify · dm index
+dm facts [--all] · dm facts types · dm facts extract [id]
 dm review · dm reprocess [--failed|--pending|--all|--lane|--wait]
 dm pair · dm identities
 dm hide · dm unhide · dm purge <id> --yes
@@ -397,8 +496,9 @@ con auditoría — el chat solo oculta) y la mantención (`classify`, `index`, `
 ## 12. Estado y límites conocidos
 
 Construido y en verde: captura, los tres carriles, canal de chat, bandeja de revisión,
-dominios dinámicos con clasificación local, y preguntas en lenguaje natural con cita
-verificada. **291 tests.**
+dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
+verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` y
+`tarjeta_credito`.
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.
@@ -414,6 +514,9 @@ Lo que falta, con nombre:
 - **El modelo de 3B a veces se queda corto** al redactar. `DM_CLASSIFY_MODEL` lo cambia.
 - **`grounding` valida que la cifra esté en el texto, no que responda tu pregunta.** Si
   la recuperación trae la sección equivocada, puede darte un número real de otra cosa.
+  Para los datos que importan, el modo hecho (§6) esquiva el problema entero; para el
+  resto sigue vigente.
+- **Solo dos tipos de hecho.** Todo lo demás se responde buscando.
 
 ## 13. Reglas duras
 
@@ -429,6 +532,9 @@ Invariantes del producto:
 7. Nunca crear, renombrar, archivar ni fusionar una categoría sin confirmación explícita.
 8. Confirmar antes de cualquier acción irreversible (fusionar, purgar).
 9. Toda consulta va filtrada por dueño. Sin excepción, sin "modo admin".
+10. Si el dato está **vencido o superado, decirlo antes del dato**. Nunca después, y
+    nunca callado. Es la razón de ser de `valid_until` (§1.3): el riesgo no es olvidar un
+    dato, es consultarlo y recibir el viejo sin darte cuenta.
 
 ## 14. Privacidad y seguridad
 
@@ -490,6 +596,11 @@ De uso, no de sistema:
 
 - **Memory** — captura inmutable. La unidad del sistema.
 - **Domain** — categoría editable en runtime; su `description` alimenta el clasificador.
+- **Fact** — dato tipado extraído de una memoria, con vigencia y cita. Se consulta, no se
+  busca.
+- **FactType** — el registro de qué extraer y de dónde. `estado` tiene uno vigente;
+  `periodo` coexiste.
+- **Supersesión** — un dato reemplaza a otro sin borrarlo. Solo en los tipos `estado`.
 - **Carril** — ruta de normalización según el tipo de entrada (§8.1).
 - **Trozo** (`memory_chunk`) — un párrafo con su vector. Lo que se cita.
 - **Grounding** — que toda cifra de la respuesta esté en los pasajes leídos.

@@ -1,8 +1,8 @@
-import type { Actor, Lane, Uuid } from '../domain/types.js';
-import { shortId } from '../domain/types.js';
-import type { Deps } from '../ports.js';
-import { err, needsConfirmation, ok, type Result } from '../result.js';
-import { resolveMemoryId } from './resolve.js';
+import type { Actor, Lane, Uuid } from '../domain/types';
+import { shortId } from '../domain/types';
+import type { Deps } from '../ports';
+import { err, needsConfirmation, ok, type Result } from '../result';
+import { resolveMemoryId } from './resolve';
 
 export interface ReprocessInput {
   /** Una memoria concreta. Excluye a los demás selectores. */

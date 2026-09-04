@@ -1,6 +1,6 @@
-import { extensionForMediaType, extensionOf } from '../../core/media.js';
-import type { Converter, ExtractInput } from '../../core/ports.js';
-import { formWithFile, postJson, probe } from './http.js';
+import { extensionForMediaType, extensionOf } from '../../core/media';
+import type { Converter, ExtractInput } from '../../core/ports';
+import { formWithFile, postJson, probe } from './http';
 
 export interface DocumentsConfig {
   baseUrl: string;

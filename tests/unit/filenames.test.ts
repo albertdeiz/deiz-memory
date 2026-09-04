@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { meaningfulName } from '../../src/core/filenames.js';
+import { meaningfulName } from '../../src/core/filenames';
 
 describe('meaningfulName', () => {
   it('descarta lo que pone la cámara', () => {

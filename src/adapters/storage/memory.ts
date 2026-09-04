@@ -1,4 +1,4 @@
-import type { BlobStore } from '../../core/ports.js';
+import type { BlobStore } from '../../core/ports';
 
 /** Blob store en memoria. Es el primer pago de tener el puerto: unit tests sin Docker. */
 export function inMemoryBlobStore(): BlobStore & { size(): number } {

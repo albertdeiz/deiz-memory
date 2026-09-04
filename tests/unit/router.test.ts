@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { encodeAction, parseAction } from '../../src/core/router/actions.js';
-import { classify, contentWords } from '../../src/core/router/intent.js';
-import type { Attachment, Incoming } from '../../src/core/channel/types.js';
+import { encodeAction, parseAction } from '../../src/core/router/actions';
+import { classify, contentWords } from '../../src/core/router/intent';
+import type { Attachment, Incoming } from '../../src/core/channel/types';
 
 const attachment = (over: Partial<Attachment> = {}): Attachment => ({
   filename: 'boleta.jpg',

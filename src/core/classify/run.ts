@@ -1,8 +1,8 @@
-import type { Actor, Uuid } from '../domain/types.js';
-import { activeDomains } from '../ops/domains.js';
-import type { Deps } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
-import { buildPrompt, classifySchema, validate, type Classification } from './prompt.js';
+import type { Actor, Uuid } from '../domain/types';
+import { activeDomains } from '../ops/domains';
+import type { Deps } from '../ports';
+import { err, ok, type Result } from '../result';
+import { buildPrompt, classifySchema, validate, type Classification } from './prompt';
 
 /**
  * Debajo de esto la clasificación se guarda pero se marca para revisar (§3.4):
@@ -97,7 +97,7 @@ export async function classifyMemory(
 
 /** Rehace los hechos. Que falle no invalida la clasificación, que ya está guardada. */
 async function reextract(deps: Deps, actor: Actor, id: Uuid): Promise<void> {
-  const { extractFacts } = await import('../facts/extract.js');
+  const { extractFacts } = await import('../facts/extract');
   await extractFacts(deps, actor, id).catch(() => {});
 }
 

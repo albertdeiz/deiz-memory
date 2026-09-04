@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   identityOwner, listIdentities, mintPairingCode, redeemPairingCode, touchIdentity,
-} from '../../src/core/index.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+} from '../../src/core/index';
+import { startStack, type TestStack } from '../helpers/stack';
 
 /**
  * El emparejamiento es la puerta de entrada al sistema por chat, así que lo que

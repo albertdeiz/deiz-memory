@@ -1,5 +1,5 @@
-import { normalizeNumber } from '../recall/grounding.js';
-import type { FactField, FactValue, FieldKind } from './types.js';
+import { normalizeNumber } from '../recall/grounding';
+import type { FactField, FactValue, FieldKind } from './types';
 
 /**
  * Validar un valor extraído, y comprobar que de verdad esté en el documento.

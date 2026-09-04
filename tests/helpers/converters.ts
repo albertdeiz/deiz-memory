@@ -1,4 +1,4 @@
-import type { Converter, Converters, ExtractInput } from '../../src/core/ports.js';
+import type { Converter, Converters, ExtractInput } from '../../src/core/ports';
 
 export interface FakeConverter extends Converter {
   calls: ExtractInput[];

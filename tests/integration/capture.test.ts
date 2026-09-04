@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { capture, fetchBlob, list, show, storageKey } from '../../src/core/index.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+import { capture, fetchBlob, list, show, storageKey } from '../../src/core/index';
+import { startStack, type TestStack } from '../helpers/stack';
 
 let s: TestStack;
 const actor = () => ({ ownerId: s.ownerId });

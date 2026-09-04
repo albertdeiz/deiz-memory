@@ -6,7 +6,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import type { BlobStore } from '../../core/ports.js';
+import type { BlobStore } from '../../core/ports';
 
 export interface S3Config {
   endpoint: string;

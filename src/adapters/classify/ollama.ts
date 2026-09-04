@@ -1,5 +1,5 @@
-import type { Classifier } from '../../core/ports.js';
-import { postJson, probe } from '../normalize/http.js';
+import type { Classifier } from '../../core/ports';
+import { postJson, probe } from '../normalize/http';
 
 export interface ClassifyConfig {
   /** Base compatible con OpenAI. Ollama en el compose: http://localhost:11434/v1 */

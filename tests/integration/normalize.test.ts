@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { capture, createDomain, reprocess, search, show } from '../../src/core/index.js';
-import type { Actor } from '../../src/core/domain/types.js';
-import { fakeConverter, fakeConverters } from '../helpers/converters.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+import { capture, createDomain, reprocess, search, show } from '../../src/core/index';
+import type { Actor } from '../../src/core/domain/types';
+import { fakeConverter, fakeConverters } from '../helpers/converters';
+import { startStack, type TestStack } from '../helpers/stack';
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
@@ -474,7 +474,7 @@ describe('clasificar es parte de guardar', () => {
     if (!res.ok) throw new Error('no capturó');
 
     stack.deps.classifier = fakeClassifier('hogar');
-    await reprocess(stack.deps, actor, { ids: [res.value.id], confirm: true });
+    await reprocess(stack.deps, actor, { ref: res.value.id, confirm: true });
 
     expect(await categoria(res.value.id)).toBe('seguros');
   });

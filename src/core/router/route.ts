@@ -1,24 +1,24 @@
-import type { Capabilities, Conversation } from '../channel/types.js';
-import type { Actor, MemoryDetail, MemorySummary } from '../domain/types.js';
-import type { Deps } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
-import { capture, type CaptureResult } from '../ops/capture.js';
-import { fetchBlob, search, show, type BlobPayload } from '../ops/query.js';
-import { setHidden } from '../ops/lifecycle.js';
-import { answer, type Answer } from '../recall/answer.js';
-import { redeemPairingCode } from '../ops/identity.js';
-import { listReview, type ReviewItem } from '../ops/review.js';
+import type { Capabilities, Conversation } from '../channel/types';
+import type { Actor, MemoryDetail, MemorySummary } from '../domain/types';
+import type { Deps } from '../ports';
+import { err, ok, type Result } from '../result';
+import { capture, type CaptureResult } from '../ops/capture';
+import { fetchBlob, search, show, type BlobPayload } from '../ops/query';
+import { setHidden } from '../ops/lifecycle';
+import { answer, type Answer } from '../recall/answer';
+import { redeemPairingCode } from '../ops/identity';
+import { listReview, type ReviewItem } from '../ops/review';
 import {
   archiveDomain, createDomain, editDomain, findDomain, listDomains, mergeDomains,
   type Domain,
-} from '../ops/domains.js';
-import { proposeDomains, type Proposal } from '../classify/emergent.js';
-import { list } from '../ops/query.js';
-import type { Intent } from './intent.js';
+} from '../ops/domains';
+import { proposeDomains, type Proposal } from '../classify/emergent';
+import { list } from '../ops/query';
+import type { Intent } from './intent';
 import {
   confirmIsFresh, pendingCount, readSession, writeSession,
   type ChatSession, type Pending,
-} from './session.js';
+} from './session';
 
 /** Cinco por página, como manda §6.1. Nunca un muro de texto. */
 export const PAGE = 5;

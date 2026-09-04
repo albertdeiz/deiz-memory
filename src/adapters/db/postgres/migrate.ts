@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Db } from '../../../core/ports.js';
+import type { Db } from '../../../core/ports';
 
 export interface MigrationResult {
   applied: string[];

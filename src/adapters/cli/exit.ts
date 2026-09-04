@@ -1,4 +1,4 @@
-import type { Result } from '../../core/result.js';
+import type { Result } from '../../core/result';
 
 /**
  * El código de salida es lo que hace testeable el CLI sin leer prosa.

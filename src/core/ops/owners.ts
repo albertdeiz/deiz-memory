@@ -1,8 +1,8 @@
-import type { Owner, Uuid } from '../domain/types.js';
-import type { Db } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
-import { seedDomains } from './domains.js';
-import { seedFactTypes } from '../facts/registry.js';
+import type { Owner, Uuid } from '../domain/types';
+import type { Db } from '../ports';
+import { err, ok, type Result } from '../result';
+import { seedDomains } from './domains';
+import { seedFactTypes } from '../facts/registry';
 
 const toOwner = (r: { id: string; label: string; created_at: Date }): Owner => ({
   id: r.id,

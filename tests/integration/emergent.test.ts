@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   acceptProposal, capture, createDomain, listDomains, list, proposeDomains,
-} from '../../src/core/index.js';
-import type { Actor } from '../../src/core/domain/types.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+} from '../../src/core/index';
+import type { Actor } from '../../src/core/domain/types';
+import { startStack, type TestStack } from '../helpers/stack';
 
 /**
  * Dominios emergentes (§9): que no tengas que anticipar tus propias categorías.

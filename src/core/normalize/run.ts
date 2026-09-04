@@ -1,9 +1,9 @@
-import type { Uuid } from '../domain/types.js';
-import { shortId } from '../domain/types.js';
-import { looksLikeText } from '../media.js';
-import type { Converter, Deps, ExtractInput } from '../ports.js';
-import { err, isPermanent, ok, type Result } from '../result.js';
-import { canonical, clamp, isPoor, lanesFor, type Lane } from './lanes.js';
+import type { Uuid } from '../domain/types';
+import { shortId } from '../domain/types';
+import { looksLikeText } from '../media';
+import type { Converter, Deps, ExtractInput } from '../ports';
+import { err, isPermanent, ok, type Result } from '../result';
+import { canonical, clamp, isPoor, lanesFor, type Lane } from './lanes';
 
 /** Qué se intentó y cómo salió. Es lo que hace legible un reproceso a los 6 meses. */
 export interface Attempt {
@@ -238,7 +238,7 @@ async function reextract(deps: Deps, id: Uuid): Promise<void> {
   );
   const ownerId = rows[0]?.owner_id;
   if (!ownerId) return;
-  const { extractFacts } = await import('../facts/extract.js');
+  const { extractFacts } = await import('../facts/extract');
   await extractFacts(deps, { ownerId }, id).catch(() => {});
 }
 
@@ -265,7 +265,7 @@ async function reclassify(
   const m = rows[0];
   if (!m || m.domain_id) return { ran: false, domain: null };
 
-  const { classifyMemory } = await import('../classify/run.js');
+  const { classifyMemory } = await import('../classify/run');
   const r = await classifyMemory(deps, { ownerId: m.owner_id }, id).catch(() => null);
   return { ran: true, domain: r?.ok ? r.value.domain : null };
 }
@@ -277,7 +277,7 @@ async function reindex(deps: Deps, id: Uuid): Promise<void> {
   );
   const ownerId = rows[0]?.owner_id;
   if (!ownerId) return;
-  const { indexMemory } = await import('../recall/index-chunks.js');
+  const { indexMemory } = await import('../recall/index-chunks');
   await indexMemory(deps, { ownerId }, id).catch(() => {});
 }
 

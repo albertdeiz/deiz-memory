@@ -22,7 +22,7 @@ npm install
 npm run up          # levanta el stack y escribe las credenciales en .env
 npm run migrate
 npm run build
-node dist/adapters/cli/index.js init "tu nombre"
+node dist/dm.js init "tu nombre"
 npm run worker      # en otra terminal: procesa lo que va llegando
 ```
 

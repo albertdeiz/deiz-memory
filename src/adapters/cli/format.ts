@@ -1,10 +1,10 @@
-import type { MemoryDetail, MemorySummary } from '../../core/domain/types.js';
-import type { ReviewItem } from '../../core/ops/review.js';
-import type { Answer } from '../../core/recall/answer.js';
-import { conflicting, contextOf, renderValue, warningFor } from '../../core/facts/format.js';
-import type { FactHit } from '../../core/facts/query.js';
-import type { Result } from '../../core/result.js';
-import { meaningfulName } from '../../core/filenames.js';
+import type { MemoryDetail, MemorySummary } from '../../core/domain/types';
+import type { ReviewItem } from '../../core/ops/review';
+import type { Answer } from '../../core/recall/answer';
+import { conflicting, contextOf, renderValue, warningFor } from '../../core/facts/format';
+import type { FactHit } from '../../core/facts/query';
+import type { Result } from '../../core/result';
+import { meaningfulName } from '../../core/filenames';
 
 /**
  * El único lugar del proyecto donde vive la prosa. El core no sabe que existe:

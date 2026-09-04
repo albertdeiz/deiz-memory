@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { coerce, grounded, normalizeDate } from '../../src/core/facts/values.js';
-import { relevantContext } from '../../src/core/facts/prompt.js';
+import { coerce, grounded, normalizeDate } from '../../src/core/facts/values';
+import { relevantContext } from '../../src/core/facts/prompt';
 
 describe('normalizar una fecha', () => {
   it('acepta la forma chilena y la ISO, y las deja iguales', () => {

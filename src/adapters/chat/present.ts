@@ -1,11 +1,11 @@
-import type { Capabilities, Option, Reply } from '../../core/channel/types.js';
-import { excerptOf, type MemorySummary } from '../../core/domain/types.js';
-import { conflicting, contextOf, renderValue, warningFor } from '../../core/facts/format.js';
-import type { FactHit } from '../../core/facts/query.js';
-import { meaningfulName } from '../../core/filenames.js';
-import { encodeAction } from '../../core/router/actions.js';
-import type { Outcome } from '../../core/router/route.js';
-import type { Result } from '../../core/result.js';
+import type { Capabilities, Option, Reply } from '../../core/channel/types';
+import { excerptOf, type MemorySummary } from '../../core/domain/types';
+import { conflicting, contextOf, renderValue, warningFor } from '../../core/facts/format';
+import type { FactHit } from '../../core/facts/query';
+import { meaningfulName } from '../../core/filenames';
+import { encodeAction } from '../../core/router/actions';
+import type { Outcome } from '../../core/router/route';
+import type { Result } from '../../core/result';
 
 /**
  * El único lugar donde vive la prosa del chat — el gemelo de

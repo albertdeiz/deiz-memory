@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
-import type { Actor, Source, Uuid } from '../domain/types.js';
-import { SOURCES, shortId } from '../domain/types.js';
-import { detectMediaType } from '../media.js';
-import type { Deps } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
-import { storageKey } from './rows.js';
+import type { Actor, Source, Uuid } from '../domain/types';
+import { SOURCES, shortId } from '../domain/types';
+import { detectMediaType } from '../media';
+import type { Deps } from '../ports';
+import { err, ok, type Result } from '../result';
+import { storageKey } from './rows';
 
 export interface CaptureInput {
   bytes?: Buffer | null;

@@ -1,7 +1,7 @@
-import type { Actor, Lane, MemorySummary } from '../domain/types.js';
-import type { Db, Deps } from '../ports.js';
-import { ok, type Result } from '../result.js';
-import { MEMORY_COLUMNS, MEMORY_FROM, type MemoryRow, toSummary } from './rows.js';
+import type { Actor, Lane, MemorySummary } from '../domain/types';
+import type { Db, Deps } from '../ports';
+import { ok, type Result } from '../result';
+import { MEMORY_COLUMNS, MEMORY_FROM, type MemoryRow, toSummary } from './rows';
 
 /**
  * La bandeja de revisión de §3.4.

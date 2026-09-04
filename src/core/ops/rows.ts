@@ -1,5 +1,5 @@
-import type { Lane, MemoryDetail, MemorySummary, Source, Status } from '../domain/types.js';
-import { excerptOf, shortId } from '../domain/types.js';
+import type { Lane, MemoryDetail, MemorySummary, Source, Status } from '../domain/types';
+import { excerptOf, shortId } from '../domain/types';
 
 export const MEMORY_COLUMNS = `
   m.id, m.owner_id, m.source, m.captured_at, m.occurred_at,

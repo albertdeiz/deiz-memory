@@ -1,7 +1,7 @@
-import type { Converter, ExtractInput } from '../../core/ports.js';
-import type { RasterResult } from './documents.js';
-import { postJson, probe } from './http.js';
-import { IMAGE_TYPES, TRANSCRIPTION_PROMPT, unsupportedImage } from './prompt.js';
+import type { Converter, ExtractInput } from '../../core/ports';
+import type { RasterResult } from './documents';
+import { postJson, probe } from './http';
+import { IMAGE_TYPES, TRANSCRIPTION_PROMPT, unsupportedImage } from './prompt';
 
 /** Rasterizar un PDF es trabajo del sidecar de documentos; acá solo se pide. */
 export type Rasterizer = (bytes: Buffer) => Promise<RasterResult>;

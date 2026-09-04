@@ -1,6 +1,6 @@
 import PgBoss from 'pg-boss';
-import { normalizeMemory } from '../../core/normalize/run.js';
-import type { Deps, Ingest } from '../../core/ports.js';
+import { normalizeMemory } from '../../core/normalize/run';
+import type { Deps, Ingest } from '../../core/ports';
 
 export const NORMALIZE_QUEUE = 'normalize';
 

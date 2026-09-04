@@ -1,4 +1,4 @@
-import type { Uuid } from '../domain/types.js';
+import type { Uuid } from '../domain/types';
 
 /**
  * Los tipos de hecho (§4).

@@ -5,31 +5,31 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import type pg from 'pg';
 import type PgBoss from 'pg-boss';
-import { loadConfig } from '../../config.js';
-import { createPool, pgDb } from '../db/postgres/index.js';
-import { s3BlobStore } from '../storage/s3.js';
-import { buildConverters } from '../normalize/index.js';
-import { ollamaClassifier } from '../classify/ollama.js';
-import { ollamaEmbedder } from '../classify/embed.js';
-import { queueIngest, runWorker, startQueue } from '../queue/pgboss.js';
-import { fakeChannel, fileAttachment } from '../chat/fake.js';
-import { serveChannel } from '../chat/serve.js';
-import { telegramChannel } from '../chat/telegram/index.js';
-import type { Reply } from '../../core/channel/types.js';
-import { inlineIngest } from '../../core/ingest.js';
-import { systemClock, type Deps } from '../../core/ports.js';
-import type { Actor, Lane } from '../../core/domain/types.js';
-import type { Fact, FactType } from '../../core/index.js';
-import { ok, type Result } from '../../core/result.js';
+import { loadConfig } from '../../config';
+import { createPool, pgDb } from '../db/postgres/index';
+import { s3BlobStore } from '../storage/s3';
+import { buildConverters } from '../normalize/index';
+import { ollamaClassifier } from '../classify/ollama';
+import { ollamaEmbedder } from '../classify/embed';
+import { queueIngest, runWorker, startQueue } from '../queue/pgboss';
+import { fakeChannel, fileAttachment } from '../chat/fake';
+import { serveChannel } from '../chat/serve';
+import { telegramChannel } from '../chat/telegram/index';
+import type { Reply } from '../../core/channel/types';
+import { inlineIngest } from '../../core/ingest';
+import { systemClock, type Deps } from '../../core/ports';
+import type { Actor, Lane } from '../../core/domain/types';
+import type { Fact, FactType } from '../../core/index';
+import { ok, type Result } from '../../core/result';
 import {
   acceptProposal, archiveDomain, capture, classifyMemory, countReview, createDomain, createOwner, editDomain,
   fetchBlob, findDomain, list, listDomains, listIdentities, listOwners, listReview,
   mergeDomains, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
   answer, indexMemory, pendingIndex, proposeDomains, resolveMemoryId, show, unindexed, LANES,
   seedDomains, seedFactTypes, extractFacts, listFacts, listFactTypes, contextOf, renderValue, warningFor,
-} from '../../core/index.js';
-import { EXIT, exitCodeFor } from './exit.js';
-import { renderAnswer, renderDetail, renderFailure, renderList, renderReview } from './format.js';
+} from '../../core/index';
+import { EXIT, exitCodeFor } from './exit';
+import { renderAnswer, renderDetail, renderFailure, renderList, renderReview } from './format';
 
 const program = new Command();
 program

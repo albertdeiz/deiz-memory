@@ -1,9 +1,9 @@
-import type { Actor, MemoryDetail, MemorySummary } from '../domain/types.js';
-import { extensionForMediaType, extensionOf } from '../media.js';
-import type { Deps } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
-import { resolveMemoryId } from './resolve.js';
-import { MEMORY_COLUMNS, MEMORY_FROM, type MemoryRow, toDetail, toSummary } from './rows.js';
+import type { Actor, MemoryDetail, MemorySummary } from '../domain/types';
+import { extensionForMediaType, extensionOf } from '../media';
+import type { Deps } from '../ports';
+import { err, ok, type Result } from '../result';
+import { resolveMemoryId } from './resolve';
+import { MEMORY_COLUMNS, MEMORY_FROM, type MemoryRow, toDetail, toSummary } from './rows';
 
 export interface ListInput {
   limit?: number;

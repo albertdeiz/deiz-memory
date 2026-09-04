@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { capture, search, show } from '../../src/core/index.js';
-import type { Actor } from '../../src/core/domain/types.js';
-import { documentsConverter, rasterizePdf } from '../../src/adapters/normalize/documents.js';
-import { fakeConverter, fakeConverters } from '../helpers/converters.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+import { capture, search, show } from '../../src/core/index';
+import type { Actor } from '../../src/core/domain/types';
+import { documentsConverter, rasterizePdf } from '../../src/adapters/normalize/documents';
+import { fakeConverter, fakeConverters } from '../helpers/converters';
+import { startStack, type TestStack } from '../helpers/stack';
 
 /**
  * Los otros tests prueban el *router* con carriles de mentira. Este prueba el
@@ -119,7 +119,7 @@ describe('convertir lo que ningún carril sabe leer', () => {
     if (!usable) return;
     // HEIC es el formato por defecto del iPhone y no lo acepta ni el OCR ni la
     // API de visión. Sin esta conversión, cada foto del teléfono entra muda.
-    const { transcodeImage } = await import('../../src/adapters/normalize/documents.js');
+    const { transcodeImage } = await import('../../src/adapters/normalize/documents');
     const heic = await readFile('fixtures/f1/boleta-escaneada.png'); // PNG sirve: prueba el camino
     const out = await transcodeImage(cfg, heic, 'foto.png');
 
@@ -130,7 +130,7 @@ describe('convertir lo que ningún carril sabe leer', () => {
 
   it('el original no se toca: la conversión produce bytes aparte', async () => {
     if (!usable) return;
-    const { transcodeImage } = await import('../../src/adapters/normalize/documents.js');
+    const { transcodeImage } = await import('../../src/adapters/normalize/documents');
     const original = await readFile('fixtures/f1/boleta-escaneada.png');
     const antes = Buffer.from(original);
     await transcodeImage(cfg, original, 'foto.png');

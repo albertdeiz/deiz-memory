@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { present } from '../../src/adapters/chat/present.js';
-import type { Capabilities, Reply } from '../../src/core/channel/types.js';
-import type { Outcome } from '../../src/core/router/route.js';
-import type { MemorySummary } from '../../src/core/domain/types.js';
-import { ok } from '../../src/core/result.js';
+import { present } from '../../src/adapters/chat/present';
+import type { Capabilities, Reply } from '../../src/core/channel/types';
+import type { Outcome } from '../../src/core/router/route';
+import type { MemorySummary } from '../../src/core/domain/types';
+import { ok } from '../../src/core/result';
 
 const CAPS: Capabilities = {
   maxUploadBytes: 50 * 1024 * 1024,
@@ -33,7 +33,9 @@ const item = (n: number): MemorySummary => ({
   tags: [],
 });
 
-const resultados = (n: number, hayMas: boolean): Outcome => ({
+type Resultados = Extract<Outcome, { kind: 'resultados' }>;
+
+const resultados = (n: number, hayMas: boolean): Resultados => ({
   kind: 'resultados',
   consulta: 'poliza',
   items: Array.from({ length: n }, (_, i) => item(i + 1)),
@@ -46,6 +48,13 @@ const resultados = (n: number, hayMas: boolean): Outcome => ({
 
 const actionsOf = (rs: Reply[]): string[] =>
   rs.flatMap((r) => (r.kind === 'text' ? (r.options ?? []).map((o) => o.action) : []));
+
+/** El primer texto de una respuesta, ya estrechado. `body` no existe en un archivo. */
+const textReply = (rs: Reply[]) => {
+  const r = rs.find((x) => x.kind === 'text');
+  if (!r || r.kind !== 'text') throw new Error('no hubo respuesta de texto');
+  return r;
+};
 
 const bodyOf = (rs: Reply[]): string =>
   rs.map((r) => (r.kind === 'text' ? r.body : '')).join('\n');
@@ -151,6 +160,7 @@ describe('cuando la respuesta se descartó a propósito', () => {
     occurredAt: null,
     capturedAt: new Date('2026-09-03T12:00:00Z'),
     domainLabel: 'Seguros',
+    mediaType: 'application/pdf',
     content: 'UF 3,0 por siniestro',
     seq: 0,
     via: 'texto' as const,
@@ -166,19 +176,19 @@ describe('cuando la respuesta se descartó a propósito', () => {
   it('dice que no dio la cifra, en vez de listar y callarse', () => {
     // Listar documentos sin decir nada deja creer que no había respuesta. La
     // verdad es otra: la había y se descartó por no tener respaldo.
-    const [r] = present(ok(rechazo('sin_respaldo')), CAPS) as [Reply];
+    const r = textReply(present(ok(rechazo('sin_respaldo')), CAPS));
     expect(r.body).toMatch(/sin inventarla/i);
     expect(r.body).toContain('a853a71c');
   });
 
   it('y lo mismo cuando el problema fue la falta de cita', () => {
-    const [r] = present(ok(rechazo('sin_cita')), CAPS) as [Reply];
+    const r = textReply(present(ok(rechazo('sin_cita')), CAPS));
     expect(r.body).toMatch(/sin inventar/i);
   });
 
   it('nunca muestra la palabra null donde iba la respuesta', () => {
     for (const reason of ['sin_cita', 'sin_respaldo'] as const) {
-      const [r] = present(ok(rechazo(reason)), CAPS) as [Reply];
+      const r = textReply(present(ok(rechazo(reason)), CAPS));
       expect(r.body).not.toMatch(/\bnull\b/);
     }
   });
@@ -187,8 +197,8 @@ describe('cuando la respuesta se descartó a propósito', () => {
 describe('los dos botones de cada resultado', () => {
   it('los datos y el archivo van en la misma fila', () => {
     // `group` es lo que evita once filas apiladas en una página de cinco.
-    const [r] = present(ok(resultados(2, false)), conBotones) as [Reply];
-    const opts = r.kind === 'text' ? r.options ?? [] : [];
+    const [r] = present(ok(resultados(2, false)), conBotones);
+    const opts = r?.kind === 'text' ? r.options ?? [] : [];
     expect(opts.filter((o) => o.group === 1).map((o) => o.action)).toEqual(['view:1', 'open:1']);
     expect(opts.filter((o) => o.group === 2).map((o) => o.action)).toEqual(['view:2', 'open:2']);
   });

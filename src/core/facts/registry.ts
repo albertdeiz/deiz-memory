@@ -1,6 +1,6 @@
-import type { Actor, Uuid } from '../domain/types.js';
-import type { Db } from '../ports.js';
-import type { FactField, FactType } from './types.js';
+import type { Actor, Uuid } from '../domain/types';
+import type { Db } from '../ports';
+import type { FactField, FactType } from './types';
 
 interface Row {
   id: string; slug: string; label: string; description: string; kind: string;

@@ -1,6 +1,6 @@
-import type { Actor, Uuid } from '../domain/types.js';
-import type { Db } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
+import type { Actor, Uuid } from '../domain/types';
+import type { Db } from '../ports';
+import { err, ok, type Result } from '../result';
 
 const REF = /^[0-9a-f-]{4,36}$/i;
 

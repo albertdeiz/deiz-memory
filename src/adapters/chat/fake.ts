@@ -1,6 +1,6 @@
 import { basename } from 'node:path';
 import { readFile, stat } from 'node:fs/promises';
-import type { Attachment, Capabilities, Channel, Incoming, Reply, Turn } from '../../core/channel/types.js';
+import type { Attachment, Capabilities, Channel, Incoming, Reply, Turn } from '../../core/channel/types';
 
 /**
  * Un canal en memoria. No es solo un doble de test: es el **segundo canal**.

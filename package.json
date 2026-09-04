@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "bin": {
-    "dm": "./dist/adapters/cli/index.js"
+    "dm": "./dist/dm.js"
   },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/adapters/cli/index.js",
+    "build": "esbuild src/adapters/cli/index.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/dm.js --sourcemap && chmod +x dist/dm.js",
     "dm": "tsx src/adapters/cli/index.ts",
     "migrate": "tsx scripts/migrate.ts",
     "worker": "tsx src/adapters/cli/index.ts worker",
@@ -19,7 +19,8 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "test:cli": "npm run build && vitest run tests/cli"
+    "test:cli": "npm run build && vitest run tests/cli",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/pg": "^8.11.10",
+    "esbuild": "^0.28.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"

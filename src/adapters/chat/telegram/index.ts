@@ -1,7 +1,7 @@
 import { Bot, InputFile, type Context } from 'grammy';
 import type {
   Attachment, Capabilities, Channel, Incoming, Option, Reply, Turn,
-} from '../../../core/channel/types.js';
+} from '../../../core/channel/types';
 
 /**
  * Telegram. Transporte y nada más.

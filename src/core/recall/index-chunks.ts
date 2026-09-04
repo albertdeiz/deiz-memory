@@ -1,7 +1,7 @@
-import type { Actor, Uuid } from '../domain/types.js';
-import type { Deps } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
-import { chunkText, contextualize } from './chunk.js';
+import type { Actor, Uuid } from '../domain/types';
+import type { Deps } from '../ports';
+import { err, ok, type Result } from '../result';
+import { chunkText, contextualize } from './chunk';
 
 export interface IndexOutcome {
   memoryId: Uuid;

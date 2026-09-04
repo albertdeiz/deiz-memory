@@ -1,16 +1,16 @@
 import { existsSync } from 'node:fs';
 import { config as loadEnv } from 'dotenv';
-import type { S3Config } from './adapters/storage/s3.js';
-import type { NormalizeConfig, VisionBackend } from './adapters/normalize/index.js';
-import type { TelegramConfig } from './adapters/chat/telegram/index.js';
-import type { ClassifyConfig } from './adapters/classify/ollama.js';
-import { defaultClassifyConfig } from './adapters/classify/ollama.js';
-import type { EmbedConfig } from './adapters/classify/embed.js';
-import { defaultEmbedConfig } from './adapters/classify/embed.js';
+import type { S3Config } from './adapters/storage/s3';
+import type { NormalizeConfig, VisionBackend } from './adapters/normalize/index';
+import type { TelegramConfig } from './adapters/chat/telegram/index';
+import type { ClassifyConfig } from './adapters/classify/ollama';
+import { defaultClassifyConfig } from './adapters/classify/ollama';
+import type { EmbedConfig } from './adapters/classify/embed';
+import { defaultEmbedConfig } from './adapters/classify/embed';
 import {
   defaultDocumentsConfig, defaultOcrConfig, defaultSpeechConfig,
   defaultVisionConfig, defaultVisionHttpConfig, VISION_BACKENDS,
-} from './adapters/normalize/index.js';
+} from './adapters/normalize/index';
 
 export interface Config {
   databaseUrl: string;

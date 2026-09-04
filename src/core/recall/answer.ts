@@ -1,9 +1,9 @@
-import type { Actor } from '../domain/types.js';
-import type { Deps } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
-import { askFacts, type FactHit } from '../facts/query.js';
-import { checkGrounding } from './grounding.js';
-import { retrieve, type Passage, type RetrieveInput } from './retrieve.js';
+import type { Actor } from '../domain/types';
+import type { Deps } from '../ports';
+import { err, ok, type Result } from '../result';
+import { askFacts, type FactHit } from '../facts/query';
+import { checkGrounding } from './grounding';
+import { retrieve, type Passage, type RetrieveInput } from './retrieve';
 
 /**
  * Responder una pregunta con lo que guardaste.

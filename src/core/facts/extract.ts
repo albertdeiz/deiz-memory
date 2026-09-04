@@ -1,10 +1,10 @@
-import type { Actor, Uuid } from '../domain/types.js';
-import { shortId } from '../domain/types.js';
-import type { Deps } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
-import { buildExtractPrompt, extractSchema, validateExtraction } from './prompt.js';
-import { typesForDomain } from './registry.js';
-import type { FactType, FactValue } from './types.js';
+import type { Actor, Uuid } from '../domain/types';
+import { shortId } from '../domain/types';
+import type { Deps } from '../ports';
+import { err, ok, type Result } from '../result';
+import { buildExtractPrompt, extractSchema, validateExtraction } from './prompt';
+import { typesForDomain } from './registry';
+import type { FactType, FactValue } from './types';
 
 export interface ExtractOutcome {
   memoryId: Uuid;

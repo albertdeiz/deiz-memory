@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import type { Uuid } from '../domain/types.js';
-import type { Db } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
+import type { Uuid } from '../domain/types';
+import type { Db } from '../ports';
+import { err, ok, type Result } from '../result';
 
 /**
  * Sin vocales y sin los caracteres que se confunden a mano: nada de 0/O ni

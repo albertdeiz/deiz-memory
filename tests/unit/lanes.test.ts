@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonical, clamp, isPoor, lanesFor, MAX_NORMALIZED_CHARS, POOR_TEXT_CHARS,
-} from '../../src/core/normalize/lanes.js';
+} from '../../src/core/normalize/lanes';
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 

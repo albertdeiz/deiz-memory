@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { excerptOf, shortId } from '../../src/core/domain/types.js';
-import { storageKey } from '../../src/core/ops/rows.js';
+import { excerptOf, shortId } from '../../src/core/domain/types';
+import { storageKey } from '../../src/core/ops/rows';
 
 describe('shortId', () => {
   it('toma los primeros 8 hex, sin guiones', () => {

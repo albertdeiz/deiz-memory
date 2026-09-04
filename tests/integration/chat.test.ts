@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { mintPairingCode } from '../../src/core/index.js';
-import type { Reply } from '../../src/core/channel/types.js';
-import { fakeChannel, fileAttachment, oversizedAttachment, type FakeChannel } from '../../src/adapters/chat/fake.js';
-import { serveChannel } from '../../src/adapters/chat/serve.js';
-import { fakeConverter, fakeConverters } from '../helpers/converters.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+import { mintPairingCode } from '../../src/core/index';
+import type { Reply } from '../../src/core/channel/types';
+import { fakeChannel, fileAttachment, oversizedAttachment, type FakeChannel } from '../../src/adapters/chat/fake';
+import { serveChannel } from '../../src/adapters/chat/serve';
+import { fakeConverter, fakeConverters } from '../helpers/converters';
+import { startStack, type TestStack } from '../helpers/stack';
 
 /**
  * El canal de punta a punta, contra Postgres y Garage reales. Lo que se prueba

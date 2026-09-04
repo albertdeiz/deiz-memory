@@ -1,12 +1,12 @@
 import type pg from 'pg';
-import { createPool, pgDb } from '../../src/adapters/db/postgres/index.js';
-import { runMigrations } from '../../src/adapters/db/postgres/migrate.js';
-import { s3BlobStore } from '../../src/adapters/storage/s3.js';
-import { inlineIngest } from '../../src/core/ingest.js';
-import type { Clock, Converters, Deps } from '../../src/core/ports.js';
-import { createOwner } from '../../src/core/index.js';
-import { fakeConverters } from './converters.js';
-import { ensureTestDatabase, TEST_BUCKET, TEST_DATABASE_URL } from './env.js';
+import { createPool, pgDb } from '../../src/adapters/db/postgres/index';
+import { runMigrations } from '../../src/adapters/db/postgres/migrate';
+import { s3BlobStore } from '../../src/adapters/storage/s3';
+import { inlineIngest } from '../../src/core/ingest';
+import type { Clock, Converters, Deps } from '../../src/core/ports';
+import { createOwner } from '../../src/core/index';
+import { fakeConverters } from './converters';
+import { ensureTestDatabase, TEST_BUCKET, TEST_DATABASE_URL } from './env';
 
 /** Reloj fijo: sin esto, cualquier aserción sobre fechas es una carrera. */
 export const fixedClock = (iso = '2026-03-14T12:00:00.000Z'): Clock => ({ now: () => new Date(iso) });

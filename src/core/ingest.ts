@@ -1,5 +1,5 @@
-import { normalizeMemory } from './normalize/run.js';
-import type { Deps, Ingest } from './ports.js';
+import { normalizeMemory } from './normalize/run';
+import type { Deps, Ingest } from './ports';
 
 /**
  * Corre los carriles ahí mismo y no vuelve hasta terminar. Es lo que usan los

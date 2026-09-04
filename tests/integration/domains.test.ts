@@ -2,9 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   archiveDomain, capture, createDomain, editDomain, findDomain,
   listDomains, list, mergeDomains, slugify,
-} from '../../src/core/index.js';
-import type { Actor } from '../../src/core/domain/types.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+} from '../../src/core/index';
+import type { Actor } from '../../src/core/domain/types';
+import { startStack, type TestStack } from '../helpers/stack';
 
 /**
  * §9: los dominios son data, no un enum. Lo que se prueba acá es que agregar

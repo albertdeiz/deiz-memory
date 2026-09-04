@@ -1,7 +1,7 @@
-import type { Actor } from '../domain/types.js';
-import { activeDomains, createDomain, slugify, type Domain } from '../ops/domains.js';
-import type { Deps } from '../ports.js';
-import { ok, type Result } from '../result.js';
+import type { Actor } from '../domain/types';
+import { activeDomains, createDomain, slugify, type Domain } from '../ops/domains';
+import type { Deps } from '../ports';
+import { ok, type Result } from '../result';
 
 /**
  * Dominios emergentes (§9).

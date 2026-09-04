@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Db, QueryResult } from '../../../core/ports.js';
+import type { Db, QueryResult } from '../../../core/ports';
 
 const { Pool } = pg;
 

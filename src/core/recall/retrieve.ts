@@ -1,7 +1,7 @@
-import type { Actor, Uuid } from '../domain/types.js';
-import { findDomain } from '../ops/domains.js';
-import type { Deps } from '../ports.js';
-import { err, ok, type Result } from '../result.js';
+import type { Actor, Uuid } from '../domain/types';
+import { findDomain } from '../ops/domains';
+import type { Deps } from '../ports';
+import { err, ok, type Result } from '../result';
 
 /**
  * Recuperación híbrida (§6).

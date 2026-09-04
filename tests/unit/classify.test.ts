@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrompt, validate } from '../../src/core/classify/prompt.js';
-import type { Domain } from '../../src/core/ops/domains.js';
+import { buildPrompt, validate } from '../../src/core/classify/prompt';
+import type { Domain } from '../../src/core/ops/domains';
 
 const dominios: Domain[] = [
   { id: '1', slug: 'salud', label: 'Salud', description: 'Consultas, recetas y exámenes', aliases: [], active: true },

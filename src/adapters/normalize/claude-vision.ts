@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Converter, ExtractInput } from '../../core/ports.js';
-import { IMAGE_TYPES, TRANSCRIPTION_PROMPT, unsupportedImage } from './prompt.js';
+import type { Converter, ExtractInput } from '../../core/ports';
+import { IMAGE_TYPES, TRANSCRIPTION_PROMPT, unsupportedImage } from './prompt';
 
 /** Tope de request de la API: 32 MB, y base64 infla un tercio. */
 const MAX_BYTES = 22 * 1024 * 1024;

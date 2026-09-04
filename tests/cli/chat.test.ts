@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createPool, pgDb } from '../../src/adapters/db/postgres/index.js';
-import { runMigrations } from '../../src/adapters/db/postgres/migrate.js';
-import { ensureTestDatabase, TEST_DATABASE_URL, TEST_ENV } from '../helpers/env.js';
+import { createPool, pgDb } from '../../src/adapters/db/postgres/index';
+import { runMigrations } from '../../src/adapters/db/postgres/migrate';
+import { ensureTestDatabase, TEST_DATABASE_URL, TEST_ENV } from '../helpers/env';
 
-const BIN = 'dist/adapters/cli/index.js';
+const BIN = 'dist/dm.js';
 
 const dm = (args: string[]): Promise<{ code: number; out: string; json: any }> =>
   new Promise((resolve) => {

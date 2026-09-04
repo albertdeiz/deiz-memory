@@ -1,12 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { capture, search, show } from '../../src/core/index.js';
-import type { Actor } from '../../src/core/domain/types.js';
-import { rasterizePdf } from '../../src/adapters/normalize/documents.js';
-import { ocrConverter } from '../../src/adapters/normalize/ocr.js';
-import { speechConverter } from '../../src/adapters/normalize/whisper-http.js';
-import { fakeConverters } from '../helpers/converters.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+import { capture, search, show } from '../../src/core/index';
+import type { Actor } from '../../src/core/domain/types';
+import { rasterizePdf } from '../../src/adapters/normalize/documents';
+import { ocrConverter } from '../../src/adapters/normalize/ocr';
+import { speechConverter } from '../../src/adapters/normalize/whisper-http';
+import { fakeConverters } from '../helpers/converters';
+import { startStack, type TestStack } from '../helpers/stack';
 
 /**
  * Los carriles B y C contra los servicios de verdad. Lo que se prueba acá no es

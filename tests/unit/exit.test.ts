@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EXIT, exitCodeFor } from '../../src/adapters/cli/exit.js';
-import { err, needsConfirmation, ok } from '../../src/core/result.js';
+import { EXIT, exitCodeFor } from '../../src/adapters/cli/exit';
+import { err, needsConfirmation, ok } from '../../src/core/result';
 
 describe('exitCodeFor', () => {
   it('mapea cada resultado a un código distinguible por un script', () => {

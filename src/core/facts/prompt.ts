@@ -1,5 +1,5 @@
-import { coerce, grounded } from './values.js';
-import type { FactField, FactType, FactValue } from './types.js';
+import { coerce, grounded } from './values';
+import type { FactField, FactType, FactValue } from './types';
 
 /**
  * El prompt del extractor, armado **en runtime** desde `fact_types`.

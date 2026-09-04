@@ -8,7 +8,7 @@
  * Por eso no hay "una llamada de normalización": hay carriles y una regla de
  * caída entre ellos.
  */
-import type { Lane } from '../domain/types.js';
+import type { Lane } from '../domain/types';
 
 export type { Lane };
 

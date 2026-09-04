@@ -1,8 +1,8 @@
-import type { Actor, Uuid } from '../domain/types.js';
-import { shortId } from '../domain/types.js';
-import type { Db } from '../ports.js';
-import { listFactTypes } from './registry.js';
-import type { Fact, FactField, FactType } from './types.js';
+import type { Actor, Uuid } from '../domain/types';
+import { shortId } from '../domain/types';
+import type { Db } from '../ports';
+import { listFactTypes } from './registry';
+import type { Fact, FactField, FactType } from './types';
 
 interface Row {
   id: string; memory_id: string; type_id: string; payload: Record<string, string | number>;

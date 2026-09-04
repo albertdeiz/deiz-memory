@@ -1,7 +1,7 @@
-import type { Converter, ExtractInput } from '../../core/ports.js';
-import { formWithFile, postJson, probe } from './http.js';
-import { IMAGE_TYPES, unsupportedImage } from './prompt.js';
-import type { Rasterizer, Transcoder } from './vision-openai.js';
+import type { Converter, ExtractInput } from '../../core/ports';
+import { formWithFile, postJson, probe } from './http';
+import { IMAGE_TYPES, unsupportedImage } from './prompt';
+import type { Rasterizer, Transcoder } from './vision-openai';
 
 export interface OcrConfig {
   baseUrl: string;

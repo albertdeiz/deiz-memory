@@ -1,4 +1,4 @@
-import type { Domain } from '../ops/domains.js';
+import type { Domain } from '../ops/domains';
 
 /**
  * El prompt del clasificador, armado **en runtime** desde la tabla `domains`.

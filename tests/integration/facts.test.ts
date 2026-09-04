@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   askFacts, capture, extractFacts, listFacts, listFactTypes, matchFields,
-} from '../../src/core/index.js';
-import type { Actor } from '../../src/core/domain/types.js';
-import type { Classifier } from '../../src/core/ports.js';
-import { fakeConverters } from '../helpers/converters.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+} from '../../src/core/index';
+import type { Actor } from '../../src/core/domain/types';
+import type { Classifier } from '../../src/core/ports';
+import { fakeConverters } from '../helpers/converters';
+import { startStack, type TestStack } from '../helpers/stack';
 
 /**
  * Datos tipados (§4) y el modo hecho (§6).

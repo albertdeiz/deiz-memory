@@ -1,5 +1,5 @@
-import type { Attachment, Incoming } from '../channel/types.js';
-import { parseAction, type Action } from './actions.js';
+import type { Attachment, Incoming } from '../channel/types';
+import { parseAction, type Action } from './actions';
 
 /**
  * Los tres verbos de §5, decididos con lógica pura.

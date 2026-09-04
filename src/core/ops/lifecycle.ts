@@ -1,10 +1,10 @@
-import type { Actor, Uuid } from '../domain/types.js';
-import { shortId } from '../domain/types.js';
-import { meaningfulName } from '../filenames.js';
-import type { Deps } from '../ports.js';
-import { err, needsConfirmation, ok, type Result } from '../result.js';
-import { resolveMemoryId } from './resolve.js';
-import { show } from './query.js';
+import type { Actor, Uuid } from '../domain/types';
+import { shortId } from '../domain/types';
+import { meaningfulName } from '../filenames';
+import type { Deps } from '../ports';
+import { err, needsConfirmation, ok, type Result } from '../result';
+import { resolveMemoryId } from './resolve';
+import { show } from './query';
 
 export interface HideResult {
   id: Uuid;

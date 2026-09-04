@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { capture, countReview, listReview, reprocess, show } from '../../src/core/index.js';
-import { PermanentError } from '../../src/core/result.js';
-import type { Actor } from '../../src/core/domain/types.js';
-import type { Converter } from '../../src/core/ports.js';
-import { fakeConverter, fakeConverters } from '../helpers/converters.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+import { capture, countReview, listReview, reprocess, show } from '../../src/core/index';
+import { PermanentError } from '../../src/core/result';
+import type { Actor } from '../../src/core/domain/types';
+import type { Converter } from '../../src/core/ports';
+import { fakeConverter, fakeConverters } from '../helpers/converters';
+import { startStack, type TestStack } from '../helpers/stack';
 
 /**
  * La bandeja de §3.4. Lo que se prueba no es que liste, sino que **diga qué

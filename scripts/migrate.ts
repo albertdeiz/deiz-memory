@@ -1,6 +1,6 @@
-import { loadConfig } from '../src/config.js';
-import { createPool, pgDb } from '../src/adapters/db/postgres/index.js';
-import { runMigrations } from '../src/adapters/db/postgres/migrate.js';
+import { loadConfig } from '../src/config';
+import { createPool, pgDb } from '../src/adapters/db/postgres/index';
+import { runMigrations } from '../src/adapters/db/postgres/migrate';
 
 const cfg = loadConfig();
 const pool = createPool(cfg.databaseUrl);

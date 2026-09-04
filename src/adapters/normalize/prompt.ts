@@ -23,7 +23,7 @@ export const TRANSCRIPTION_PROMPT = `Transcribe fielmente el contenido de este d
 - No agregues comentarios, encabezados ni "Aquí está la transcripción". Solo el contenido.
 - Si no hay texto, describe en una sola línea qué se ve.`;
 
-import { PermanentError } from '../../core/result.js';
+import { PermanentError } from '../../core/result';
 
 /** Los únicos formatos que aceptan tanto la API de Anthropic como las compatibles con OpenAI. */
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];

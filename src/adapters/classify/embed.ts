@@ -1,5 +1,5 @@
-import type { Embedder } from '../../core/ports.js';
-import { postJson, probe } from '../normalize/http.js';
+import type { Embedder } from '../../core/ports';
+import { postJson, probe } from '../normalize/http';
 
 export interface EmbedConfig {
   baseUrl: string;

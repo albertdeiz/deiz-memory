@@ -1,6 +1,6 @@
-import type { Actor, Uuid } from '../domain/types.js';
-import type { Db, Deps } from '../ports.js';
-import { err, needsConfirmation, ok, type Result } from '../result.js';
+import type { Actor, Uuid } from '../domain/types';
+import type { Db, Deps } from '../ports';
+import { err, needsConfirmation, ok, type Result } from '../result';
 
 /**
  * Los dominios de §9.

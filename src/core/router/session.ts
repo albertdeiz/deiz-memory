@@ -1,6 +1,6 @@
-import type { Conversation } from '../channel/types.js';
-import type { Uuid } from '../domain/types.js';
-import type { Db } from '../ports.js';
+import type { Conversation } from '../channel/types';
+import type { Uuid } from '../domain/types';
+import type { Db } from '../ports';
 
 /**
  * Lo que la conversación está esperando.

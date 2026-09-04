@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkGrounding, figures, normalizeNumber } from '../../src/core/recall/grounding.js';
+import { checkGrounding, figures, normalizeNumber } from '../../src/core/recall/grounding';
 
 describe('normalizar un número', () => {
   it('la coma es decimal y el punto es de miles, como en Chile', () => {

@@ -1,10 +1,10 @@
-import type { Channel, Incoming, Turn } from '../../core/channel/types.js';
-import type { Deps } from '../../core/ports.js';
-import { identityOwner, touchIdentity } from '../../core/ops/identity.js';
-import { classify } from '../../core/router/intent.js';
-import { pair, route } from '../../core/router/route.js';
-import { readSession } from '../../core/router/session.js';
-import { present } from './present.js';
+import type { Channel, Incoming, Turn } from '../../core/channel/types';
+import type { Deps } from '../../core/ports';
+import { identityOwner, touchIdentity } from '../../core/ops/identity';
+import { classify } from '../../core/router/intent';
+import { pair, route } from '../../core/router/route';
+import { readSession } from '../../core/router/session';
+import { present } from './present';
 
 /**
  * El bucle: llega un mensaje, se resuelve quién es, se enruta, se responde.

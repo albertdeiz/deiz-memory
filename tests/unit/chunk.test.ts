@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chunkText, contextualize, TARGET_CHARS } from '../../src/core/recall/chunk.js';
+import { chunkText, contextualize, TARGET_CHARS } from '../../src/core/recall/chunk';
 
 describe('trocear', () => {
   it('un texto corto es un solo trozo', () => {

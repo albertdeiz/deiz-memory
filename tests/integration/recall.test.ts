@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { answer, capture, createDomain, indexMemory, retrieve } from '../../src/core/index.js';
-import type { Actor } from '../../src/core/domain/types.js';
-import type { Classifier, Embedder } from '../../src/core/ports.js';
-import { fakeConverters } from '../helpers/converters.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+import { answer, capture, createDomain, indexMemory, retrieve } from '../../src/core/index';
+import type { Actor } from '../../src/core/domain/types';
+import type { Classifier, Embedder } from '../../src/core/ports';
+import { fakeConverters } from '../helpers/converters';
+import { startStack, type TestStack } from '../helpers/stack';
 
 /**
  * Recuperación híbrida y respuesta con cita (§6, reglas duras 1 y 2).

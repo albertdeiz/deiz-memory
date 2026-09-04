@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectMediaType, extensionOf, looksLikeText } from '../../src/core/media.js';
+import { detectMediaType, extensionOf, looksLikeText } from '../../src/core/media';
 
 const withMagic = (sig: number[], tail = 64): Buffer =>
   Buffer.concat([Buffer.from(sig), Buffer.alloc(tail, 0x41)]);

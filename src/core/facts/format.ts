@@ -1,5 +1,5 @@
-import type { FactHit } from './query.js';
-import type { FieldKind } from './types.js';
+import type { FactHit } from './query';
+import type { FieldKind } from './types';
 
 /**
  * Cómo se escribe un valor tipado.

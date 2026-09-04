@@ -1,17 +1,17 @@
-import type { Converters } from '../../core/ports.js';
-import { claudeVisionConverter, type VisionConfig } from './claude-vision.js';
-import { documentsConverter, rasterizePdf, transcodeImage, type DocumentsConfig } from './documents.js';
-import { ocrConverter, type OcrConfig } from './ocr.js';
-import { openAiVisionConverter, type VisionHttpConfig } from './vision-openai.js';
-import { speechConverter, type SpeechConfig } from './whisper-http.js';
+import type { Converters } from '../../core/ports';
+import { claudeVisionConverter, type VisionConfig } from './claude-vision';
+import { documentsConverter, rasterizePdf, transcodeImage, type DocumentsConfig } from './documents';
+import { ocrConverter, type OcrConfig } from './ocr';
+import { openAiVisionConverter, type VisionHttpConfig } from './vision-openai';
+import { speechConverter, type SpeechConfig } from './whisper-http';
 
-export * from './claude-vision.js';
-export * from './documents.js';
-export * from './http.js';
-export * from './ocr.js';
-export * from './prompt.js';
-export * from './vision-openai.js';
-export * from './whisper-http.js';
+export * from './claude-vision';
+export * from './documents';
+export * from './http';
+export * from './ocr';
+export * from './prompt';
+export * from './vision-openai';
+export * from './whisper-http';
 
 /**
  * Cuál motor atiende el carril de visión. Es una variable de entorno y no una

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { capture, list, search, setHidden, show } from '../../src/core/index.js';
-import { startStack, type TestStack } from '../helpers/stack.js';
+import { capture, list, search, setHidden, show } from '../../src/core/index';
+import { startStack, type TestStack } from '../helpers/stack';
 
 let s: TestStack;
 const mine = () => ({ ownerId: s.ownerId });
@@ -117,9 +117,10 @@ describe('resolución de id por prefijo', () => {
 
     const r = await show(s.deps, mine(), 'abcd1234');
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.kind).toBe('ambiguous');
+    if (!r.ok && r.kind === 'ambiguous') {
       expect((r.detail as { matches: string[] }).matches).toHaveLength(2);
+    } else {
+      throw new Error('se esperaba un prefijo ambiguo');
     }
 
     // Con suficientes caracteres deja de ser ambiguo.

@@ -1,6 +1,5 @@
 import type { Classifier } from '../../core/ports.js';
 import { postJson, probe } from '../normalize/http.js';
-import { classifySchema } from '../../core/classify/prompt.js';
 
 export interface ClassifyConfig {
   /** Base compatible con OpenAI. Ollama en el compose: http://localhost:11434/v1 */
@@ -52,7 +51,7 @@ export function ollamaClassifier(cfg: ClassifyConfig = defaultClassifyConfig): C
   if (cfg.apiKey) headers.authorization = `Bearer ${cfg.apiKey}`;
 
   return {
-    async classify({ system, user }) {
+    async classify({ system, user, schema }) {
       const res = await postJson<ChatResponse>({
         service: 'clasificador',
         url: `${base}/chat/completions`,
@@ -67,7 +66,7 @@ export function ollamaClassifier(cfg: ClassifyConfig = defaultClassifyConfig): C
           // soporte lo ignora, y por eso igual se parsea a la defensiva abajo.
           response_format: {
             type: 'json_schema',
-            json_schema: { name: 'clasificacion', schema: classifySchema },
+            json_schema: { name: 'salida', schema },
           },
           messages: [
             { role: 'system', content: system },

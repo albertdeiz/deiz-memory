@@ -1,5 +1,7 @@
 import type { Capabilities, Option, Reply } from '../../core/channel/types.js';
 import { excerptOf, type MemorySummary } from '../../core/domain/types.js';
+import { contextOf, renderValue, warningFor } from '../../core/facts/format.js';
+import type { FactHit } from '../../core/facts/query.js';
 import { meaningfulName } from '../../core/filenames.js';
 import { encodeAction } from '../../core/router/actions.js';
 import type { Outcome } from '../../core/router/route.js';
@@ -80,6 +82,26 @@ const porItem = (items: readonly { mediaType: string | null }[]): Option[] =>
     return fila;
   });
 
+/**
+ * Los datos duros que respondieron.
+ *
+ * **La advertencia va antes del valor** (regla dura 10). Leer "UF 3" y recién
+ * después "vencida en 2024" es exactamente el modo de falla de §1.3: el riesgo
+ * no es olvidar un dato, es leer el viejo sin darte cuenta.
+ */
+function factsBody(hits: FactHit[]): string {
+  const lineas = hits.map((h) => {
+    const aviso = warningFor(h);
+    return `${aviso ? `⚠ ${aviso}.\n` : ''}${h.ref.field.label}: ${renderValue(h.value, h.ref.field.kind)}\n` +
+      `   ${contextOf(h)} · ${h.fact.shortId}`;
+  });
+  // Regla dura 3: dos vigentes no se resuelven eligiendo una.
+  const conflicto = hits.filter((h) => !h.expired && !h.superseded).length > 1
+    ? '\n\nHay más de uno vigente. No elijo por ti: están los dos arriba.'
+    : '';
+  return lineas.join('\n\n') + conflicto;
+}
+
 export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
   if (!result.ok) return [failure(result, caps)];
   const v = result.value;
@@ -139,6 +161,9 @@ export function present(result: Result<Outcome>, caps: Capabilities): Reply[] {
 
     case 'respuesta': {
       const a = v.answer;
+      // Modo hecho (§6): el dato exacto, con su vigencia y su cita. No hay
+      // lista que paginar ni pasajes que ofrecer — hay una respuesta.
+      if (a.facts?.length) return [{ kind: 'text', body: factsBody(a.facts) }];
       // Las fuentes van siempre, aunque la respuesta sea buena: la regla dura 1
       // pide respaldo, y en el chat eso significa poder abrir el documento.
       const fuentes = a.sources.map((p, i) =>

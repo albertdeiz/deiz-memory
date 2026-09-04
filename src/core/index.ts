@@ -34,3 +34,12 @@ export { buildPrompt, validate, classifySchema, type Classification } from './cl
 export { normalizeMemory, type NormalizeOutcome, type Attempt } from './normalize/run.js';
 export { lanesFor, isPoor, clamp, POOR_TEXT_CHARS, MAX_NORMALIZED_CHARS, LANES } from './normalize/lanes.js';
 export { storageKey } from './ops/rows.js';
+
+// Datos tipados (§4). El modo hecho de §6.
+export { extractFacts, type ExtractOutcome } from './facts/extract.js';
+export { listFacts, factsForMemory, askFacts, matchFields, type FactHit } from './facts/query.js';
+export {
+  listFactTypes, findFactType, typesForDomain, seedFactTypes, SEED_FACT_TYPES,
+} from './facts/registry.js';
+export { contextOf, renderValue, warningFor } from './facts/format.js';
+export type { Fact, FactType, FactField, FactKind, FieldKind } from './facts/types.js';

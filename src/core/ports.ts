@@ -92,8 +92,16 @@ export const noConverters: Converters = { document: null, vision: null, audio: n
  * clasificar, solo que las categorías se llenan a mano.
  */
 export interface Classifier {
-  /** Pide JSON y lo devuelve parseado. Para clasificar. */
-  classify(prompt: { system: string; user: string }): Promise<unknown>;
+  /**
+   * Pide JSON y lo devuelve parseado.
+   *
+   * El `schema` lo trae quien llama, y por eso el adapter no sabe qué es una
+   * clasificación ni un hecho: solo sabe pedirle JSON con forma a un modelo.
+   * Cuando el esquema vivía en el adapter, el extractor de hechos recibía la
+   * respuesta del clasificador —dominio, título y tags— sin importar qué
+   * hubiera pedido.
+   */
+  classify(prompt: { system: string; user: string; schema: object }): Promise<unknown>;
   /**
    * Pide prosa y la devuelve tal cual.
    *

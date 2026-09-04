@@ -1,6 +1,7 @@
 import type { Actor } from '../domain/types.js';
 import type { Deps } from '../ports.js';
 import { err, ok, type Result } from '../result.js';
+import { askFacts, type FactHit } from '../facts/query.js';
 import { checkGrounding } from './grounding.js';
 import { retrieve, type Passage, type RetrieveInput } from './retrieve.js';
 
@@ -29,6 +30,14 @@ export interface Answer {
   sources: Passage[];
   /** Por qué no hay respuesta, cuando no la hay. */
   reason: 'sin_resultados' | 'sin_modelo' | 'sin_cita' | 'sin_respaldo' | null;
+  /**
+   * Los datos duros que responden, si los hay (§6, modo hecho).
+   *
+   * Cuando vienen, son **la** respuesta: salen de una consulta, no de un
+   * ranking, y no hay prosa que verificar. La presentación los muestra en vez
+   * de la búsqueda, no además de ella.
+   */
+  facts?: FactHit[];
 }
 
 /**
@@ -45,6 +54,14 @@ export async function answer(
   actor: Actor,
   input: AnswerInput,
 ): Promise<Result<Answer>> {
+  // 1 · Modo hecho, primero (§6). Si un campo tipado responde, no hay nada que
+  //     rankear: la respuesta es exacta, con su vigencia y su cita. Se cae al
+  //     modo contexto sin ruido cuando no aplica, que es la mayoría de las veces.
+  const hits = await askFacts(deps.db, actor, input.query, deps.clock?.now() ?? new Date());
+  if (hits.length > 0) {
+    return ok({ text: null, sources: [], reason: null, facts: hits });
+  }
+
   const found = await retrieve(deps, actor, input);
   if (!found.ok) return found;
   const sources = found.value;

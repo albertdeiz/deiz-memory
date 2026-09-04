@@ -234,8 +234,9 @@ async function dispatch(
         // por omisión. La persona preguntó un número y recibe documentos sin
         // enterarse de que el bot se negó a dárselo. Eso se dice.
         const rechazada = r.value.reason === 'sin_cita' || r.value.reason === 'sin_respaldo';
+        const hechos = (r.value.facts?.length ?? 0) > 0;
         // La sesión la escribe `registerList`, como con cualquier otro listado.
-        if (r.value.text || rechazada) {
+        if (r.value.text || rechazada || hechos) {
           return ok({ kind: 'respuesta', answer: r.value, consulta: intent.query });
         }
       }

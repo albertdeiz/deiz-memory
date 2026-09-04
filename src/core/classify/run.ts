@@ -2,7 +2,7 @@ import type { Actor, Uuid } from '../domain/types.js';
 import { activeDomains } from '../ops/domains.js';
 import type { Deps } from '../ports.js';
 import { err, ok, type Result } from '../result.js';
-import { buildPrompt, validate, type Classification } from './prompt.js';
+import { buildPrompt, classifySchema, validate, type Classification } from './prompt.js';
 
 /**
  * Debajo de esto la clasificación se guarda pero se marca para revisar (§3.4):
@@ -72,7 +72,7 @@ export async function classifyMemory(
     capturedAt: m.captured_at,
   });
 
-  const raw = await deps.classifier.classify({ system, user });
+  const raw = await deps.classifier.classify({ system, user, schema: classifySchema });
   const c = validate(raw, domains);
   if (!c) return err('invalid', 'El clasificador devolvió algo que no se pudo usar.');
 

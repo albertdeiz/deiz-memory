@@ -497,8 +497,8 @@ con auditoría — el chat solo oculta) y la mantención (`classify`, `index`, `
 
 Construido y en verde: captura, los tres carriles, canal de chat, bandeja de revisión,
 dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
-verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` y
-`tarjeta_credito`.
+verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
+`tarjeta_credito` (período). **330 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.

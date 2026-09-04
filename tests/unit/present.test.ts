@@ -318,3 +318,63 @@ describe('todo listado ofrece las mismas acciones', () => {
     });
   }
 });
+
+/**
+ * Regla dura 10: lo vencido o superado se dice ANTES del dato.
+ *
+ * Leer "UF 3" y recién después "vencida en 2024" es el modo de falla de §1.3:
+ * el riesgo no es olvidar un dato, es leer el viejo sin darte cuenta. Se
+ * comprueba en los dos canales porque la prosa vive en dos archivos.
+ */
+describe('lo vencido se dice antes del dato', () => {
+  const hit = (over: Record<string, unknown> = {}) => ({
+    ref: {
+      type: {
+        id: 't', slug: 'poliza_auto', label: 'Póliza de auto', description: '',
+        kind: 'estado' as const, domainSlug: 'seguros', fields: [],
+        identityField: 'patente', validFromField: null, validUntilField: null, active: true,
+      },
+      field: { name: 'deducible', kind: 'uf' as const, label: 'deducible', aliases: ['deducible'] },
+    },
+    fact: {
+      id: 'f', memoryId: 'm', typeId: 't', typeSlug: 'poliza_auto', typeLabel: 'Póliza de auto',
+      kind: 'estado' as const, payload: { deducible: 3 }, identity: 'VHWD58',
+      validFrom: new Date('2020-01-01'), validUntil: new Date('2021-01-01'),
+      supersededBy: null, confidence: 1, shortId: 'a853a71c', memoryTitle: null,
+    },
+    value: 3,
+    expired: true,
+    superseded: false,
+    ...over,
+  });
+
+  const respuesta = (hits: unknown[]): Outcome => ({
+    kind: 'respuesta',
+    consulta: 'deducible',
+    answer: { text: null, sources: [], reason: null, facts: hits as never },
+  });
+
+  it('la advertencia precede al valor', () => {
+    const body = bodyOf(present(ok(respuesta([hit()])), conBotones));
+    expect(body.indexOf('vencido')).toBeGreaterThanOrEqual(0);
+    expect(body.indexOf('vencido')).toBeLessThan(body.indexOf('UF 3'));
+  });
+
+  it('lo superado también se avisa', () => {
+    const body = bodyOf(present(ok(respuesta([hit({ expired: false, superseded: true })])), conBotones));
+    expect(body).toMatch(/superado/i);
+  });
+
+  it('dos vigentes se muestran los dos, sin elegir', () => {
+    // Regla dura 3.
+    const vivos = [hit({ expired: false }), hit({ expired: false })];
+    const body = bodyOf(present(ok(respuesta(vivos)), conBotones));
+    expect(body).toMatch(/No elijo por ti/);
+  });
+
+  it('un dato vigente no lleva advertencia', () => {
+    const body = bodyOf(present(ok(respuesta([hit({ expired: false })])), conBotones));
+    expect(body).not.toMatch(/vencido|superado/i);
+    expect(body).toContain('UF 3');
+  });
+});

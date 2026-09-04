@@ -1,6 +1,8 @@
 import type { MemoryDetail, MemorySummary } from '../../core/domain/types.js';
 import type { ReviewItem } from '../../core/ops/review.js';
 import type { Answer } from '../../core/recall/answer.js';
+import { contextOf, renderValue, warningFor } from '../../core/facts/format.js';
+import type { FactHit } from '../../core/facts/query.js';
 import type { Result } from '../../core/result.js';
 import { meaningfulName } from '../../core/filenames.js';
 
@@ -141,6 +143,9 @@ export function renderReview(items: ReviewItem[]): string {
  * —incluso cuando no hubo prosa— y cada una trae su id para poder abrirla.
  */
 export function renderAnswer(a: Answer): string {
+  // Modo hecho (§6): el dato exacto, no una lista de documentos donde buscarlo.
+  if (a.facts?.length) return renderFacts(a.facts);
+
   const fuentes = a.sources.map((p) => {
     const cuando = (p.occurredAt ?? p.capturedAt).toISOString().slice(0, 10);
     const donde = p.domainLabel ? ` · ${p.domainLabel}` : '';
@@ -168,6 +173,29 @@ export function renderAnswer(a: Answer): string {
     default:
       return fuentes.join('\n');
   }
+}
+
+/**
+ * Los datos duros que respondieron.
+ *
+ * **La advertencia va antes del valor** (regla dura 10). Leer "3 UF" y recién
+ * después "vencida en 2024" es exactamente el modo de falla que §1.3 describe:
+ * el riesgo no es olvidar un dato, es leer el viejo sin darte cuenta.
+ */
+function renderFacts(hits: FactHit[]): string {
+  const lineas = hits.map((h) => {
+    const aviso = warningFor(h);
+    const cabeza = aviso ? `⚠ ${aviso}. ` : '';
+    return [
+      `${cabeza}${h.ref.field.label}: ${renderValue(h.value, h.ref.field.kind)}`,
+      `    ${contextOf(h)} · ${h.fact.shortId}`,
+    ].join('\n');
+  });
+  const conflicto = hits.filter((h) => !h.expired && !h.superseded).length > 1
+    // Regla dura 3: dos vigentes no se resuelven eligiendo una.
+    ? '\n\nHay más de uno vigente. No elijo por ti: están los dos arriba.'
+    : '';
+  return lineas.join('\n') + conflicto;
 }
 
 /** Errores y confirmaciones: qué pasó y qué hacer, sin disculpas ni vaguedad. */

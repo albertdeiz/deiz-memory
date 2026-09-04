@@ -5,8 +5,9 @@ Memoria personal externa. Le mandas un archivo y después le preguntas.
 El diseño está en [CLAUDE.md](./CLAUDE.md). Esto es lo que hace falta para correrlo.
 
 **Estado.** Captura, normalización por tres carriles, búsqueda full-text y semántica,
-clasificación con IA local, y preguntas en lenguaje natural con cita verificada. Todo
-por Telegram o por terminal. 291 tests.
+clasificación con IA local, preguntas en lenguaje natural con cita verificada, y **datos
+tipados** para los campos que no toleran un ranking. Todo por Telegram o por terminal.
+330 tests.
 
 El sistema se vació el 3 de septiembre de 2026 para poblarlo desde cero; si vienes de
 antes, hay que **volver a vincular el chat** con `dm pair`.
@@ -44,6 +45,7 @@ igual, solo que sin carril no es buscable por dentro.
 /pending             qué falta por leer
 /review              lo que quedó dudoso
 /domains             tus categorías · /<slug> para ver una
+/facts               los datos duros, con su vigencia
 /create <n>: <desc>  crea una; la descripción ES el prompt
 /describe <n>: <d>   ·  /rename <n> <nuevo>  ·  /archive <n>  ·  /merge <a> <b>
 /propose             categorías que te faltan
@@ -77,6 +79,9 @@ dm review                        lo que quedó dudoso, y qué hacer con cada cos
 
 dm domains                       tus categorías, con cuántas tiene cada una
 dm domains create <n> --desc ""  ·  edit  ·  archive  ·  merge  ·  propose
+dm facts [--all]                 lo extraído; --all incluye lo superado
+dm facts types                   qué sabe extraer, y de qué categoría
+dm facts extract [id]            vuelve a extraer
 dm in <categoría>                lo de esa categoría, por fecha del hecho
 dm classify [id]                 dominio, título y fecha del hecho, con IA local
 
@@ -245,6 +250,60 @@ número inventado con cita válida no lo delata nada.
 **Las fuentes van una por memoria.** Recuperar por trozo es correcto —el modelo necesita
 el párrafo—, pero mostrarlo por trozo hacía que la misma póliza apareciera tres veces.
 
+## Los datos duros no se buscan, se consultan
+
+Preguntar *"¿cuánto es mi deducible?"* a un índice de búsqueda es usar la herramienta
+equivocada: la respuesta es un número exacto, no un ranking. Medido sobre la póliza real,
+los ocho trozos recuperados puntuaban entre 1,62 y 1,77 — un 9% para decidir cuál
+responde, porque todos hablan de seguros de auto y la pregunta también.
+
+Así que ciertos campos se extraen **una vez, al guardar**, a una tabla:
+
+```
+$ dm ask "cuanto es mi deducible en el seguro de mi vehiculo?"
+deducible por siniestro: UF 3
+    Póliza de auto VHWD58 · vigente 2026-07-29 a 2029-07-29 · a853a71c
+```
+
+Sin ranking, sin modelo redactando, sin nada que verificar después.
+
+**Qué se extrae es data, no código.** `dm facts types` lo muestra: un tipo declara sus
+campos, de qué categoría intentarlos, y con qué palabras se pregunta por cada uno. Agregar
+`poliza_salud` no es un deploy — es una fila, igual que una categoría.
+
+### Cada valor se comprueba contra el documento
+
+El modelo propone; el código verifica. Un campo que no aparece en el texto original se
+descarta, comparando el valor normalizado contra todas las formas en que el documento
+pudo escribirlo: `UF 3,0` respalda un `3`, `$886.568` respalda un `886568`, y `07/09/2026`
+respalda un `2026-09-07`. Sin esa normalización se descartarían justo los valores buenos.
+
+Y **sin el campo identidad no es de ese tipo**. Eso salió de medir: en el dominio
+`seguros` había una póliza, una liquidación de siniestro y un certificado de cobertura, y
+los tres se tipificaban como póliza aunque la descripción excluía los otros dos. Un modelo
+de 3B lee esa exclusión y la ignora; un `if` no. Una póliza sin patente no es una póliza.
+
+### Estado y período
+
+Un tipo `estado` tiene **uno vigente** — la póliza nueva sucede a la vieja, que sigue
+existiendo y sigue respondiendo qué cubría antes. Un tipo `periodo` **coexiste**: la
+cartola de agosto no reemplaza a la de julio, porque la de julio sigue siendo la verdad
+sobre julio.
+
+Sin esa distinción el sistema habría marcado julio como superada, que es peor que no tener
+el dato. Y la supersesión solo ocurre cuando las vigencias **no se solapan**: dos vigentes
+a la vez no son una sucesión, son un conflicto, y entonces se muestran las dos.
+
+**Lo vencido se dice antes del dato**, nunca después. Es la razón de ser de la fecha de
+término: el riesgo no es olvidar un dato, es leer el viejo sin darte cuenta.
+
+### Lo que no es un dato duro
+
+Esa cartola trae **53 líneas de transacción**. Eso no es un campo, es una tabla, y
+*"¿cuánto gasté en delivery?"* necesita sumar filas. Queda fuera por diseño: agregar
+gastos por comercio es una app de finanzas. La línea es responder *"tienes que pagar
+$886.568 antes del 7 de septiembre"* y parar ahí.
+
 ## Los tres carriles
 
 | Entrada | Carril | Servicio |
@@ -362,6 +421,7 @@ src/core/         operaciones tipadas. No sabe que existe un CLI.
   normalize/      lanes.ts (el router, lógica pura) · run.ts
   classify/       prompt armado en runtime · validación de lo que devuelve
   recall/         chunk · index-chunks · retrieve · answer · grounding
+  facts/          registry (los tipos son data) · extract · values · query
   channel/        el puerto del canal: capacidades declaradas (§7.1)
   router/         los verbos de §5. intent y actions son puros
   ports.ts        BlobStore · Clock · Db · Ingest · Converter · Classifier · Embedder

@@ -217,7 +217,28 @@ export async function normalizeMemory(deps: Deps, memoryId: Uuid): Promise<Resul
  */
 async function finish(deps: Deps, id: Uuid): Promise<string | null> {
   await reindex(deps, id);
-  return reclassify(deps, id);
+  const domain = await reclassify(deps, id);
+  // Después de clasificar y no antes: qué tipos de hecho intentar depende del
+  // dominio que acaba de quedar puesto (§4).
+  await reextract(deps, id);
+  return domain;
+}
+
+/**
+ * Los datos duros, si el documento tiene alguno (§4).
+ *
+ * Va al final y no invalida nada si falla: un hecho es un derivado más, y el
+ * texto —lo caro de recuperar— ya está guardado.
+ */
+async function reextract(deps: Deps, id: Uuid): Promise<void> {
+  if (!deps.classifier) return;
+  const { rows } = await deps.db.query<{ owner_id: string }>(
+    `select owner_id from memories where id = $1`, [id],
+  );
+  const ownerId = rows[0]?.owner_id;
+  if (!ownerId) return;
+  const { extractFacts } = await import('../facts/extract.js');
+  await extractFacts(deps, { ownerId }, id).catch(() => {});
 }
 
 /**

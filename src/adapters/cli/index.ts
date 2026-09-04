@@ -19,12 +19,14 @@ import type { Reply } from '../../core/channel/types.js';
 import { inlineIngest } from '../../core/ingest.js';
 import { systemClock, type Deps } from '../../core/ports.js';
 import type { Actor, Lane } from '../../core/domain/types.js';
-import type { Result } from '../../core/result.js';
+import type { Fact, FactType } from '../../core/index.js';
+import { ok, type Result } from '../../core/result.js';
 import {
   acceptProposal, archiveDomain, capture, classifyMemory, countReview, createDomain, createOwner, editDomain,
   fetchBlob, findDomain, list, listDomains, listIdentities, listOwners, listReview,
   mergeDomains, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
   answer, indexMemory, pendingIndex, proposeDomains, resolveMemoryId, show, unindexed, LANES,
+  seedDomains, seedFactTypes, extractFacts, listFacts, listFactTypes, contextOf, renderValue, warningFor,
 } from '../../core/index.js';
 import { EXIT, exitCodeFor } from './exit.js';
 import { renderAnswer, renderDetail, renderFailure, renderList, renderReview } from './format.js';
@@ -160,7 +162,12 @@ program
       const db = pgDb(pool);
       const existing = await listOwners(db);
       if (existing.length > 0) {
-        emit({ ok: true, value: existing[0]! }, (o) => `Ya existe el dueño ${o.id} (${o.label}).`);
+        // Idempotente: las semillas se rellenan también sobre un dueño que ya
+        // existe. Sin esto, un tipo de hecho nuevo solo lo tendría quien
+        // empiece de cero, que es justo al revés de lo útil.
+        await seedDomains(db, existing[0]!.id);
+        await seedFactTypes(db, existing[0]!.id);
+        emit({ ok: true, value: existing[0]! }, (o) => `Ya existe el dueño ${o.id} (${o.label}). Semillas al día.`);
         return;
       }
       emit(await createOwner(db, label), (o) => `Dueño creado: ${o.id} (${o.label})`);
@@ -822,6 +829,81 @@ program
       ({ deps, actor }) => listReview(deps, actor, { limit: Number(opts.limit) }),
       renderReview,
     );
+  });
+
+const facts = program
+  .command('facts')
+  .description('los datos duros extraídos de tus documentos (§4)');
+
+facts
+  .command('list', { isDefault: true })
+  .description('lo vigente, con su cita')
+  .option('--all', 'incluye lo superado')
+  .action(async (opts: Record<string, boolean>) => {
+    await run(
+      async ({ deps, actor }): Promise<Result<Fact[]>> =>
+        ok(await listFacts(deps.db, actor, { includeSuperseded: opts.all === true })),
+      (fs) => (fs.length === 0
+        ? 'Todavía no tengo datos duros. Manda una póliza o una cartola.'
+        : fs.map((f) => {
+            const campos = Object.entries(f.payload)
+              .map(([k, v]) => `    ${k}: ${v}`).join('\n');
+            const cuando = f.validFrom || f.validUntil
+              ? `  ${f.validFrom?.toISOString().slice(0, 10) ?? '—'} → ${f.validUntil?.toISOString().slice(0, 10) ?? '—'}`
+              : '';
+            const sup = f.supersededBy ? '  ⚠ superado' : '';
+            return `${f.shortId}  ${f.typeLabel}${cuando}${sup}\n${campos}`;
+          }).join('\n\n')),
+    );
+  });
+
+facts
+  .command('types')
+  .description('qué sabe extraer, y de qué categoría')
+  .action(async () => {
+    await run(
+      async ({ deps, actor }): Promise<Result<FactType[]>> => ok(await listFactTypes(deps.db, actor)),
+      (ts) => ts.map((t) =>
+        `${t.slug}  (${t.kind})  ← ${t.domainSlug ?? 'cualquier categoría'}\n` +
+        t.fields.map((f) => `    ${f.name}: ${f.label} [${f.kind}]  ~ ${f.aliases.join(', ')}`).join('\n'),
+      ).join('\n\n'),
+    );
+  });
+
+facts
+  .command('extract')
+  .description('vuelve a extraer de una memoria, o de todas las que apliquen')
+  .argument('[id]', 'memoria; sin id, todas las clasificadas')
+  .action(async (id: string | undefined) => {
+    await run(async ({ deps, actor }): Promise<Result<string[]>> => {
+      const linea = (o: { shortId: string; extracted: string[]; discarded: string[] }) => {
+        const desc = o.discarded.length ? `  (sin respaldo: ${o.discarded.join(', ')})` : '';
+        return `${o.extracted.length ? '✓' : '·'} ${o.shortId}  ${o.extracted.join(', ') || 'ningún tipo aplicó'}${desc}`;
+      };
+
+      if (id) {
+        const resolved = await resolveMemoryId(deps.db, actor, id);
+        if (!resolved.ok) return resolved;
+        const out = await extractFacts(deps, actor, resolved.value);
+        return out.ok ? ok([linea(out.value)]) : out;
+      }
+
+      // Sin id: todo lo que tenga categoría y texto. Es idempotente — el unique
+      // sobre (memory_id, type_id) hace que reextraer reemplace, no duplique.
+      const { rows } = await deps.db.query<{ id: string }>(
+        `select m.id from memories m
+          where m.owner_id = $1 and not m.hidden and m.domain_id is not null
+            and (m.normalized_text is not null or m.note is not null)
+          order by m.captured_at desc`,
+        [actor.ownerId],
+      );
+      const lineas: string[] = [];
+      for (const r of rows) {
+        const out = await extractFacts(deps, actor, r.id);
+        if (out.ok && out.value.extracted.length > 0) lineas.push(linea(out.value));
+      }
+      return ok(lineas);
+    }, (v) => (v.length === 0 ? 'Nada que extraer.' : v.join('\n')));
   });
 
 program

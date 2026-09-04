@@ -20,12 +20,12 @@ import {
   type ChatSession, type Pending,
 } from './session';
 
-/** Cinco por página, como manda §6.1. Nunca un muro de texto. */
+/** Five per page. Never a wall of text. */
 export const PAGE = 5;
 
 /**
- * Lo que pasó, en datos. `present.ts` decide cómo se ve; acá no hay una sola
- * cadena destinada a una persona — el core devuelve datos y nunca prosa.
+ * What happened, as data. Presentation decides how it looks; there is not one
+ * string here meant for a person — the core returns data and never prose.
  */
 export type Outcome =
   | { kind: 'paired'; displayName: string | null }
@@ -36,11 +36,11 @@ export type Outcome =
       items: MemorySummary[];
       offset: number;
       hasMore: boolean;
-      /** Lo que todavía no se ha leído. Convierte un "no lo tengo" en verdad. */
+      /** What has not been read yet. Turns "I do not have it" into the truth. */
       pendientes: number;
-      /** Texto que se puede guardar si la búsqueda no encontró nada (§5). */
+      /** Text that can be stored if the search found nothing. */
       offerSave: string | null;
-      /** Se pidió "más" y ya no queda: distinto de "no lo tengo". */
+      /** "More" was asked for and none is left: different from "I do not have it". */
       exhausted: boolean;
     }
   | { kind: 'answer'; answer: Answer; query: string }
@@ -65,11 +65,11 @@ export interface RouteInput {
 }
 
 /**
- * Del verbo a la operación del core.
+ * From the verb to the core operation.
  *
- * Exige un `Actor`, y esa firma es la regla dura 9 hecha estructura: sin
- * identidad vinculada no hay Actor, y sin Actor no existe el camino para llamar
- * a nada. Deja de depender de que alguien se acuerde de un WHERE.
+ * It demands an `Actor`, and that signature is owner isolation made structural:
+ * with no linked identity there is no actor, and with no actor there is no path
+ * to call anything. It stops depending on someone remembering a WHERE clause.
  */
 export async function route(
   deps: Deps,
@@ -81,19 +81,18 @@ export async function route(
 }
 
 /**
- * Deja anotada la lista que se acaba de shown, para que "ver 2" signifique el
- * segundo de ESA lista.
+ * Records the list just shown, so "view 2" means the second of THAT list.
  *
- * Se hace acá, en un solo lugar, y no en cada rama. `enDominio` numeraba sus
- * resultados y ofrecía los botones `ver N` sin escribir la sesión nunca: al
- * pulsar el 2 salía el segundo de la búsqueda anterior. Un documento real, de
- * otra cosa — el fallo silencioso más caro que puede tener esto, porque parece
- * una respuesta.
+ * Done here, in one place, and not in each branch. The category listing numbered
+ * its results and offered the buttons without ever writing the session: pressing
+ * 2 returned the second of the previous *search*. A real document, of something
+ * else entirely — the most expensive silent failure this can have, because it
+ * looks like an answer.
  *
- * La causa de fondo no era la rama olvidada: era que **numerar y registrar
- * vivían en archivos distintos**, así que la próxima lista que alguien agregue
- * repite el bug. Acá el registro cuelga de la forma del `Outcome`, y una lista
- * nueva queda cubierta sin que nadie se acuerde.
+ * The root cause was not the forgotten branch: it was that **numbering and
+ * recording lived in different files**, so the next list anyone adds repeats the
+ * bug. Here the recording hangs off the shape of the outcome, and a new list is
+ * covered without anyone remembering to.
  */
 async function registerList(
   deps: Deps,
@@ -104,8 +103,8 @@ async function registerList(
   const v = r.value;
 
   // Una lista numerada nueva reemplaza a la anterior. `resultados` y
-  // `respuesta` ya escribieron la suya —con su `lastQuery` y su offset, que acá
-  // no se conocen—, así que no se tocan.
+  // The answer path writes its own — carrying its query and offset, which are
+  // not known here — so they are left alone.
   const ids = numbered(v);
   if (ids) {
     await writeSession(deps.db, input.conv, actor.ownerId,
@@ -114,7 +113,7 @@ async function registerList(
   }
 
   // Abrir un detalle no cambia la lista: mueve el foco. Se conserva `ids` para
-  // que "ver 3" siga significando el tercero de lo que estás mirando.
+  // so "view 3" still means the third of what you are looking at.
   if (v.kind === 'detail') {
     const prev = await readSession(deps.db, input.conv);
     await writeSession(deps.db, input.conv, actor.ownerId,
@@ -160,7 +159,7 @@ async function dispatch(
       return ok({ kind: 'help' });
 
     case 'pair':
-      // Ya está adentro; volver a parear no rompe nada pero tampoco hace falta.
+      // Already inside; pairing again breaks nothing but is not needed either.
       return ok({ kind: 'paired', displayName: input.displayName ?? null });
 
     case 'pending':
@@ -197,9 +196,9 @@ async function dispatch(
 
     case 'inDomain': {
       const d = await findDomain(deps.db, actor, intent.ref);
-      // Cualquier /loquesea cae acá, así que el mensaje tiene que servir tanto
-      // a quien se equivocó de categoría como a quien probó un comando que no
-      // existe. Nombrar los dos caminos cuesta una línea.
+      // Any unknown /whatever lands here, so the message has to serve both the
+      // person who mistyped a category and the one who tried a command that
+      // does not exist. Naming both paths costs one line.
       if (!d) {
         return err('not_found',
           `No conozco "/${intent.ref}". Mira /domains para las categorías, o /help para los comandos.`);
@@ -217,25 +216,25 @@ async function dispatch(
       return doCapture(deps, actor, input, null);
 
     case 'recall': {
-      // Una pregunta se responde; una búsqueda por palabras se lista.
+      // A question is answered; a keyword search is listed.
       //
-      // La diferencia importa: "¿cuál es mi deducible?" quiere el dato con su
-      // cita, no cinco documentos donde buscarlo. `/search poliza` quiere la
-      // lista. El clasificador de intención ya distinguió las dos (§5), así que
-      // acá solo hay que respetarlo.
+      // The difference matters: asking for a deductible wants the datum with
+      // its citation, not five documents to look through. An explicit search
+      // wants the list. The intent classifier already told them apart, so all
+      // that is needed here is to respect it.
       if (intent.guessed && deps.classifier) {
         const r = await answer(deps, actor, { query: intent.query, synthesize: true });
         if (!r.ok) return r;
-        // Sin respuesta redactada se cae a la lista: los pasajes sirven igual,
-        // y es mejor que un "no pude" cuando sí hay material.
+        // With no drafted answer it falls back to the list: the passages are
+        // useful anyway, and better than an "I could not" when material exists.
         //
-        // Con una excepción: si la prosa se descartó **a propósito** —sin cita,
-        // o con una cifra que no está en lo que se leyó— la lista sola miente
-        // por omisión. La persona preguntó un número y recibe documentos sin
-        // enterarse de que el bot se negó a dárselo. Eso se dice.
+        // With one exception: if the prose was discarded **on purpose** — no
+        // citation, or a figure absent from what was read — the bare list lies
+        // by omission. The person asked for a number and gets documents without
+        // learning the bot declined to give it. That gets said.
         const rechazada = r.value.reason === 'no_citation' || r.value.reason === 'ungrounded';
         const hechos = (r.value.facts?.length ?? 0) > 0;
-        // La sesión la escribe `registerList`, como con cualquier otro listado.
+        // The session is written by registerList, like any other listing.
         if (r.value.text || rechazada || hechos) {
           return ok({ kind: 'answer', answer: r.value, query: intent.query });
         }
@@ -249,12 +248,12 @@ async function dispatch(
 }
 
 /**
- * Crear y fusionar comparten forma: intentan, y si el core pide confirmación,
- * guardan la operación en la sesión para poder repetirla con un "sí".
+ * Creating and merging share a shape: they try, and if the core asks for
+ * confirmation they store the operation in the session so a yes can repeat it.
  *
- * Se guarda la operación entera y no un marcador, así que el sí reejecuta
- * exactamente el mismo camino con `confirm: true`. Un segundo camino que
- * "aplica lo confirmado" podría divergir del primero sin que nadie lo note.
+ * The whole operation is stored rather than a marker, so the yes re-runs exactly
+ * the same path with confirmation set. A second path that "applies the confirmed
+ * thing" could drift from the first without anyone noticing.
  */
 async function doCreateDomain(
   deps: Deps, actor: Actor, input: RouteInput,
@@ -308,8 +307,8 @@ async function doCapture(
   let filename: string | null = null;
 
   if (attachment) {
-    // Se compara ANTES de bajar. En Telegram esto no es una degradación, es un
-    // muro: no hay forma de que el bot pida un archivo más grande.
+    // Compared BEFORE downloading. On some platforms this is not a degradation
+    // but a wall: the bot cannot ask for a larger file.
     if (attachment.sizeBytes !== null && attachment.sizeBytes > caps.maxDownloadBytes) {
       const mb = (n: number) => `${Math.round(n / 1024 / 1024)} MB`;
       return err(
@@ -322,7 +321,7 @@ async function doCapture(
       bytes = await attachment.fetch();
     } catch (e) {
       // No se crea la memoria: una fila apuntando a un blob que no existe es
-      // peor que no tener la fila (el mismo criterio que ya está en capture.ts).
+      // worse than not having the row at all, same as at capture time.
       return err('invalid', `No pude bajar el archivo: ${e instanceof Error ? e.message : String(e)}`);
     }
     filename = attachment.filename;
@@ -356,8 +355,8 @@ async function doSearch(
   const q = query.trim();
   if (!q) return err('invalid', 'Dime qué buscar.');
 
-  // Se piden seis para shown cinco: el sexto es el que dice si hay más, sin
-  // un count(*) ni un cursor de keyset que a esta escala no compran nada.
+  // Six are asked for to show five: the sixth is what says whether there is
+  // more, with no count(*) and no keyset cursor at this scale.
   const res = await search(deps, actor, { query: q, limit: PAGE + 1, offset });
   if (!res.ok) return res;
 
@@ -366,10 +365,10 @@ async function doSearch(
   const pendientes = await pendingCount(deps.db, actor.ownerId);
 
   const pending: Pending = { ids: items.map((m) => m.id) };
-  // Solo se ofrece guardar cuando fuimos NOSOTROS los que decidimos que esto
-  // era una pregunta. Si escribió /search quería buscar, y si pidió "más"
-  // quería la página siguiente: ofrecerle guardar "deducible" como nota sería
-  // absurdo, y encima lo haría con un texto que él nunca quiso guardar.
+  // Saving is only offered when WE decided this was a question. An explicit
+  // search meant search, and "more" meant the next page: offering to store
+  // the search term as a note would be absurd, and would do it with text
+  // the person never meant to store.
   const exhausted = offset > 0 && items.length === 0;
   const offerSave = guessed && !exhausted && items.length === 0 ? q : null;
   if (offerSave) pending.save = offerSave;
@@ -409,8 +408,8 @@ async function doAction(
       const ids = session?.pending?.ids ?? [];
       const id = ids[a.n - 1];
       if (!id) return err('invalid', `No hay un ${a.n} en la última lista.`);
-      // Ocultar y no purgar: el chat no borra nada de forma irreversible. Para
-      // eso está la terminal, con su confirmación y su registro de auditoría.
+      // Hide, not purge: the chat deletes nothing irreversibly. That is what
+      // the terminal is for, with its confirmation and its audit log.
       const r = await setHidden(deps, actor, id, true);
       return r.ok ? ok({ kind: 'hidden', shortId: r.value.shortId }) : r;
     }
@@ -431,7 +430,7 @@ async function doAction(
     }
 
     case 'original': {
-      // El archivo de lo que estás mirando, no el de un puesto de la lista.
+      // The file of what you are looking at, not of a position in the list.
       const id = session?.pending?.viewing;
       if (!id) return err('invalid', 'No estás mirando nada. Abre algo primero.');
       const b = await fetchBlob(deps, actor, id);
@@ -441,15 +440,15 @@ async function doAction(
     case 'yes':
     case 'no': {
       if (!confirmIsFresh(session?.pending ?? null, now)) {
-        // Un "sí" que llega media hora tarde no se refiere a lo que la persona
-        // cree. Vencerlo es más seguro que adivinar a qué apuntaba.
+        // A yes arriving half an hour late does not refer to what the person
+        // thinks. Expiring it is safer than guessing what it pointed at.
         return err('invalid', 'No hay nada esperando confirmación.');
       }
       const c = session!.pending!.confirm!;
       await writeSession(deps.db, conv, actor.ownerId, { pending: null }, now);
       if (a.kind === 'no') return err('invalid', `Listo, no hago nada con "${c.label}".`);
 
-      // Se repite la MISMA operación con confirm activo.
+      // The SAME operation is repeated, with confirmation set.
       if (c.op === 'createDomain') {
         return doCreateDomain(deps, actor, input, c.args.label ?? '', c.args.description ?? '', true);
       }
@@ -459,7 +458,7 @@ async function doAction(
   }
 }
 
-/** Vincula una identidad nueva. Vive acá porque es lo único que corre sin Actor. */
+/** Links a new identity. The only thing here that runs with no actor. */
 export async function pair(
   deps: Deps,
   conv: Conversation,

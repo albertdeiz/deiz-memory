@@ -5,8 +5,8 @@ import { runMigrations } from '../../src/adapters/db/postgres/migrate';
 import { ensureTestDatabase, TEST_DATABASE_URL, TEST_ENV } from '../helpers/env';
 
 const BIN = 'dist/dm.js';
-// Tu mismo stack, pero con la base y el bucket de pruebas: el binario recibe
-// las variables por entorno en vez de leer un .env propio.
+// Your own stack, with the test database and bucket: the binary gets its
+// settings from the environment instead of reading its own .env.
 const ENV = TEST_ENV;
 
 interface Run { code: number; stdout: string; stderr: string; json: any }
@@ -23,9 +23,9 @@ const dm = (args: string[]): Promise<Run> =>
   });
 
 /**
- * Levanta el worker de verdad y espera a que diga que terminó un trabajo. Es la
- * única forma de probar que la cola está enchufada: si `capture` encolara al
- * vacío, todos los demás tests seguirían pasando y nadie se enteraría.
+ * Runs the real worker and waits for it to report a finished job. It is the only
+ * way to prove the queue is plugged in: if capture enqueued into the void, every
+ * other test would still pass and nobody would notice.
  */
 const workUntil = (needle: string, timeoutMs = 45_000): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -33,10 +33,10 @@ const workUntil = (needle: string, timeoutMs = 45_000): Promise<string> =>
     let out = '';
     let settle: (() => void) | null = null;
 
-    // Se espera a que el worker MUERA de verdad, no solo a mandarle la señal.
+    // It waits for the worker to actually DIE, not just for the signal to be sent.
     // Un worker sobreviviente sigue sacando trabajos de la cola durante el test
-    // siguiente, y el test siguiente afirma que nadie los ha tocado. Es el tipo
-    // de flakiness que después se pasa media hora buscando en el lugar
+    // next test's jobs, and that test asserts nobody touched them. The kind of
+    // flakiness you then spend half an hour hunting in the wrong place.
     // equivocado.
     child.on('exit', () => settle?.());
 
@@ -44,7 +44,7 @@ const workUntil = (needle: string, timeoutMs = 45_000): Promise<string> =>
       clearTimeout(timer);
       settle = fn;
       child.kill('SIGINT');
-      // Si no se muere solo en 10s, se lo mata en serio.
+      // If it does not die on its own in 10s, it gets killed for real.
       setTimeout(() => child.kill('SIGKILL'), 10_000).unref();
     };
     const timer = setTimeout(
@@ -66,8 +66,8 @@ const db = pgDb(pool);
 beforeAll(async () => { await ensureTestDatabase(); await runMigrations(db); }, 60_000);
 beforeEach(async () => {
   await db.query('truncate memories, memory_chunks, blobs, audit_log, channel_identities, pairing_codes, chat_sessions, domains, owners restart identity cascade');
-  // La cola sobrevive al truncate de las memorias: sin esto, un trabajo viejo
-  // apuntaría a una memoria que ya no existe y el worker gritaría por nada.
+  // The queue survives truncating the memories: without this, an old job would
+  // point at a memory that no longer exists and the worker would shout for nothing.
   await db.query('delete from pgboss.job').catch(() => {});
   expect((await dm(['--json', 'init', 'yo'])).code).toBe(0);
 });
@@ -83,7 +83,7 @@ describe('la cola', () => {
     const antes = await dm(['--json', 'show', id]);
     expect(antes.json.normalizedAt).toBeNull();
     expect(antes.json.lane).toBeNull();
-    // Todavía no es buscable por dentro, y eso es correcto: nadie lo ha leído.
+    // Not searchable by content yet, and that is correct: nobody has read it.
     expect((await dm(['--json', 'search', '4471-2026'])).json).toHaveLength(0);
   }, 60_000);
 
@@ -97,7 +97,7 @@ describe('la cola', () => {
     expect(despues.json.lane).toBe('document');
     expect(despues.json.normalizedText).toContain('4471-2026');
 
-    // El criterio de F1, por el camino real: encontrarlo por lo que dice.
+    // The real criterion, by the real path: finding it by what it says.
     const hit = await dm(['--json', 'search', 'deducible']);
     expect(hit.json).toHaveLength(1);
     expect(hit.json[0].shortId).toBe(id);

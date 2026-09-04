@@ -8,9 +8,9 @@ import { fakeConverter, fakeConverters } from '../helpers/converters';
 import { startStack, type TestStack } from '../helpers/stack';
 
 /**
- * El canal de punta a punta, contra Postgres y Garage reales. Lo que se prueba
- * son conversaciones completas: parear, mandar, buscar, paginar — y sobre todo
- * lo que NO debe pasar.
+ * The channel end to end, against the real database and object store. What is
+ * tested is whole conversations: pair, send, search, page — and above all what
+ * must NOT happen.
  */
 let s: TestStack;
 let ch: FakeChannel;
@@ -41,7 +41,7 @@ describe('quién puede hablarle', () => {
     const out = await ch.send({ text: 'guárdame esto' });
     expect(text(out)).toBe('No te conozco.');
 
-    // No se guarda contenido de un extraño, ni siquiera para revisarlo después.
+    // A stranger's content is not stored, not even for later review.
     const { rows } = await s.deps.db.query<{ n: string }>('select count(*)::text n from memories');
     expect(rows[0]!.n).toBe('0');
   });
@@ -69,14 +69,14 @@ describe('capture', () => {
   beforeEach(async () => { await pairMe(); });
 
   it('guarda un texto suelto con /capture, y no promete leerlo', async () => {
-    // Un texto ya es texto: no hay nada que un carril pueda agregarle.
+    // Text is already text: there is nothing a lane can add to it.
     const out = text(await ch.send({ text: '/capture el mecánico es Juan +569 1234 5678' }));
     expect(out).toContain('Guardado');
     expect(out).not.toContain('Lo estoy leyendo');
   });
 
   it('un texto SIN /capture no se guarda: se query', async () => {
-    // En un chat, lo que escribes es casi siempre algo que estás preguntando.
+    // In a chat, what you type is almost always something you are asking.
     // Guardar por defecto dejaba preguntas convertidas en memorias.
     const out = text(await ch.send({ text: 'el mecánico es Juan +569 1234 5678' }));
     expect(out).not.toContain('Guardado');
@@ -85,7 +85,7 @@ describe('capture', () => {
   });
 
   it('guarda una foto y avisa que la está leyendo', async () => {
-    // El acuse dice el estado, no solo "éxito": la espera queda declarada.
+    // The acknowledgement states the status, not just success: the wait is declared.
     s.deps.converters = fakeConverters({ vision: fakeConverter(LARGO) });
     const out = text(await ch.send({
       text: 'la boleta del taller',
@@ -96,8 +96,8 @@ describe('capture', () => {
   });
 
   it('rechaza lo que no cabe por el canal, y no crea la memoria', async () => {
-    // El tamaño se compara ANTES de bajar: el fetch de este adjunto revienta si
-    // alguien lo llama, y que el test pase prueba que nadie lo llamó.
+    // The size is compared BEFORE downloading: this attachment's fetch throws if
+    // anyone calls it, and the test passing proves nobody did.
     const out = text(await ch.send({ attachment: oversizedAttachment(50 * 1024 * 1024) }));
     expect(out).toContain('50 MB');
     expect(out).toContain('dm capture');
@@ -133,7 +133,7 @@ describe('recall', () => {
   });
 
   it('pedir más al final dice que no hay más, no que no lo tiene', async () => {
-    // Son cosas distintas: una es el final de una lista, la otra una respuesta
+    // Different things: one is the end of a list, the other an answer about your
     // sobre tu memoria.
     await guardar(2);
     await ch.send({ text: '/search poliza' });
@@ -148,8 +148,8 @@ describe('recall', () => {
   });
 
   it('un número suelto sin lista en pantalla no es "ver el séptimo"', async () => {
-    // Sin lista, un 7 no puede significar una posición. Se query, y si no
-    // hay nada se ofrece guardarlo: no se pierde.
+    // With no list, a 7 cannot mean a position. It is queried, and if there is
+    // nothing it is offered for saving: nothing is lost.
     const out = text(await ch.send({ text: '7' }));
     expect(out).toContain('No lo tengo');
     expect(text(await ch.send({ text: 'save' }))).toContain('Guardado');
@@ -164,16 +164,16 @@ describe('recall', () => {
   });
 
   it('no ofrece guardar lo que buscaste a propósito', async () => {
-    // Si escribiste /buscar querías buscar. Ofrecerte guardar "pinguino" como
-    // nota sería guardarte un texto que nunca quisiste guardar.
+    // An explicit search meant search. Offering to store the search term as a note
+    // would store text you never meant to store.
     const out = text(await ch.send({ text: '/search pinguino' }));
     expect(out).toContain('No lo tengo');
     expect(out).not.toContain('save');
   });
 
   it('dice cuánto falta por leer, para no mentir con un "no lo tengo"', async () => {
-    // Una búsqueda que responde "no lo tengo" mientras un OCR corre está
-    // mintiendo. Es la métrica estrella de §15.
+    // A search answering "I do not have it" while an OCR pass runs is lying. That
+    // rate is the metric that matters.
     s.deps.converters = fakeConverters({ vision: fakeConverter('throw:todavía no') });
     await ch.send({ attachment: await fileAttachment('fixtures/f1/boleta-escaneada.png') });
     await s.deps.db.query(`update memories set normalized_at = null where blob_sha256 is not null`);
@@ -189,7 +189,7 @@ describe('aislamiento entre personas (regla dura 9)', () => {
     await pairMe();
     await ch.send({ text: 'mi póliza secreta del auto' });
 
-    // Otra persona, pareada a otro dueño, sobre el mismo canal.
+    // Another person, paired to another owner, over the same channel.
     const otro = fakeChannel({ externalUserId: 'intruso', chatId: 'chat-2' });
     await serveChannel(otro, s.deps);
     await pairMe(otro, s.otherOwnerId);
@@ -202,8 +202,8 @@ describe('aislamiento entre personas (regla dura 9)', () => {
 
 describe('el turno se cierra', () => {
   it('no se puede responder después de que el handler retorna', async () => {
-    // §2 sostenida por el tipo: sin un send() suelto, el bot no tiene cómo
-    // iniciar conversación. El canal falso lo comprueba de verdad.
+    // Held up by the type: with no loose send, the bot has no way to start a
+    // conversation. The fake channel actually verifies it.
     await pairMe();
     let escaped: ((r: Reply) => Promise<void>) | null = null;
     const espia = fakeChannel({ chatId: 'chat-espia' });
@@ -221,15 +221,15 @@ describe('paridad con el CLI', () => {
   beforeEach(async () => { await pairMe(); });
 
   it('una pregunta se responde con cita; una búsqueda se lista', async () => {
-    // Es la diferencia que el chat no hacía: preguntar traía cinco documentos
-    // donde buscar, en vez del dato.
+    // The distinction the chat used to miss: asking brought five documents to look
+    // through, instead of the datum.
     s.deps.classifier = {
       async classify() { return {}; },
       async complete() { return 'El deducible es de 5 UF [1].'; },
       async available() { return { ok: true, detail: 'fake' }; },
     };
-    // Sin embedder la recuperación degrada a full-text, que acá alcanza: lo
-    // que se prueba es que preguntar responda, no la calidad del vector.
+    // With no embedder retrieval degrades to full-text, which suffices here: what is
+    // tested is that asking answers, not the quality of the vector.
     s.deps.embedder = null;
     await ch.send({ text: '/capture el deducible de la póliza es de 5 UF por siniestro' });
 
@@ -242,7 +242,7 @@ describe('paridad con el CLI', () => {
   });
 
   it('se puede ocultar un resultado sin poder borrarlo', async () => {
-    // El chat oculta; purgar es irreversible y se queda en la terminal.
+    // The chat hides; purging is irreversible and stays in the terminal.
     await ch.send({ text: '/capture la póliza del auto' });
     await ch.send({ text: '/search poliza' });
     expect(text(await ch.send({ text: 'hide:1' }))).toContain('No se borró');
@@ -260,7 +260,7 @@ describe('paridad con el CLI', () => {
   });
 
   it('no ofrece exportar, que no existe', async () => {
-    // Prometer un comando que no hace nada es peor que no tenerlo.
+    // Promising a command that does nothing is worse than not having it.
     expect(text(await ch.send({ text: '/ayuda' }))).not.toContain('exportar');
   });
 });
@@ -294,8 +294,8 @@ describe('categorías desde el chat (§9)', () => {
   });
 
   it('renombrar no cambia el slug: la identidad es el id', async () => {
-    // Descripción que no se solapa con la semilla, o el guardarraíl de §9
-    // pediría confirmación y no habría nada que renombrar.
+    // A description that does not overlap the seed, or the overlap guard would ask
+    // for confirmation and there would be nothing to rename.
     await ch.send({ text: '/create Bitácora: Anotaciones sueltas del día a día' });
     expect(text(await ch.send({ text: '/rename bitacora Diario' }))).toContain('/bitacora');
   });
@@ -308,7 +308,7 @@ describe('categorías desde el chat (§9)', () => {
   });
 
   it('una confirmación vencida no vale', async () => {
-    // Un "sí" que llega media hora tarde no se refiere a lo que crees.
+    // A yes arriving half an hour late does not refer to what you think.
     const t0 = new Date('2026-03-14T12:00:00Z');
     await ch.send({ text: '/create Consultorio: Consultas médicas y recetas', at: t0 });
     await ch.send({ text: '/create Medico: Consultas médicas y recetas clínicas', at: t0 });
@@ -319,10 +319,10 @@ describe('categorías desde el chat (§9)', () => {
 
 describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
   /**
-   * El bug: `/documentos` numeraba sus cuatro resultados y ofrecía los botones
-   * `ver N` sin registrar nunca esos ids en la sesión. Al pulsar el 2 salía el
-   * segundo de la BÚSQUEDA anterior — un documento real, de otra cosa. Es el
-   * peor tipo de fallo silencioso, porque parece una respuesta.
+   * The bug: the category listing numbered its four results and offered the view
+   * buttons without ever recording those ids in the session. Pressing 2 returned
+   * the second of the previous SEARCH — a real document, of something else. The
+   * worst kind of silent failure, because it looks like an answer.
    */
   const guardar = async (body: string) => ch.send({ text: `/capture ${body}` });
 
@@ -334,12 +334,12 @@ describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
   });
 
   it('numerar una categoría no puede resolverse contra la lista anterior', async () => {
-    // Una búsqueda deja SU lista en la sesión...
+    // A search leaves ITS list in the session...
     await guardar('contrato de arriendo del departamento');
     await guardar('presupuesto de la mudanza');
     await ch.send({ text: '/search mudanza' });
 
-    // ...y ahora una categoría con otras cosas, en otro orden.
+    // ...and now a category with other things, in another order.
     for (const t of ['cédula de identidad', 'licencia de conducir', 'pasaporte vigente']) {
       const r = await guardar(t);
       const id = /([0-9a-f]{8})/.exec(text(r))?.[1];
@@ -349,13 +349,13 @@ describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
     }
 
     const lista = text(await ch.send({ text: '/papeles' }));
-    // El segundo de lo que se mostró, leído de la propia respuesta.
+    // The second of what was shown, read from the reply itself.
     const segundo = /^2\. (.+)$/m.exec(lista)?.[1]?.trim();
     expect(segundo).toBeTruthy();
 
     const detalle = text(await ch.send({ text: 'view:2' }));
     expect(detalle).toContain(segundo!.split('\n')[0]!);
-    // Y desde luego nada de la búsqueda de antes.
+    // And of course nothing from the earlier search.
     expect(detalle).not.toContain('mudanza');
   });
 
@@ -363,7 +363,7 @@ describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
     await guardar('presupuesto de la mudanza');
     await ch.send({ text: '/search mudanza' });
     await ch.send({ text: '/papeles' });
-    // No hay nada en Papeles, así que "ver 1" no puede abrir la mudanza.
+    // The category is empty, so "view 1" cannot open the earlier result.
     expect(text(await ch.send({ text: 'view:1' }))).not.toContain('mudanza');
   });
 });
@@ -397,8 +397,8 @@ describe('bajar el archivo desde la lista', () => {
   });
 
   it('"mandarme el original" desde el detalle no manda el de otro', async () => {
-    // El botón codificaba `abrir:1`, así que abrir el segundo y pedir su
-    // original devolvía el archivo del primero de la lista.
+    // The button encoded position 1, so opening the second and asking for its
+    // original returned the first item's file.
     for (const [name, cuerpo] of [['uno.txt', 'PRIMERO uno'], ['dos.txt', 'SEGUNDO dos']] as const) {
       await ch.send({
         text: cuerpo,

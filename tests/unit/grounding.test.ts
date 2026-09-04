@@ -15,7 +15,7 @@ describe('normalizar un número', () => {
 
 describe('cifras con su unidad', () => {
   it('la unidad se reconoce a los dos lados', () => {
-    // Los documentos escriben "UF 3,0"; las personas escriben "3 UF".
+    // Documents write the unit first; people write it last.
     expect(figures('UF 3,0').pairs).toContain('3|uf');
     expect(figures('3 UF').pairs).toContain('3|uf');
   });
@@ -33,8 +33,8 @@ describe('respaldo de las cifras', () => {
   });
 
   it('descarta la cifra que no está en ningún pasaje', () => {
-    // El caso real: la cita era válida y el número inventado. Los ocho pasajes
-    // recuperados no contenían "5 UF" en ninguna parte.
+    // The real case: the citation was valid and the number invented. None of the
+    // eight retrieved passages contained that figure anywhere.
     const r = checkGrounding('El deducible es de 5 UF [a853a71c].', poliza);
     expect(r.ok).toBe(false);
     expect(r.ungrounded).toContain('5 uf');
@@ -46,7 +46,7 @@ describe('respaldo de las cifras', () => {
   });
 
   it('atrapa la unidad cambiada, que es el fallo conocido de F3', () => {
-    // "$89.990" redactado como "89.990 UF": número correcto, unidad inventada.
+    // An amount rendered with the wrong unit: right number, invented unit.
     const r = checkGrounding('El total es de 89.990 UF [x].', ['SUBTOTAL $89.990']);
     expect(r.ok).toBe(false);
     expect(r.ungrounded).toContain('89990 uf');

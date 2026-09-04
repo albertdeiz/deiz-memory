@@ -8,7 +8,7 @@ import { createOwner } from '../../src/core/index';
 import { fakeConverters } from './converters';
 import { ensureTestDatabase, TEST_BUCKET, TEST_DATABASE_URL } from './env';
 
-/** Reloj fijo: sin esto, cualquier aserción sobre fechas es una carrera. */
+/** Fixed clock: without it, any assertion about dates is a race. */
 export const fixedClock = (iso = '2026-03-14T12:00:00.000Z'): Clock => ({ now: () => new Date(iso) });
 
 export interface TestStack {
@@ -32,16 +32,16 @@ export async function startStack(
   const blobs = s3BlobStore({
     endpoint: process.env.S3_ENDPOINT!,
     region: process.env.S3_REGION ?? 'garage',
-    // Bucket aparte: los tests escriben blobs de verdad y no tienen por qué
+    // Separate bucket: the tests write real blobs and have no business
     // dejarlos entre tus documentos.
     bucket: TEST_BUCKET,
     accessKeyId: process.env.S3_ACCESS_KEY_ID!,
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
   });
 
-  // inlineIngest en los tests, no la cola: los carriles corren dentro de
-  // capture() y una aserción justo después ve el resultado. Con pg-boss de por
-  // medio, cada test sería una espera con reintentos.
+  // Inline ingest in tests, not the queue: the lanes run inside capture and an
+  // assertion right after sees the result. With the queue in between, every test
+  // would be a wait with retries.
   const deps = { db, blobs, clock, converters, classifier: null, embedder: null } as Deps;
   deps.ingest = inlineIngest(() => deps);
 

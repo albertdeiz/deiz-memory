@@ -104,8 +104,8 @@ describe('resolución de id por prefijo', () => {
   });
 
   it('un prefijo que matchea a varias es ambiguous, no una elección al azar', async () => {
-    // Ids controlados que comparten prefijo: provocar la colisión al azar exigiría
-    // decenas de miles de filas y haría el test lento y no determinista.
+    // Controlled ids sharing a prefix: forcing the collision at random would need
+    // tens of thousands of rows and make the test slow and non-deterministic.
     const a = 'abcd1234-0000-4000-8000-000000000001';
     const b = 'abcd1234-0000-4000-8000-000000000002';
     for (const id of [a, b]) {
@@ -123,7 +123,7 @@ describe('resolución de id por prefijo', () => {
       throw new Error('se esperaba un prefijo ambiguo');
     }
 
-    // Con suficientes caracteres deja de ser ambiguo.
+    // With enough characters it stops being ambiguous.
     expect(unwrap<any>(await show(s.deps, mine(), 'abcd1234-0000-4000-8000-000000000001')).id).toBe(a);
   });
 
@@ -136,7 +136,7 @@ describe('resolución de id por prefijo', () => {
 
 describe('el nombre del archivo pesa menos que el contenido', () => {
   it('una coincidencia en el contenido le gana a una en el nombre', async () => {
-    // El nombre dice "poliza" pero no es de lo que trata; el otro sí lo es.
+    // The name says one thing but is not what it is about; the other one is.
     await capture(s.deps, mine(), { bytes: Buffer.from('nada que ver'), filename: 'poliza.txt' });
     await capture(s.deps, mine(), { text: 'la póliza del auto cubre el parabrisas' });
 

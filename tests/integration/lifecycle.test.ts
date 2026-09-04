@@ -68,7 +68,7 @@ describe('purge', () => {
     expect(await s.deps.blobs.exists(key)).toBe(true);
     expect((await s.deps.db.query('select 1 from blobs')).rowCount).toBe(1);
 
-    // La que quedó sigue sirviendo su archivo.
+    // The remaining one still serves its file.
     expect(unwrap<any>(await show(s.deps, mine(), b.value.shortId)).sha256).toBe(a.value.sha256);
   });
 

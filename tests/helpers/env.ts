@@ -3,15 +3,15 @@ import { config as loadEnv } from 'dotenv';
 import pg from 'pg';
 
 /**
- * Los tests corren contra **tu mismo stack**, no contra contenedores paralelos.
+ * Tests run against **your own stack**, not against parallel containers.
  *
- * Duplicar Postgres, Garage y los tres servicios solo para probar significaba
- * bajar dos veces el modelo de Whisper y construir dos veces las imágenes, para
- * ejercitar exactamente el mismo código. Lo que de verdad hay que aislar es
- * mucho más chico: la base que los tests truncan y el bucket donde escriben.
+ * Duplicating the database, the object store and the three services just to test
+ * meant downloading the speech model twice and building the images twice, to
+ * exercise exactly the same code. What genuinely has to be isolated is much
+ * smaller: the database the tests truncate and the bucket they write to.
  *
- * Y ese aislamiento no es negociable: `reset()` hace `truncate memories, blobs,
- * owners cascade`. Apuntado a tu base, eso borra todo lo que has guardado.
+ * And that isolation is not negotiable: the reset truncates the core tables with
+ * a cascade. Pointed at your database, that erases everything you have stored.
  */
 if (existsSync('.env.local')) loadEnv({ path: '.env.local', quiet: true });
 loadEnv({ path: process.env.DM_ENV_FILE ?? '.env', quiet: true });
@@ -31,23 +31,23 @@ if (!process.env.DATABASE_URL) {
 
 export const TEST_DATABASE_URL = swapDatabase(process.env.DATABASE_URL, TEST_DATABASE);
 
-/** Lo que se le pasa a un proceso hijo (los tests del CLI levantan el binario). */
+/** What is handed to a child process: the CLI tests run the binary. */
 export const TEST_ENV: Record<string, string> = {
   ...(process.env as Record<string, string>),
   DATABASE_URL: TEST_DATABASE_URL,
   S3_BUCKET: TEST_BUCKET,
-  // Sin esto, el binario cargaría .env y volvería a apuntar a la base real.
+  // Without this the binary would load .env and point back at the real database.
   DM_ENV_FILE: '/dev/null',
-  // Sin clasificador. Estos tests son de la cola y de los carriles, y desde que
-  // la tubería clasifica sola cada captura llamaba a Ollama de verdad: veinte
+  // No classifier. These tests are about the queue and the lanes, and since the
+  // pipeline classifies on its own, every capture was calling the real model:
   // tests en paralelo contra un modelo que atiende de a uno, y el timeout.
-  // La clasificación tiene sus propios tests, con un clasificador falso.
+  // Classification has its own tests, with a fake classifier.
   DM_CLASSIFY_URL: '',
 };
 
 /**
- * Crea la base de pruebas si no existe. Idempotente, y a propósito NO la borra
- * al terminar: dejarla permite mirar qué quedó cuando un test falla.
+ * Creates the test database if missing. Idempotent, and on purpose it does NOT
+ * drop it afterwards: leaving it lets you inspect what a failing test left behind.
  */
 export async function ensureTestDatabase(): Promise<void> {
   const admin = new pg.Client({ connectionString: swapDatabase(process.env.DATABASE_URL!, 'postgres') });

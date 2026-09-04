@@ -5,9 +5,9 @@ import {
 import { startStack, type TestStack } from '../helpers/stack';
 
 /**
- * El emparejamiento es la puerta de entrada al sistema por chat, así que lo que
- * se prueba acá no es "funciona" sino "no se puede forzar": un código no se usa
- * dos veces, no sirve vencido, y no vincula a nadie que no lo tenga.
+ * Pairing is the way into the system by chat, so what is tested here is not
+ * "it works" but "it cannot be forced": a code is not used twice, does not work
+ * expired, and links nobody who does not hold it.
  */
 let s: TestStack;
 const NOW = new Date('2026-03-14T12:00:00.000Z');
@@ -26,7 +26,7 @@ describe('acuñar', () => {
   it('devuelve un código legible y con vencimiento', async () => {
     const c = await mint();
     expect(c.code).toHaveLength(8);
-    // Sin caracteres que se confundan al dictarlo por teléfono.
+    // No characters that get confused when dictated over the phone.
     expect(c.code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
     expect(c.expiresAt.getTime()).toBeGreaterThan(NOW.getTime());
   });
@@ -52,22 +52,22 @@ describe('canjear', () => {
   });
 
   it('acepta el código en minúsculas y con espacios', async () => {
-    // Se copia de una terminal a un teléfono: va a llegar sucio.
+    // It is copied from a terminal to a phone: it will arrive dirty.
     const c = await mint();
     const r = await redeemPairingCode(s.deps.db, 'telegram', '4471', `  ${c.code.toLowerCase()} `, NOW);
     expect(r.ok).toBe(true);
   });
 
   it('no sirve dos veces', async () => {
-    // "De un solo uso" tiene que ser cierto aunque lleguen dos mensajes juntos:
-    // por eso la condición vive en el UPDATE y no en un chequeo previo.
+    // "Single use" has to be true even when two messages arrive together: hence the
+    // condition living in the update and not in a prior check.
     const c = await mint();
     expect((await redeemPairingCode(s.deps.db, 'telegram', '111', c.code, NOW)).ok).toBe(true);
 
     const segundo = await redeemPairingCode(s.deps.db, 'telegram', '222', c.code, NOW);
     expect(segundo.ok).toBe(false);
 
-    // Y el segundo no quedó vinculado a nada.
+    // And the second one was linked to nothing.
     expect(await identityOwner(s.deps.db, 'telegram', '222')).toBeNull();
   });
 
@@ -86,7 +86,7 @@ describe('canjear', () => {
   });
 
   it('no distingue entre inexistente, usado y vencido', async () => {
-    // Separarlos le diría a un extraño si un código existe. Los tres se
+    // Separating them would tell a stranger whether a code exists. All three are
     // arreglan igual: pide otro.
     const usado = await mint();
     await redeemPairingCode(s.deps.db, 'telegram', '111', usado.code, NOW);
@@ -105,8 +105,8 @@ describe('canjear', () => {
 
 describe('identidad', () => {
   it('un desconocido no tiene dueño, y sin dueño no hay Actor', async () => {
-    // Esta es la propiedad estructural que sostiene la regla dura 9: sin Actor
-    // no existe el camino para llamar a ninguna operación del core.
+    // This is the structural property owner isolation rests on: with no actor there
+    // is no path to call any core operation at all.
     expect(await identityOwner(s.deps.db, 'telegram', 'nadie')).toBeNull();
   });
 

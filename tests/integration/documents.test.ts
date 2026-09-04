@@ -7,10 +7,10 @@ import { fakeConverter, fakeConverters } from '../helpers/converters';
 import { startStack, type TestStack } from '../helpers/stack';
 
 /**
- * Los otros tests prueban el *router* con carriles de mentira. Este prueba el
+ * The other tests exercise the *router* with fake lanes. This one exercises the
  * carril A de verdad, contra el sidecar real y documentos reales — porque la
- * afirmación que sostiene todo el diseño de §8.1 ("markitdown no hace OCR") es
- * una afirmación sobre markitdown, y conviene que esté verificada y no supuesta.
+ * claim the whole lane design rests on ("the document lane does no OCR") is a
+ * claim about that service, and it is better verified than assumed.
  */
 const cfg = {
   baseUrl: process.env.DM_DOCUMENTS_URL ?? 'http://localhost:8091',
@@ -52,8 +52,8 @@ describe('carril A · el sidecar de documentos', () => {
 
   it('conserva la tabla de un docx en vez de aplanarla', async () => {
     if (!usable) return;
-    // La razón de elegir markitdown antes que un extractor de texto plano: una
-    // tabla de coberturas sigue pareciendo una tabla, y eso se busca mejor.
+    // The reason for choosing a structure-preserving converter over a plain text
+    // extractor: a coverage table still looks like a table, and that searches better.
     const bytes = await readFile('fixtures/f1/carta.docx');
     const res = await capture(stack.deps, actor, { bytes, filename: 'carta.docx' });
     if (!res.ok) throw new Error('no capturó');
@@ -66,8 +66,8 @@ describe('carril A · el sidecar de documentos', () => {
 
   it('un PDF escaneado sale vacío del carril A y cae a visión', async () => {
     if (!usable) return;
-    // Este es el test que justifica que exista el carril B. El sidecar corre de
-    // verdad, devuelve nada de verdad, y la regla de caída se dispara sola.
+    // This is the test that justifies the visual lane existing. The service really
+    // runs, really returns nothing, and the fallback rule fires on its own.
     const vision = fakeConverter('FERRETERIA EL ROBLE · Boleta 88213 · Amoladora Bosch $89.990 · 14/03/2026 · gracias por su compra');
     stack.deps.converters = fakeConverters({ document: converter, vision });
 
@@ -86,7 +86,7 @@ describe('carril A · el sidecar de documentos', () => {
   }, 180_000);
 
   it('dice con claridad que no está, en vez de un ECONNREFUSED', async () => {
-    // Un carril caído a las once de la noche tiene que explicarse solo.
+    // A lane down at eleven at night has to explain itself.
     const roto = documentsConverter({ baseUrl: 'http://localhost:9', timeoutMs: 3_000 });
     const state = await roto.available();
     expect(state.ok).toBe(false);
@@ -99,8 +99,8 @@ describe('carril A · el sidecar de documentos', () => {
 describe('rasterizar PDF', () => {
   it('convierte las páginas a PNG para los modelos que no aceptan PDF', async () => {
     if (!usable) return;
-    // El chat de OpenAI —lo que hablan Ollama, llama.cpp y vLLM— solo acepta
-    // imágenes. Sin esto, el carril de visión solo funcionaría con Anthropic.
+    // The chat-style API that most local servers speak only accepts images. Without
+    // this, the visual lane would work with only one provider.
     const bytes = await readFile('fixtures/f1/escaneo.pdf');
     const out = await rasterizePdf(cfg, bytes, { dpi: 120 });
 
@@ -108,7 +108,7 @@ describe('rasterizar PDF', () => {
     expect(out.pages).toHaveLength(1);
     expect(out.truncated).toBe(false);
     expect(out.pages[0]!.mediaType).toBe('image/png');
-    // PNG de verdad: los magic bytes tienen que estar.
+    // A real PNG: the magic bytes have to be there.
     const png = Buffer.from(out.pages[0]!.dataBase64, 'base64');
     expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
   }, 120_000);
@@ -117,14 +117,14 @@ describe('rasterizar PDF', () => {
 describe('convertir lo que ningún carril sabe leer', () => {
   it('un HEIC se convierte a JPEG para poder leerlo', async () => {
     if (!usable) return;
-    // HEIC es el formato por defecto del iPhone y no lo acepta ni el OCR ni la
-    // API de visión. Sin esta conversión, cada foto del teléfono entra muda.
+    // HEIC is the iPhone default and neither the OCR nor the vision API accepts it.
+    // Without this conversion, every phone photo arrives mute.
     const { transcodeImage } = await import('../../src/adapters/normalize/documents');
     const heic = await readFile('fixtures/f1/boleta-escaneada.png'); // PNG sirve: prueba el camino
     const out = await transcodeImage(cfg, heic, 'foto.png');
 
     expect(out.mediaType).toBe('image/jpeg');
-    // Magic bytes de JPEG: la conversión pasó de verdad.
+    // JPEG magic bytes: the conversion really happened.
     expect(out.bytes.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
   }, 60_000);
 

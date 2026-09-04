@@ -7,9 +7,9 @@ import { fakeConverter, fakeConverters } from '../helpers/converters';
 import { startStack, type TestStack } from '../helpers/stack';
 
 /**
- * La bandeja de §3.4. Lo que se prueba no es que liste, sino que **diga qué
- * hacer**: una bandeja que enumera problemas sin distinguir cuál se arregla
- * reintentando te deja igual que abriendo psql.
+ * The review inbox. What is tested is not that it lists, but that it **says what
+ * to do**: an inbox that enumerates problems without distinguishing which a
+ * retry fixes leaves you no better off than opening a SQL client.
  */
 let s: TestStack;
 let actor: Actor;
@@ -17,7 +17,7 @@ let actor: Actor;
 const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 7)]);
 const otro = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 9)]);
 
-/** Un carril que falla de forma permanente: no sabe leer ese formato. */
+/** A lane that fails permanently: it cannot read that format. */
 const permanente = (msg: string): Converter => ({
   async extract() { throw new PermanentError(msg); },
   async available() { return { ok: true, detail: 'fake' }; },
@@ -52,8 +52,8 @@ describe('qué entra a la bandeja', () => {
   });
 
   it('lo que quedó incompleto también, aunque tenga texto', async () => {
-    // Un OCR de poca confianza no es un fallo: es algo que igual guardaste y
-    // que conviene mirar. La bandeja tiene que verlo.
+    // A low-confidence OCR is not a failure: it is something you stored anyway and
+    // should look at. The inbox has to see it.
     const dudoso: Converter = {
       async extract() {
         return { text: 'algo borroso', incomplete: 'el OCR quedó con poca confianza' };
@@ -81,7 +81,7 @@ describe('reintentar sirve o no sirve', () => {
   });
 
   it('un formato que el carril no sabe leer, no', async () => {
-    // Es el caso del HEIC: reintentar mañana da exactamente lo mismo.
+    // The HEIC case: retrying tomorrow gives exactly the same.
     s.deps.converters = fakeConverters({ vision: permanente('no acepta image/heic') });
     await capture(s.deps, actor, { bytes: jpeg, filename: 'a.jpg' });
 
@@ -92,7 +92,7 @@ describe('reintentar sirve o no sirve', () => {
 
   it('con un carril transitorio y otro permanente, gana reintentar', async () => {
     // Equivocarse hacia "reintenta" cuesta una corrida; hacia "no insistas"
-    // esconde una memoria para siempre.
+    // hides a memory forever.
     s.deps.converters = fakeConverters({
       document: fakeConverter('throw:servicio apagado'),
       vision: permanente('formato no soportado'),
@@ -117,9 +117,9 @@ describe('reintentar sirve o no sirve', () => {
 
 describe('el estado dice la verdad', () => {
   it('una memoria que falló queda en needs_review, no en normalized', async () => {
-    // El bug que arregló la 005: F0 marcaba normalized cuando había nota, la
-    // 003 movió la nota, y una corrida con error no tocaba el estado. Quedaban
-    // memorias sin una letra extraída figurando como normalizadas.
+    // The bug this fixed: the status was set to normalized when a note existed, the
+    // note later moved columns, and a failed run did not touch the status. Memories
+    // with not one letter extracted read as normalized.
     s.deps.converters = fakeConverters({ vision: fakeConverter('throw:se cayó') });
     const res = await capture(s.deps, actor, { bytes: jpeg, filename: 'a.jpg', text: 'mi nota' });
     if (!res.ok) throw new Error('no capturó');
@@ -161,7 +161,7 @@ describe('aislamiento', () => {
 
 describe('la confirmación de reprocess nombra lo afectado', () => {
   it('lista las memorias en vez de decir "3 memorias"', async () => {
-    // purge ya lo hacía; reprocess decía un número y ya, que no deja decidir.
+    // Purge already did this; reprocess said a number and nothing else.
     s.deps.converters = fakeConverters({ vision: fakeConverter('throw:se cayó') });
     await capture(s.deps, actor, { bytes: jpeg, filename: 'primera.jpg', title: 'Primera' });
     await capture(s.deps, actor, { bytes: otro, filename: 'segunda.jpg', title: 'Segunda' });

@@ -8,8 +8,8 @@ import { runMigrations } from '../../src/adapters/db/postgres/migrate';
 import { ensureTestDatabase, TEST_DATABASE_URL, TEST_ENV } from '../helpers/env';
 
 const BIN = 'dist/dm.js';
-// Tu mismo stack, pero con la base y el bucket de pruebas: el binario recibe
-// las variables por entorno en vez de leer un .env propio.
+// Your own stack, with the test database and bucket: the binary gets its
+// settings from the environment instead of reading its own .env.
 const ENV = TEST_ENV;
 
 interface Run {
@@ -19,12 +19,12 @@ interface Run {
   json: any;
 }
 
-/** Levanta el binario compilado como lo haría una persona. Esto reemplaza la prueba manual. */
+/** Runs the built binary the way a person would. This replaces the manual test. */
 const dm = (args: string[], stdin?: string): Promise<Run> =>
   new Promise((resolve) => {
     const child = execFile('node', [BIN, ...args], { env: ENV, maxBuffer: 16 << 20 },
       (error, stdout, stderr) => {
-        // El valor sale por stdout y los fallos por stderr: se intentan ambos.
+        // The value goes to stdout and failures to stderr: both are tried.
         let json: any;
         for (const stream of [stdout, stderr]) {
           try { json = JSON.parse(stream); break; } catch { /* sigue */ }
@@ -54,8 +54,8 @@ describe('recorrido completo por CLI', () => {
 
     const doctor = await dm(['--json', 'doctor']);
     expect(doctor.code).toBe(0);
-    // Lo obligatorio en verde. Los carriles se reportan pero no mandan sobre el
-    // código de salida: no tener whisper instalado no es un sistema roto.
+    // The required checks green. Lanes are reported but do not rule the exit code:
+    // not having a speech service installed is not a broken system.
     expect(doctor.json.filter((c: any) => c.required).every((c: any) => c.ok)).toBe(true);
     expect(doctor.json.map((c: any) => c.check)).toContain('garage');
     expect(doctor.json.map((c: any) => c.check)).toContain('carril foto');

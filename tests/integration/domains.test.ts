@@ -7,9 +7,9 @@ import type { Actor } from '../../src/core/domain/types';
 import { startStack, type TestStack } from '../helpers/stack';
 
 /**
- * §9: los dominios son data, no un enum. Lo que se prueba acá es que agregar
- * una categoría no requiera un deploy, y que las dos operaciones honestas
- * —archivar y fusionar— dejen las memorias donde deben.
+ * Domains are data, not an enum. What is tested here is that adding a category
+ * does not require a deploy, and that the two honest operations — archive and
+ * merge — leave the memories where they should be.
  */
 let s: TestStack;
 let actor: Actor;
@@ -43,7 +43,7 @@ describe('crear', () => {
   });
 
   it('avisa cuando se solapa con una que ya existe', async () => {
-    // El modo de falla de §9 es la proliferación: cuarenta dominios con la
+    // The failure mode is proliferation: forty domains with half of them
     // mitad solapados. El bot propone, nunca crea solo.
     await crear('Consultorio', 'Consultas médicas, recetas y exámenes de laboratorio');
     const r = await createDomain(s.deps.db, actor, {
@@ -75,8 +75,8 @@ describe('crear', () => {
 
 describe('renombrar no rompe nada', () => {
   it('el slug NO cambia al renombrar: la identidad es el id', async () => {
-    // §9: renombrar "vehículo" a "auto" cambia un label; ninguna memoria se
-    // entera, y el comando que la persona ya tiene en la cabeza sigue sirviendo.
+    // Renaming a category changes a label; no memory notices, and the command the
+    // person already has memorised keeps working.
     const d = await crear('Motocicleta', 'Patente de moto, revisión y permiso de circulación');
     const r = await editDomain(s.deps.db, actor, 'motocicleta', { label: 'Moto' });
     if (!r.ok) throw new Error('no editó');
@@ -104,7 +104,7 @@ describe('archivar y fusionar, que son las dos operaciones honestas', () => {
 
     await archiveDomain(s.deps.db, actor, 'papeles');
 
-    // No aparece al listar activos, pero su memoria sigue ahí y sigue siendo suya.
+    // It does not appear among the active ones, but its memory is still there and
     expect((await listDomains(s.deps.db, actor)).map((x) => x.slug)).not.toContain('papeles');
     const enDominio = await list(s.deps, actor, { domainId: d.id });
     if (!enDominio.ok) throw new Error('no listó');
@@ -155,7 +155,7 @@ describe('listar una categoría', () => {
       text: 'query reciente', occurredAt: new Date('2026-05-20T00:00:00Z'),
     });
     if (!viejo.ok || !nuevo.ok) throw new Error('no capturó');
-    // Se captura el viejo primero pero ocurrió después: si ordenara por captura,
+    // The older one is captured first but happened later: ordering by capture would
     // saldrían al revés.
     await s.deps.db.query('update memories set domain_id = $1 where owner_id = $2', [d.id, s.ownerId]);
 

@@ -12,14 +12,14 @@ describe('lanesFor', () => {
   });
 
   it('manda el PDF a markitdown y deja la visión debajo', () => {
-    // El caso que justifica toda la máquina: con capa de texto sale por A,
-    // escaneado sale por B, y nadie tiene que decidirlo a mano.
+    // The case that justifies the whole machine: with a text layer it goes out one
+    // way, scanned it goes out the other, and nobody has to decide by hand.
     expect(lanesFor('application/pdf')).toEqual(['document', 'vision']);
   });
 
   it('manda las imágenes directo a visión, sin pasar por markitdown', () => {
-    // markitdown sobre una foto da una descripción, no una transcripción.
-    // Intentarlo primero sería gastar un proceso para no obtener nada.
+    // The document lane on a photo gives a description, not a transcript.
+    // Trying it first would spend a process to get nothing.
     expect(lanesFor('image/jpeg')).toEqual(['vision']);
     expect(lanesFor('image/png')).toEqual(['vision']);
     expect(lanesFor('image/heic')).toEqual(['vision']);
@@ -31,8 +31,8 @@ describe('lanesFor', () => {
   });
 
   it('deja el texto crudo como red para html y csv', () => {
-    // markitdown los lee mejor, pero si no está, siguen siendo texto: leerlos
-    // crudo es peor que la conversión y muchísimo mejor que nada.
+    // The document lane reads them better, but without it they are still text:
+    // reading them raw is worse than converting and far better than nothing.
     expect(lanesFor('text/html')).toEqual(['document', 'text']);
     expect(lanesFor('text/csv')).toEqual(['document', 'text']);
   });
@@ -42,8 +42,8 @@ describe('lanesFor', () => {
   });
 
   it('no inventa un carril donde no lo hay', () => {
-    // Un array vacío es una respuesta honesta: el blob se guarda igual y
-    // nadie promete un texto que no va a existir.
+    // An empty array is an honest answer: the blob is stored anyway and nobody
+    // promises text that will not exist.
     expect(lanesFor('video/mp4')).toEqual([]);
     expect(lanesFor('application/octet-stream')).toEqual([]);
     expect(lanesFor(null)).toEqual([]);
@@ -71,8 +71,8 @@ describe('clamp', () => {
   });
 
   it('recorta y lo dice en el propio texto', () => {
-    // to_tsvector revienta pasado ~1MB: recortar acá es lo que evita que un
-    // escaneo de 600 páginas tumbe el insert.
+    // Text indexing breaks past a megabyte: clamping here is what stops a 600-page
+    // scan from taking down the insert.
     const { text, truncated } = clamp('x'.repeat(MAX_NORMALIZED_CHARS + 10));
     expect(truncated).toBe(true);
     expect(text).toContain('recortado');
@@ -82,7 +82,7 @@ describe('clamp', () => {
 
 describe('canonical', () => {
   it('normaliza los caracteres de ancho completo que devuelve el OCR', () => {
-    // Caso real, de un plano de edificio escaneado: el OCR devolvió U+FF29 en
+    // A real case from a scanned building plan: the OCR returned a full-width
     // vez de "I", el unaccent de Postgres no los toca, y el documento dejaba de
     // aparecer al buscar "inmobiliaria".
     expect(canonical('INMOBＩLＩＡRＩＡ')).toBe('INMOBILIARIA');

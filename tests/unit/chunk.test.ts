@@ -11,12 +11,12 @@ describe('trocear', () => {
   });
 
   it('corta por párrafos antes que por longitud', () => {
-    // Un documento ya trae su estructura; cortar cada N caracteres a ciegas
+    // A document already carries its structure; cutting blindly every N characters
     // parte tablas por la mitad.
     const p = 'x'.repeat(500);
     const trozos = chunkText([p, p, p].join('\n\n'));
     expect(trozos.length).toBeGreaterThan(1);
-    // Ningún trozo parte un párrafo que cabía entero.
+    // No chunk splits a paragraph that fitted whole.
     for (const t of trozos) expect(t.content).not.toMatch(/^x{499}$/);
   });
 
@@ -32,8 +32,8 @@ describe('trocear', () => {
   });
 
   it('no deja trozos residuales que no aportan', () => {
-    // Un "ok." suelto al final no debería ser su propio trozo: no se parece a
-    // ninguna pregunta y solo ensucia los resultados.
+    // A stray "ok." at the end should not be its own chunk: it resembles no
+    // question and only dirties the results.
     const trozos = chunkText(`${'w'.repeat(800)}\n\nok.`);
     expect(trozos.every((t) => t.content.length > 10)).toBe(true);
   });
@@ -41,8 +41,8 @@ describe('trocear', () => {
 
 describe('qué se embebe', () => {
   it('solo el trozo, sin anteponerle el título', () => {
-    // Si los ochenta trozos de una póliza empiezan con "póliza de auto BCI",
-    // los ochenta se parecen entre sí y ninguno destaca al preguntar por el
+    // If all eighty chunks of a policy start with the same title, all eighty
+    // resemble each other and none stands out when asked about the
     // deducible. El contexto compartido no distingue nada.
     expect(contextualize('el deducible es de 5 UF')).toBe('el deducible es de 5 UF');
   });

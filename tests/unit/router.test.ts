@@ -26,8 +26,8 @@ const conLista = { ids: ['a', 'b', 'c'], hasConfirm: false, hasSave: false };
 
 describe('acciones · el botón y el teclado son lo mismo', () => {
   it('el callback y la palabra escrita producen la misma acción', () => {
-    // Esta es la pieza que sostiene toda la degradación de §7.1. Si estas dos
-    // dejaran de coincidir, un canal sin botones quedaría mudo.
+    // This is the piece the whole degradation rests on. If these two stopped
+    // matching, a channel without buttons would go mute.
     expect(parseAction(encodeAction({ kind: 'more' }), true)).toEqual({ kind: 'more' });
     expect(parseAction('more', true)).toEqual({ kind: 'more' });
     expect(parseAction('MORE', true)).toEqual({ kind: 'more' });
@@ -39,7 +39,7 @@ describe('acciones · el botón y el teclado son lo mismo', () => {
   });
 
   it('un número pelado no es una acción si no hay lista en pantalla', () => {
-    // Sin esto, alguien capturando "3" perdería el dato — y §5 dice que perder
+    // Without this, someone capturing "3" would lose the datum — and losing is
     // es lo caro.
     expect(parseAction('3', false)).toBeNull();
   });
@@ -58,7 +58,7 @@ describe('clasificar · el orden es la regla', () => {
   });
 
   it('un comando gana sobre cualquier heurística', () => {
-    // `guessed: false` porque lo pediste tú: si no encuentra nada, no tiene
+    // Not guessed, because you asked for it: if it finds nothing there is no
     // sentido ofrecerte guardar "deducible" como nota.
     expect(classify(msg({ text: '/search deducible' }), null))
       .toEqual({ verb: 'recall', query: 'deducible', guessed: false });
@@ -81,7 +81,7 @@ describe('clasificar · el orden es la regla', () => {
   });
 
   it('texto libre se CONSULTA: en un chat, lo que escribes es una pregunta', () => {
-    // Invierte §5 para el chat, a propósito. Adivinar con una heurística
+    // Inverts the default toward capture, on purpose. Guessing with a heuristic
     // acertaba a medias y dejaba preguntas guardadas como memorias.
     for (const t of ['el mecánico es Juan +569 1234 5678', 'comprar pan', 'poliza del auto']) {
       expect(classify(msg({ text: t }), null).verb).toBe('recall');
@@ -94,8 +94,8 @@ describe('clasificar · el orden es la regla', () => {
   });
 
   it('un texto sin palabras con contenido igual query, no se pierde', () => {
-    // "hola" no deja contenido tras quitar las vacías; caer en un error seco
-    // sería peor que buscar y ofrecer guardarlo.
+    // A greeting leaves no content once stopwords are removed; falling into a dry
+    // error would be worse than searching and offering to store it.
     const i = classify(msg({ text: 'hola' }), null);
     expect(i).toEqual({ verb: 'recall', query: 'hola', guessed: true });
   });
@@ -124,7 +124,7 @@ describe('los comandos son los del CLI, en inglés', () => {
   });
 
   it('/ask responde y /search lista: la diferencia es guessed', () => {
-    // Es la distinción de §6: el dato con su cita, o los documentos.
+    // The distinction: the datum with its citation, or the documents.
     expect(classify(msg({ text: '/ask deducible' }), null))
       .toEqual({ verb: 'recall', query: 'deducible', guessed: true });
     expect(classify(msg({ text: '/search deducible' }), null))
@@ -132,7 +132,7 @@ describe('los comandos son los del CLI, en inglés', () => {
   });
 
   it('los nombres en español ya no valen: un solo nombre por operación', () => {
-    // Cae al camino de /<categoría>, que responde que no la conoce. Mantener
+    // It falls into the category path, which answers that it does not know it.
     // dos vocabularios es mantener dos, para siempre.
     expect(classify(msg({ text: '/buscar x' }), null).verb).toBe('inDomain');
     expect(classify(msg({ text: '/dominios' }), null).verb).toBe('inDomain');

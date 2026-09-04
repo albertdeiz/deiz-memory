@@ -9,9 +9,9 @@ import { fakeConverters } from '../helpers/converters';
 import { startStack, type TestStack } from '../helpers/stack';
 
 /**
- * Los carriles B y C contra los servicios de verdad. Lo que se prueba acá no es
- * la calidad del modelo —eso depende de cuál cargues— sino que el carril esté
- * enchufado: que los bytes salgan, vuelva texto, y ese texto quede buscable.
+ * The visual and audio lanes against the real services. What is tested here is
+ * not model quality — that depends which one you load — but that the lane is
+ * plugged in: bytes go out, text comes back, and that text becomes searchable.
  */
 const docsCfg = { baseUrl: process.env.DM_DOCUMENTS_URL ?? 'http://localhost:8091', timeoutMs: 120_000 };
 const ocr = ocrConverter(
@@ -49,8 +49,8 @@ beforeEach(async () => {
 describe('carril B · OCR local', () => {
   it('lee una boleta fotografiada, con montos y fecha exactos', async () => {
     if (!ocrUp) return;
-    // El criterio de F1, por el camino que de verdad se va a usar: "mandas la
-    // foto de una boleta y la encuentras buscando por lo que dice".
+    // The real criterion, by the path that will actually be used: send a photo of a
+    // receipt and find it by what it says.
     stack.deps.converters = fakeConverters({ vision: ocr });
     const bytes = await readFile('fixtures/f1/boleta-escaneada.png');
     const res = await capture(stack.deps, actor, { bytes, filename: 'IMG_20260314_093312.png' });
@@ -59,8 +59,8 @@ describe('carril B · OCR local', () => {
     const detail = await show(stack.deps, actor, res.value.id);
     if (!detail.ok) throw new Error('no mostró');
     expect(detail.value.lane).toBe('vision');
-    // Los dígitos exactos son el punto entero de haber elegido OCR: un monto o
-    // un número de boleta mal leído es peor que no tener nada.
+    // The exact digits are the whole point of choosing OCR: a misread amount or
+    // receipt number is worse than having nothing.
     expect(detail.value.normalizedText).toContain('88213');
     expect(detail.value.normalizedText).toContain('89.990');
     expect(detail.value.normalizedText).toContain('14/03/2026');
@@ -72,8 +72,8 @@ describe('carril B · OCR local', () => {
 
   it('rasteriza un PDF escaneado y lo lee igual', async () => {
     if (!ocrUp) return;
-    // El OCR no recibe PDF: lo rasteriza el sidecar de documentos. Este test es
-    // el que prueba que esa costura funciona de verdad.
+    // OCR does not take PDFs: the document service rasterizes them. This test is the
+    // one that proves that seam really works.
     stack.deps.converters = fakeConverters({ vision: ocr });
     const bytes = await readFile('fixtures/f1/escaneo.pdf');
     const res = await capture(stack.deps, actor, { bytes, filename: 'escaneo.pdf' });
@@ -97,8 +97,8 @@ describe('carril C · transcripción', () => {
     if (!speechUp) return;
     stack.deps.converters = fakeConverters({ audio: speech });
 
-    // Voz sintetizada en el momento: el fixture no se puede versionar sin meter
-    // un binario grande al repo, y `say` viene con macOS.
+    // Speech synthesised on the spot: the fixture cannot be versioned without adding
+    // a large binary to the repo, and the tool ships with the OS.
     const wav = await synthesize('El mecánico se llama Juan Pérez');
     if (!wav) return;
 
@@ -108,18 +108,18 @@ describe('carril C · transcripción', () => {
     const detail = await show(stack.deps, actor, res.value.id);
     if (!detail.ok) throw new Error('no mostró');
     expect(detail.value.lane).toBe('audio');
-    // Sin tildes: los tests corren con el modelo `tiny`, que escribe "mecanico"
-    // a secas. Lo que se prueba acá es que el carril está enchufado, no la
-    // calidad del modelo — esa depende de cuál cargues, y en el compose de
-    // verdad es `small` justamente por esto.
+    // Unaccented: the tests run the smallest model, which drops accents. What is
+    // tested here is that the lane is plugged in, not the model's quality — that
+    // depends which one you load, and the real compose loads a larger one exactly
+    // for this reason.
     const plano = (detail.value.normalizedText ?? '')
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
     expect(plano).toContain('mecanico');
 
-    // Y el tsvector de F0 sigue haciendo su trabajo sobre texto que ahora viene
-    // de un modelo: buscas como escribes, con o sin tilde.
+    // And text search keeps doing its job over text that now comes from a model:
+    // you search the way you type, accented or not.
     const hit = await search(stack.deps, actor, { query: 'mecanico' });
     if (!hit.ok) throw new Error('no buscó');
     expect(hit.value).toHaveLength(1);
@@ -135,7 +135,7 @@ describe('carril C · transcripción', () => {
   }, 30_000);
 });
 
-/** macOS trae `say`; en otro sistema el test se salta en vez de fallar. */
+/** The tool ships with macOS; elsewhere the test skips instead of failing. */
 async function synthesize(text: string): Promise<Buffer | null> {
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');

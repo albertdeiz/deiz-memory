@@ -49,7 +49,7 @@ const resultados = (n: number, hasMore: boolean): Resultados => ({
 const actionsOf = (rs: Reply[]): string[] =>
   rs.flatMap((r) => (r.kind === 'text' ? (r.options ?? []).map((o) => o.action) : []));
 
-/** El primer texto de una respuesta, ya estrechado. `body` no existe en un archivo. */
+/** The first text reply, already narrowed. A file reply has no body. */
 const textReply = (rs: Reply[]) => {
   const r = rs.find((x) => x.kind === 'text');
   if (!r || r.kind !== 'text') throw new Error('no hubo respuesta de texto');
@@ -62,10 +62,10 @@ const bodyOf = (rs: Reply[]): string =>
 /**
  * El test que sostiene §7.1.
  *
- * Si un canal sin botones ofreciera menos que uno con botones, "el core degrada
- * solo" sería una intención escrita en un comentario. Acá se comprueba que las
- * dos formas ofrecen exactamente lo mismo, y que la versión sin botones además
- * dice en el cuerpo qué escribir.
+ * If a channel without buttons offered less than one with them, "the core
+ * degrades on its own" would be an intention written in a comment. Here both
+ * forms are checked to offer exactly the same, and the button-free one to say in
+ * the body what to type.
  */
 describe('degradación · las mismas acciones con y sin botones', () => {
   it('una página de resultados ofrece lo mismo por los dos caminos', () => {
@@ -74,7 +74,7 @@ describe('degradación · las mismas acciones con y sin botones', () => {
     const sinB = present(ok(out), sinBotones);
 
     expect(actionsOf(conB)).toEqual(actionsOf(sinB));
-    // Dos acciones por resultado: los datos y el archivo.
+    // Two actions per result: the data and the file.
     expect(actionsOf(conB)).toEqual([
       'view:1', 'open:1', 'view:2', 'open:2', 'view:3', 'open:3',
       'view:4', 'open:4', 'view:5', 'open:5', 'more',
@@ -82,7 +82,7 @@ describe('degradación · las mismas acciones con y sin botones', () => {
   });
 
   it('sin botones, el cuerpo dice qué escribir', () => {
-    // De nada sirve ofrecer una acción que la persona no puede ver.
+    // Offering an action the person cannot see is worth nothing.
     const sinB = present(ok(resultados(2, true)), sinBotones);
     const body = bodyOf(sinB);
     expect(body).toContain('view:1');
@@ -113,7 +113,7 @@ describe('degradación · las mismas acciones con y sin botones', () => {
 
     expect(actionsOf(conB)).toEqual(['yes', 'no']);
     expect(actionsOf(sinB)).toEqual(['yes', 'no']);
-    // Y en los dos casos se nombra lo afectado, no se pide un sí a ciegas.
+    // And in both cases what is affected is named, not a blind yes.
     expect(bodyOf(conB)).toContain('Póliza 2026');
     expect(bodyOf(sinB)).toContain('Póliza 2026');
   });
@@ -174,8 +174,8 @@ describe('cuando la respuesta se descartó a propósito', () => {
   });
 
   it('dice que no dio la cifra, en vez de listar y callarse', () => {
-    // Listar documentos sin decir nada deja creer que no había respuesta. La
-    // verdad es otra: la había y se descartó por no tener respaldo.
+    // Listing documents and saying nothing lets you believe there was no answer.
+    // The truth is otherwise: there was one and it was discarded for lack of backing.
     const r = textReply(present(ok(rechazo('ungrounded')), CAPS));
     expect(r.body).toMatch(/sin inventarla/i);
     expect(r.body).toContain('a853a71c');
@@ -196,7 +196,7 @@ describe('cuando la respuesta se descartó a propósito', () => {
 
 describe('los dos botones de cada resultado', () => {
   it('los datos y el archivo van en la misma fila', () => {
-    // `group` es lo que evita once filas apiladas en una página de cinco.
+    // Grouping is what avoids eleven stacked rows on a page of five.
     const [r] = present(ok(resultados(2, false)), conBotones);
     const opts = r?.kind === 'text' ? r.options ?? [] : [];
     expect(opts.filter((o) => o.group === 1).map((o) => o.action)).toEqual(['view:1', 'open:1']);
@@ -204,7 +204,7 @@ describe('los dos botones de cada resultado', () => {
   });
 
   it('una nota suelta no ofrece "archivo": no tiene', () => {
-    // Un botón que sabe de antemano que va a fallar es peor que no estar.
+    // A button that knows in advance it will fail is worse than no button.
     const soloTexto: Outcome = {
       ...resultados(1, false),
       items: [{ ...item(1), mediaType: null, sizeBytes: null }],
@@ -213,8 +213,8 @@ describe('los dos botones de cada resultado', () => {
   });
 
   it('el original del detalle es el que estás mirando, no el primero de la lista', () => {
-    // Codificaba `abrir:1`, que se resuelve contra la lista: abrir el tercero y
-    // pedir su original te mandaba el archivo del primero.
+    // It encoded position 1, resolved against the list: opening the third and asking
+    // for its original sent you the first one's file.
     const detalle: Outcome = {
       kind: 'detail',
       memory: {
@@ -260,12 +260,12 @@ describe('la nota se muestra una vez', () => {
     // `excerpt` es `note ?? normalized_text`: con nota, el asomo ERA la nota.
     const body = bodyOf(present(ok(conNota()), conBotones));
     expect(body.split('BP9344586')).toHaveLength(2);
-    // Y sí se ve lo que se extrajo, que es otra cosa.
+    // And what was extracted is visible, which is a different thing.
     expect(body).toContain('deducible UF 3,0');
   });
 
   it('una nota suelta sin título tampoco se lee dos veces', () => {
-    // Sin título la cabecera cae al excerpt, que también es la nota.
+    // With no title the header falls back to the excerpt, which is also the note.
     const body = bodyOf(present(ok(conNota({
       title: null, originalFilename: null, mediaType: null, sha256: null, normalizedText: null,
     })), conBotones));
@@ -274,11 +274,11 @@ describe('la nota se muestra una vez', () => {
 });
 
 /**
- * Las acciones son un patrón, no una decisión por pantalla.
+ * Actions are a pattern, not a per-screen decision.
  *
- * Preguntar ofrecía solo `view` mientras buscar ofrecía `view` y `open`, porque
- * cada listado armaba sus propios botones. No es una decisión distinta por
- * pantalla: es la misma, y hay que escribirla una vez.
+ * Asking offered only `view` while searching offered `view` and `open`, because
+ * each listing built its own buttons. It is not a different decision per screen:
+ * it is the same one, and it belongs in one place.
  */
 describe('todo listado ofrece las mismas acciones', () => {
   const conArchivo = { ...item(1), mediaType: 'application/pdf' };
@@ -321,7 +321,7 @@ describe('todo listado ofrece las mismas acciones', () => {
     });
 
     it(`${nombre} numera el cuerpo igual que las acciones`, () => {
-      // Si el cuerpo dijera "1." y la acción fuera del segundo, abrirías otro.
+      // If the body said "1." and the action belonged to the second, you would open
       const body = bodyOf(present(ok(out), conBotones));
       expect(body, nombre).toMatch(/^1\. /m);
       expect(body, nombre).toMatch(/^2\. /m);
@@ -330,11 +330,11 @@ describe('todo listado ofrece las mismas acciones', () => {
 });
 
 /**
- * Regla dura 10: lo vencido o superado se dice ANTES del dato.
+ * Expired or superseded is said BEFORE the datum.
  *
- * Leer "UF 3" y recién después "vencida en 2024" es el modo de falla de §1.3:
- * el riesgo no es olvidar un dato, es leer el viejo sin darte cuenta. Se
- * comprueba en los dos canales porque la prosa vive en dos archivos.
+ * Reading "UF 3" and only then "expired in 2024" is the failure mode this
+ * prevents: the risk is not forgetting a datum, it is reading the old one
+ * without noticing. Checked in both channels because prose lives in two files.
  */
 describe('lo vencido se dice antes del dato', () => {
   const hit = (over: Record<string, unknown> = {}) => ({
@@ -419,8 +419,8 @@ describe('un conflicto es el mismo dato dos veces, no dos cosas distintas', () =
   } as Outcome), conBotones));
 
   it('dos tarjetas distintas NO son un conflicto', () => {
-    // Avisar de esto enseña a ignorar el aviso, y entonces deja de servir para
-    // el caso en que sí importa.
+    // Warning about this teaches people to ignore the warning, and then it stops
+    // working for the case that does matter.
     expect(body([conIdentidad('4005', 886568), conIdentidad('2527', 84665)]))
       .not.toMatch(/No elijo/);
   });

@@ -6,7 +6,7 @@ import { startStack, type TestStack } from '../helpers/stack';
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-/** Un PDF de verdad, mínimo pero válido: %PDF- es lo que mira detectMediaType. */
+/** A real PDF, minimal but valid: the signature is what media detection looks at. */
 const pdfBytes = Buffer.from('%PDF-1.4\n% un pdf de mentira pero con la firma correcta\n');
 const jpegBytes = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 7)]);
 
@@ -29,7 +29,7 @@ beforeEach(async () => {
 
 describe('carriles', () => {
   it('lee un archivo de texto sin ninguna herramienta', async () => {
-    // El carril más barato y el único que no puede faltar nunca.
+    // The cheapest lane and the only one that can never be missing.
     const res = await capture(stack.deps, actor, {
       bytes: Buffer.from('el mecánico de confianza es Juan, +56 9 1234 5678'),
       filename: 'notas.txt',
@@ -60,8 +60,8 @@ describe('carriles', () => {
   });
 
   it('cae de markitdown a visión cuando el PDF viene escaneado', async () => {
-    // La regla de §8.1 en una línea: markitdown no hace OCR, así que un PDF sin
-    // capa de texto devuelve vacío y hay que mirar el papel.
+    // The rule in one line: the document lane does no OCR, so a PDF with no text
+    // layer comes back empty and the paper has to be looked at.
     const doc = fakeConverter('');
     const vision = fakeConverter(LARGO);
     stack.deps.converters = fakeConverters({ document: doc, vision });
@@ -91,8 +91,8 @@ describe('carriles', () => {
   });
 
   it('deja anotado el carril que faltaba, sin perder lo poco que sacó', async () => {
-    // Un PDF escaneado y sin visión configurada: lo honesto es guardar lo que
-    // hay, decir por qué está incompleto, y quedar esperando el reproceso.
+    // A scanned PDF with no visual lane configured: the honest move is to store what
+    // there is, say why it is incomplete, and wait for a reprocess.
     stack.deps.converters = fakeConverters({ document: fakeConverter('vacío') });
 
     const res = await capture(stack.deps, actor, { bytes: pdfBytes, filename: 'escaneo.pdf' });
@@ -102,9 +102,9 @@ describe('carriles', () => {
     if (!detail.ok) throw new Error('no mostró');
     expect(detail.value.normalizationError).toContain('vision');
     expect(detail.value.normalizedText).toBe('vacío');
-    // needs_review y no normalized: el estado tiene que decir que esto necesita
-    // una mirada. Antes de la 005 se quedaba con el estado anterior y una
-    // memoria sin texto podía figurar como normalizada.
+    // needs_review and not normalized: the status has to say this needs a look.
+    // It used to keep the previous status, and a memory with no text could read as
+    // normalized.
     expect(detail.value.status).toBe('needs_review');
   });
 
@@ -136,8 +136,8 @@ describe('carriles', () => {
 
 describe('la nota y lo extraído no se pisan', () => {
   it('conserva tu nota después de transcribir el archivo', async () => {
-    // El modo de falla que la migración 003 existe para evitar: la primera
-    // transcripción se comía lo que habías escrito al mandar la foto.
+    // The failure mode the note/text split exists to prevent: the first transcript
+    // used to eat what you wrote when you sent the photo.
     stack.deps.converters = fakeConverters({ vision: fakeConverter(LARGO) });
 
     const res = await capture(stack.deps, actor, {
@@ -167,8 +167,8 @@ describe('la nota y lo extraído no se pisan', () => {
 
 describe('el criterio de F1', () => {
   it('encuentra una foto por lo que dice, no por cómo se llama', async () => {
-    // "Listo cuando: mandas la foto de una boleta y la encuentras buscando por
-    // lo que dice." El nombre del archivo es ruido de cámara a propósito.
+    // The real criterion: send a photo of a receipt and find it by what it says.
+    // The filename is camera noise on purpose.
     stack.deps.converters = fakeConverters({
       vision: fakeConverter('BOLETA · Ferretería El Roble · amoladora Bosch · $89.990 · 14/03/2026'),
     });
@@ -208,7 +208,7 @@ describe('reprocesar desde el original', () => {
     if (!antes.ok) throw new Error('no mostró');
     expect(antes.value.normalizationError).toContain('sin API key');
 
-    // Aparece la key. El blob nunca se tocó, así que se puede reprocesar entero.
+    // The key appears. The blob was never touched, so it can be reprocessed whole.
     stack.deps.converters = fakeConverters({ vision: fakeConverter('Paracetamol 500mg cada 8 horas') });
     const done = await reprocess(stack.deps, actor, { ref: res.value.id });
     expect(done.ok).toBe(true);
@@ -264,7 +264,7 @@ describe('reprocesar desde el original', () => {
   });
 
   it('no reprocesa memorias de otro dueño', async () => {
-    // Regla dura 9: sin excepciones y sin modo admin.
+    // Owner isolation: no exceptions and no admin mode.
     stack.deps.converters = fakeConverters({ vision: fakeConverter('secreto ajeno') });
     const suya = await capture(stack.deps, { ownerId: stack.otherOwnerId }, { bytes: jpegBytes, filename: 'x.jpg' });
     if (!suya.ok) throw new Error('no capturó');
@@ -278,8 +278,8 @@ describe('reprocesar desde el original', () => {
 
 describe('reprocesar nunca deja las cosas peor', () => {
   it('un carril caído no borra la transcripción que ya tenías', async () => {
-    // Si reprocesar pudiera empeorar el resultado, nadie reprocesaría nunca su
-    // histórico — y ahí "todo lo derivado es regenerable" deja de ser una red.
+    // If reprocessing could make the result worse, nobody would ever reprocess their
+    // history — and there "everything derived is regenerable" stops being a net.
     stack.deps.converters = fakeConverters({ vision: fakeConverter('Amoxicilina 500mg cada 8 horas por 7 días. ' + LARGO) });
     const res = await capture(stack.deps, actor, { bytes: jpegBytes, filename: 'receta.jpg' });
     if (!res.ok) throw new Error('no capturó');
@@ -290,7 +290,7 @@ describe('reprocesar nunca deja las cosas peor', () => {
     const detail = await show(stack.deps, actor, res.value.id);
     if (!detail.ok) throw new Error('no mostró');
     expect(detail.value.normalizedText).toContain('Amoxicilina');
-    // Pero el fallo sí queda anotado: se conserva el dato y se dice la verdad.
+    // The failure is still recorded: the datum is kept and the truth is told.
     expect(detail.value.normalizationError).toContain('la API está caída');
   });
 
@@ -312,7 +312,7 @@ describe('reprocesar nunca deja las cosas peor', () => {
 describe('una corrida fallida no degrada lo que ya había', () => {
   it('no reemplaza una transcripción buena por la basura de otro carril', async () => {
     // El caso real: la key vence, el reproceso saca 30 caracteres por el carril
-    // de documentos, y sin guarda esos 30 caracteres pisan la transcripción.
+    // lane, and with no guard those 30 characters overwrite the transcript.
     stack.deps.converters = fakeConverters({ vision: fakeConverter('Amoxicilina 500mg cada 8 horas. ' + LARGO) });
     const res = await capture(stack.deps, actor, { bytes: pdfBytes, filename: 'receta.pdf' });
     if (!res.ok) throw new Error('no capturó');
@@ -332,8 +332,8 @@ describe('una corrida fallida no degrada lo que ya había', () => {
   });
 
   it('conserva también de qué carril salió el texto que conservó', async () => {
-    // Quedarse con la transcripción pero marcarla `none` sería mentir sobre su
-    // origen, y dm reprocess --lane vision ya no la encontraría.
+    // Keeping the transcript but marking it as no lane would lie about its origin,
+    // and a lane-filtered reprocess could no longer find it.
     stack.deps.converters = fakeConverters({ vision: fakeConverter('transcripción buena ' + LARGO) });
     const res = await capture(stack.deps, actor, { bytes: jpegBytes, filename: 'receta.jpg' });
     if (!res.ok) throw new Error('no capturó');
@@ -354,8 +354,8 @@ describe('una corrida fallida no degrada lo que ya había', () => {
 
 describe('los selectores de reprocess', () => {
   it('rechaza las combinaciones que no pueden dar nada', async () => {
-    // "No hay nada que reprocesar" sería peor que un error: te irías tranquilo
-    // creyendo que está todo bien.
+    // "Nothing to reprocess" would be worse than an error: you would walk away
+    // believing everything is fine.
     for (const input of [{ pending: true, lane: 'vision' as const }, { pending: true, failed: true }]) {
       const res = await reprocess(stack.deps, actor, input);
       expect(res.ok).toBe(false);
@@ -382,10 +382,10 @@ describe('los selectores de reprocess', () => {
 
 describe('un fallo previo no explica un resultado posterior', () => {
   it('no marca error si un carril posterior sí leyó, aunque el texto sea corto', async () => {
-    // El caso real: una boleta chica leída perfecto por OCR son ~80 caracteres,
-    // menos que el umbral de "pobre" —que existe para detectar PDF sin capa de
-    // texto, no para juzgar boletas—. Sin la regla, quedaba marcada con "el
-    // carril document no está configurado", que además de falso manda a mirar
+    // The real case: a small receipt read perfectly by OCR is about 80 characters,
+    // below the "poor" threshold — which exists to detect PDFs with no text layer,
+    // not to judge receipts. Without the rule it stayed flagged as a lane not being
+    // configured, which is both false and sends you looking in the wrong place.
     // el lugar equivocado.
     stack.deps.converters = fakeConverters({ vision: fakeConverter('Boleta 88213 · Total $89.990') });
     const res = await capture(stack.deps, actor, { bytes: pdfBytes, filename: 'boleta.pdf' });
@@ -399,8 +399,8 @@ describe('un fallo previo no explica un resultado posterior', () => {
   });
 
   it('pero sí marca error si el carril que faltaba era el último', async () => {
-    // Acá el fallo sí explica el resultado: markitdown corrió, no trajo nada, y
-    // el carril que podía salvarlo no estaba.
+    // Here the failure does explain the result: the document lane ran, brought back
+    // nothing, and the lane that could have saved it was absent.
     stack.deps.converters = fakeConverters({ document: fakeConverter('') });
     const res = await capture(stack.deps, actor, { bytes: pdfBytes, filename: 'escaneo.pdf' });
     if (!res.ok) throw new Error('no capturó');
@@ -412,12 +412,12 @@ describe('un fallo previo no explica un resultado posterior', () => {
 });
 
 /**
- * La clasificación es parte de la tubería, no un comando aparte.
+ * Classification is part of the pipeline, not a separate command.
  *
- * Durante todo F2 no lo fue: `classifyMemory` existía y funcionaba, pero lo
- * llamaba únicamente `dm classify` a mano. Quince documentos entraron por
- * Telegram y quedaron normalizados, indexados y sin categoría, con `doctor` en
- * verde. La fase se dio por lista porque el comando andaba.
+ * For a whole phase it was not: the classifier existed and worked, but only the
+ * manual command ever called it. Fifteen documents arrived through chat and
+ * stayed normalized, indexed and uncategorized, with the health check green.
+ * The work was considered done because the command ran.
  */
 describe('clasificar es parte de guardar', () => {
   const fakeClassifier = (domain: string | null) => ({
@@ -433,7 +433,7 @@ describe('clasificar es parte de guardar', () => {
     await createDomain(stack.deps.db, actor, { label: 'Hogar', description: 'garantías y técnicos' });
   });
 
-  /** El slug de la categoría que quedó puesta, o null. */
+  /** The slug of the category that ended up set, or null. */
   const categoria = async (id: string): Promise<string | null> => {
     const { rows } = await stack.deps.db.query<{ slug: string }>(
       `select d.slug from memories m join domains d on d.id = m.domain_id where m.id = $1`, [id]);
@@ -455,8 +455,8 @@ describe('clasificar es parte de guardar', () => {
   });
 
   it('una nota suelta también se clasifica, aunque no tenga archivo', async () => {
-    // Salir temprano por "no hay blob" ya había dejado las notas fuera del
-    // índice una vez. El mismo camino no puede dejarlas sin categoría.
+    // Leaving early on "there is no blob" had already kept notes out of the index
+    // once. The same path cannot leave them uncategorized.
     stack.deps.classifier = fakeClassifier('hogar');
     const res = await capture(stack.deps, actor, { text: 'el gásfiter es Juan, +56 9 1234 5678' });
     if (!res.ok) throw new Error('no capturó');
@@ -465,8 +465,8 @@ describe('clasificar es parte de guardar', () => {
   });
 
   it('reprocesar NO pisa la categoría que ya tenía', async () => {
-    // Reprocesar mejora el texto; no revisa decisiones ya tomadas. Para
-    // reclasificar a propósito está `dm classify <id>`.
+    // Reprocessing improves the text; it does not revisit decisions already made.
+    // Reclassifying on purpose is its own command.
     stack.deps.classifier = fakeClassifier('seguros');
     const res = await capture(stack.deps, actor, {
       bytes: Buffer.from(LARGO), filename: 'poliza.txt',
@@ -480,7 +480,7 @@ describe('clasificar es parte de guardar', () => {
   });
 
   it('sin clasificador se guarda igual, solo que sin categoría', async () => {
-    // La captura nunca se bloquea por un servicio caído (§7).
+    // Capture is never blocked by a service being down.
     stack.deps.classifier = null;
     const res = await capture(stack.deps, actor, {
       bytes: Buffer.from(LARGO), filename: 'poliza.txt',

@@ -10,10 +10,10 @@ import { startStack, type TestStack } from '../helpers/stack';
 /**
  * Datos tipados (§4) y el modo hecho (§6).
  *
- * El modelo es falso y devuelve lo que el test le dice: lo que se prueba es la
- * validación, la supersesión y la diferencia entre `estado` y `periodo`. Nada
- * de eso depende de qué tan bueno sea el modelo, y probarlo contra uno real
- * sería probar el modelo.
+ * The model is fake and returns what the test tells it: what is tested is
+ * validation, supersession and the difference between state and period. None of
+ * that depends on how good the model is, and testing it against a real one would
+ * be testing the model.
  */
 let s: TestStack;
 let actor: Actor;
@@ -46,7 +46,7 @@ beforeEach(async () => {
   s.deps.classifier = null;
 });
 
-/** Guarda un texto y lo pone en un dominio, sin pasar por el clasificador. */
+/** Stores text and puts it in a domain, without going through the classifier. */
 const guardar = async (text: string, slug: string) => {
   const r = await capture(s.deps, actor, { text });
   if (!r.ok) throw new Error('no capturó');
@@ -75,12 +75,12 @@ describe('extraer', () => {
     const [f] = await listFacts(s.deps.db, actor);
     expect(f!.payload.deducible).toBe(3);
     expect(f!.payload.patente).toBe('VHWD58');
-    // La vigencia sale de los campos que el registro declara, no hardcodeada.
+    // The validity comes from the fields the registry declares, not hardcoded.
     expect(f!.validFrom?.toISOString().slice(0, 10)).toBe('2026-07-29');
   });
 
   it('DESCARTA un campo que el documento no dice, y guarda el resto', async () => {
-    // Es lo que separa un dato extraído de una alucinación con buen formato.
+    // It is what separates an extracted datum from a well-formatted hallucination.
     const id = await guardar(POLIZA, 'seguros');
     s.deps.classifier = modelo({
       aplica: true,
@@ -96,9 +96,9 @@ describe('extraer', () => {
   });
 
   it('sin el campo identidad no es de ese tipo', async () => {
-    // Sobre el corpus real, una liquidación de siniestro y un certificado de
-    // cobertura se tipificaban como póliza aunque la descripción los excluía.
-    // Un modelo chico lee esa exclusión y la ignora; un `if` no.
+    // On the real corpus, a claim report and a coverage certificate both typed as a
+    // policy though the description excluded them by name. A small model reads that
+    // exclusion and ignores it; an `if` does not.
     const id = await guardar('Informe de liquidación. Deducible UF 3,0 aplicado.', 'seguros');
     s.deps.classifier = modelo({ aplica: true, campos: { deducible: '3,0' } });
     const r = await extractFacts(s.deps, actor, id);
@@ -116,8 +116,8 @@ describe('extraer', () => {
   });
 
   it('solo se intentan los tipos de ese dominio', async () => {
-    // Una boleta del supermercado no tiene por qué pasar por el extractor de
-    // pólizas: el filtro por dominio es lo que hace barato el mecanismo.
+    // A supermarket receipt has no business passing through the policy extractor:
+    // the domain filter is what makes the mechanism cheap.
     let llamadas = 0;
     const id = await guardar(POLIZA, 'salud');
     s.deps.classifier = {
@@ -149,20 +149,20 @@ describe('estado y periodo no se tratan igual', () => {
     expect(vivos).toHaveLength(1);
     expect(vivos[0]!.validFrom?.toISOString().slice(0, 10)).toBe('2023-01-01');
 
-    // La vieja no se borró: sigue respondiendo "¿qué cubría antes?".
+    // The old one was not deleted: it still answers "what did it cover before?".
     expect(await listFacts(s.deps.db, actor, { includeSuperseded: true })).toHaveLength(2);
   });
 
   it('dos vigencias que se solapan son un CONFLICTO, no una sucesión', async () => {
-    // Regla dura 3: se muestran las dos y jamás se elige una en silencio.
+    // Both are shown and one is never chosen silently.
     await guardarPoliza('VHWD58', '01-01-2023', '01-01-2027');
     await guardarPoliza('VHWD58', '01-01-2026', '01-01-2029');
     expect(await listFacts(s.deps.db, actor)).toHaveLength(2);
   });
 
   it('una cartola NO supera a la del mes anterior', async () => {
-    // La de julio sigue siendo la verdad sobre julio, para siempre. Sin la
-    // distinción `periodo`, agosto la habría marcado superada.
+    // July's is still the truth about July, permanently. Without the period
+    // distinction, August would have marked it superseded.
     for (const [desde, hasta] of [['24/06/2026', '21/07/2026'], ['24/07/2026', '21/08/2026']]) {
       const id = await guardar(`TARJETA XXXXX4005\nPERIODO FACTURADO ${desde} al ${hasta}`, 'finanzas');
       s.deps.classifier = modelo({
@@ -185,19 +185,19 @@ describe('el modo hecho responde', () => {
   });
 
   it('calza conjugaciones, no solo la palabra exacta', async () => {
-    // "cuánto PAGA mi tarjeta" no calzaba con el alias `pagar`. Pedirle a quien
-    // define un tipo que enumere pagar/paga/pago/pagos es pedirle que conjugue.
+    // A conjugated form did not match the infinitive alias. Asking whoever defines a
+    // type to enumerate every form is asking them to conjugate.
     const types = await listFactTypes(s.deps.db, actor);
     for (const q of ['cuanto paga la tarjeta', 'cuanto pago', 'cuanto tengo que pagar']) {
       expect(matchFields(q, types).map((r) => r.field.name), q).toContain('monto_a_pagar');
     }
-    // Y "vence" tiene que llegar a "vencimiento", que ninguna raíz junta.
+    // And a short form has to reach its long noun, which no stem joins.
     expect(matchFields('cuando vence', types).map((r) => r.field.name)).toContain('pagar_hasta');
   });
 
   it('no confunde palabras que solo comparten dos letras', async () => {
     const types = await listFactTypes(s.deps.db, actor);
-    // `tasa` y `tarjeta` empiezan igual y no son lo mismo.
+    // Two words starting alike are not the same word.
     expect(matchFields('de que tarjeta', types).map((r) => r.field.name)).not.toContain('tasa');
   });
 
@@ -222,8 +222,8 @@ describe('el modo hecho responde', () => {
   });
 
   it('marca vencido lo que ya no vale, sin ocultarlo', async () => {
-    // Regla dura 10: se dice ANTES del dato. Que sea un booleano y no prosa es
-    // lo que permite comprobar el orden en los dos canales.
+    // Said BEFORE the datum. Being a boolean and not prose is what lets the order be
+    // checked in both channels.
     const id = await guardar(
       'Póliza N° X · Patente ABCD12 · Deducible UF 9,0 · 01-01-2020 a 01-01-2021', 'seguros');
     s.deps.classifier = modelo({

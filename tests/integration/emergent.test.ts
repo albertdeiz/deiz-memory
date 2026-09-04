@@ -6,11 +6,11 @@ import type { Actor } from '../../src/core/domain/types';
 import { startStack, type TestStack } from '../helpers/stack';
 
 /**
- * Dominios emergentes (§9): que no tengas que anticipar tus propias categorías.
+ * Emergent domains: so you do not have to anticipate your own categories.
  *
- * Con la regla dura encima: **el bot propone, nunca crea solo**. Que proponer y
+ * With one hard rule on top: **the bot proposes, it never creates on its own.**
  * aceptar sean dos operaciones distintas no es prolijidad, es la regla escrita
- * en la forma del código — proponer no puede escribir nada.
+ * in the shape of the code — proposing cannot write anything.
  */
 let s: TestStack;
 let actor: Actor;
@@ -20,11 +20,11 @@ afterAll(async () => { await s.close(); });
 beforeEach(async () => {
   await s.reset();
   actor = { ownerId: s.ownerId };
-  // Sin dominios sembrados, para partir de una base predecible.
+  // No seeded domains, to start from a predictable base.
   await s.deps.db.query('delete from domains where owner_id = $1', [s.ownerId]);
 });
 
-/** Una memoria ya clasificada con etiquetas, pero sin dominio. */
+/** A memory already tagged by the classifier, but with no domain. */
 const conTags = async (title: string, tags: string[]) => {
   const r = await capture(s.deps, actor, { text: title, title });
   if (!r.ok) throw new Error('no capturó');
@@ -60,8 +60,8 @@ describe('propose', () => {
   });
 
   it('no propone lo que ya cubre un dominio activo', async () => {
-    // Si "seguros" ya existe y su descripción habla de pólizas, proponer
-    // "Poliza" sería justo la proliferación que §9 quiere evitar.
+    // If a category already exists and its description covers this, proposing a
+    // near-duplicate would be exactly the proliferation to avoid.
     await createDomain(s.deps.db, actor, {
       label: 'Seguros', description: 'Pólizas de auto y hogar, coberturas y deducibles', confirm: true,
     });
@@ -73,8 +73,8 @@ describe('propose', () => {
   });
 
   it('una memoria cae en un solo racimo, en el más grande', async () => {
-    // Sin esto, "webdox" y "corporativo" propondrían dos categorías para las
-    // mismas cosas y tendrías que elegir entre duplicados.
+    // Without this, two overlapping tags would propose two categories for the same
+    // things and you would have to choose between duplicates.
     for (const n of [1, 2, 3, 4] as const) await conTags(`W ${n}`, ['webdox', 'corporativo']);
     const r = await proposeDomains(s.deps, actor);
     if (!r.ok) throw new Error('falló');
@@ -122,8 +122,8 @@ describe('aceptar', () => {
   });
 
   it('deja cambiar el nombre y la descripción antes de aceptar', async () => {
-    // La descripción sugerida es un punto de partida: es el prompt del
-    // clasificador, así que conviene poder mejorarla antes de que mande.
+    // The suggested description is a starting point: it is the classifier's prompt,
+    // so being able to improve it before it takes effect matters.
     for (const n of [1, 2, 3]) await conTags(`Wallpaper ${n}`, ['webdox']);
     const r = await proposeDomains(s.deps, actor);
     if (!r.ok || !r.value[0]) throw new Error('sin propuesta');

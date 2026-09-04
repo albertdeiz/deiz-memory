@@ -6,17 +6,17 @@ import { fakeConverters } from '../helpers/converters';
 import { startStack, type TestStack } from '../helpers/stack';
 
 /**
- * Recuperación híbrida y respuesta con cita (§6, reglas duras 1 y 2).
+ * Hybrid retrieval and answering with a citation.
  *
- * El embedder es falso y determinista a propósito: lo que se prueba es que el
- * filtro estructurado recorte primero, que los dos caminos se fusionen, y que
- * una respuesta sin cita NO se muestre. Nada de eso depende de qué tan bueno
- * sea el modelo, y probarlo contra uno real sería probar el modelo.
+ * The embedder is fake and deterministic on purpose: what is tested is that the
+ * structured filter cuts first, that the two paths fuse, and that an answer with
+ * no citation is NOT shown. None of that depends on how good the model is, and
+ * testing it against a real one would be testing the model.
  */
 let s: TestStack;
 let actor: Actor;
 
-/** Vector determinista: mismo texto, mismo vector; textos parecidos, parecidos. */
+/** Deterministic vector: same text, same vector; similar texts, similar vectors. */
 const fakeEmbedder = (): Embedder => ({
   dimensions: 768,
   async embed(texts) {
@@ -73,8 +73,8 @@ describe('recuperación híbrida', () => {
   });
 
   it('una pregunta no exige TODAS sus palabras', async () => {
-    // El caso medido sobre una póliza real: el párrafo que responde dice
-    // "deducible" y no dice "auto". Con AND daba cero resultados.
+    // The case measured on a real policy: the paragraph that answers says
+    // "deductible" and does not say "car". With AND it returned zero results.
     await guardar('DEDUCIBLE INTELIGENTE: el deducible establecido es de 3 UF');
 
     const r = await retrieve(s.deps, actor, { query: '¿cuál es el deducible de mi seguro de auto?' });
@@ -121,9 +121,9 @@ describe('recuperación híbrida', () => {
   });
 
   it('un documento con varios trozos que calzan figura UNA vez en las fuentes', async () => {
-    // Recuperar por trozo es correcto —el modelo necesita el párrafo—, pero
+    // Retrieving per chunk is right — the model needs the paragraph — but showing
     // presentarlo por trozo es mentira de interfaz: en el chat "ver 1", "ver 2"
-    // y "ver 3" abrían el mismo archivo.
+    // and "view 3" opened the same file.
     const parrafo = (n: number) => `El deducible de la sección ${n} es relevante. ${'x'.repeat(900)}`;
     await guardar([parrafo(1), parrafo(2), parrafo(3)].join('\n\n'));
     const r = await answer(s.deps, actor, { query: 'deducible' });
@@ -149,21 +149,21 @@ describe('responder con cita (regla dura 1)', () => {
     s.deps.classifier = fakeClassifier('El deducible es de 5 UF por siniestro [1].');
     const r = await answer(s.deps, actor, { query: 'deducible', synthesize: true });
     if (!r.ok) throw new Error('falló');
-    // La cita apunta a un id abrible, no a un número que no significa nada
-    // media hora después.
+    // The citation points at an openable id, not a number that means nothing half
+    // an hour later.
     expect(r.value.text).toMatch(/\[[0-9a-f]{8}\]/);
     expect(r.value.reason).toBeNull();
   });
 
   it('DESCARTA una respuesta sin cita, aunque suene bien', async () => {
-    // Es la regla dura 1 verificada en código y no confiada al prompt: sin
+    // Verified in code and not trusted to the prompt: with no verifiable backing a
     // respaldo verificable no se muestra un dato factual.
     s.deps.classifier = fakeClassifier('El deducible es de 5 UF por siniestro.');
     const r = await answer(s.deps, actor, { query: 'deducible', synthesize: true });
     if (!r.ok) throw new Error('falló');
     expect(r.value.text).toBeNull();
     expect(r.value.reason).toBe('no_citation');
-    // Pero los pasajes sí se muestran: son verdad verificable.
+    // The passages are still shown: they are verifiable truth.
     expect(r.value.sources.length).toBeGreaterThan(0);
   });
 
@@ -185,9 +185,9 @@ describe('responder con cita (regla dura 1)', () => {
   });
 
   it('DESCARTA una cifra que no está en los pasajes, aunque la cita sea válida', async () => {
-    // El fallo real que motivó esto: la cita apuntaba a un documento que existe
-    // y el número no estaba en ninguna parte de lo que el modelo leyó. Una
-    // respuesta así es MÁS creíble que una sin cita, y por eso es la peor.
+    // The real failure behind this: the citation pointed at a document that exists
+    // and the number was nowhere in what the model read. An answer like that is
+    // MORE believable than one with no citation, which is why it is the worst.
     s.deps.classifier = fakeClassifier('El deducible es de 12 UF por siniestro [1].');
     const r = await answer(s.deps, actor, { query: 'deducible', synthesize: true });
     if (!r.ok) throw new Error('falló');
@@ -197,8 +197,8 @@ describe('responder con cita (regla dura 1)', () => {
   });
 
   it('la misma cifra escrita distinto sí pasa', async () => {
-    // "UF 5,0" en el documento y "5 UF" en la respuesta son el mismo dato. Sin
-    // normalizar, este guardarraíl descartaría justo las respuestas correctas.
+    // The same figure written two ways is the same datum. Without normalizing,
+    // this guard would discard precisely the correct answers.
     await guardar('cobertura de sismo con deducible UF 5,0 por evento');
     s.deps.classifier = fakeClassifier('El deducible es de 5 UF [1].');
     const r = await answer(s.deps, actor, { query: 'deducible', synthesize: true });
@@ -217,23 +217,23 @@ describe('responder con cita (regla dura 1)', () => {
 });
 
 /**
- * Buscar con todos los términos, rankear con los que discriminan.
+ * Match on every term, rank on the ones that discriminate.
  *
- * El OR de una pregunta es correcto —exigir todas las palabras descarta el
- * párrafo que responde— pero rankear con OR le da crédito completo a las
- * palabras que solo dicen de qué documento hablamos, y esas están en todas sus
- * páginas. Medido sobre una póliza real: `seguro` en el 16% de los trozos y
- * `vehiculo` en el 15%, contra el 4% de `deducible`. El trozo que traía la
- * cifra quedaba séptimo, y el modelo solo lee los primeros.
+ * OR-ing a question is right — requiring every word discards the paragraph that
+ * answers — but ranking with OR gives full credit to the words that only say
+ * which document we are talking about, and those are on every page of it.
+ * Measured on a real policy: two topic words in 15-16% of the chunks against 4%
+ * for the discriminating one. The chunk carrying the figure came seventh, and
+ * the model only reads the first few.
  */
 describe('las palabras de tema no deciden el orden', () => {
   beforeEach(async () => {
-    // Nueve trozos saturados de las palabras de tema y sin ningún dato. Es lo
-    // que hace una póliza: cada página repite "seguro" y "vehículo".
+    // Nine chunks saturated with the topic words and carrying no datum. It is what a
+    // policy does: every page repeats the same two words.
     for (let i = 1; i <= 9; i++) {
       await guardar(`Clausula ${i}. ${'El seguro del vehiculo asegurado. '.repeat(12)}`);
     }
-    // ...y uno que las menciona UNA vez y trae el dato que responde.
+    // ...and one that mentions them ONCE and carries the datum that answers.
     await guardar('Tabla de coberturas del seguro de vehiculo: deducible UF 3,0 por siniestro.');
   });
 
@@ -252,7 +252,7 @@ describe('las palabras de tema no deciden el orden', () => {
   });
 
   it('si todas son igual de comunes, siguen contando todas', async () => {
-    // Sin esto, un umbral mal puesto dejaría la query sin términos.
+    // Without this, a badly placed threshold would leave the query with no terms.
     const r = await retrieve(s.deps, actor, { query: 'seguro vehiculo' });
     if (!r.ok) throw new Error('falló');
     expect(r.value.length).toBeGreaterThan(0);

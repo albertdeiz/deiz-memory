@@ -34,10 +34,10 @@ const pair = async () => {
 };
 
 /**
- * `dm chat` habla por un canal que declara `supportsButtons: false`, así que
+ * The CLI chat speaks through a channel declaring no button support, so every
  * cada corrida de estos tests ejercita la rama degradada de §7.1 de punta a
  * punta. Es el pago concreto de haber construido el canal falso antes que el
- * de verdad: la promesa de "no horneamos las asunciones de un canal" se
+ * run exercises the degraded branch end to end. The promise of "we do not bake
  * comprueba sola.
  */
 describe('conversación completa por CLI', () => {
@@ -54,7 +54,7 @@ describe('conversación completa por CLI', () => {
 
     expect((await dm(['chat', '/capture el mecánico es Juan Pérez de Ñuñoa'])).out).toContain('Guardado');
 
-    // Sin tildes, como escribe la gente en un teléfono.
+    // Unaccented, the way people type on a phone.
     const buscado = await dm(['chat', '/search mecanico']);
     expect(buscado.out).toContain('1–1');
     expect(buscado.out).toContain('Juan');
@@ -66,7 +66,7 @@ describe('conversación completa por CLI', () => {
 
     const p1 = await dm(['chat', '/search poliza']);
     expect(p1.out).toContain('1–5');
-    // La lista numerada aparece porque el canal no tiene botones.
+    // The numbered list appears because the channel has no buttons.
     expect(p1.out).toContain('more');
 
     const p2 = await dm(['chat', 'more']);
@@ -84,7 +84,7 @@ describe('conversación completa por CLI', () => {
     await pair();
     await dm(['chat', '/capture mi póliza secreta']);
 
-    // Otro id de canal, sin parear: ni siquiera llega a buscar.
+    // Another channel id, unpaired: it does not even reach the search.
     const intruso = await dm(['chat', '--as', 'intruso', '/search poliza']);
     expect(intruso.out).toContain('No te conozco');
     expect(intruso.out).not.toContain('secreta');

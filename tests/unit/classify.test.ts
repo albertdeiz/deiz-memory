@@ -9,8 +9,8 @@ const dominios: Domain[] = [
 
 describe('el prompt se arma desde la tabla', () => {
   it('incluye las descripciones, que son lo que el modelo lee para decidir', () => {
-    // §9: la descripción no es documentación, es el prompt. Si esto dejara de
-    // pasar, crear un dominio no cambiaría nada del comportamiento.
+    // The description is not documentation, it is the prompt. If this stopped
+    // holding, creating a domain would change nothing about the behaviour.
     const { system } = buildPrompt({
       domains: dominios, text: 'algo', note: null, filename: null, capturedAt: new Date(),
     });
@@ -19,7 +19,7 @@ describe('el prompt se arma desde la tabla', () => {
   });
 
   it('no tiene ninguna categoría escrita a mano', () => {
-    // El día que alguien meta una lista fija acá, agregar un dominio va a
+    // The day someone puts a fixed list here, adding a domain will
     // requerir un deploy y §3.7 se cae.
     const { system } = buildPrompt({
       domains: [], text: 'algo', note: null, filename: null, capturedAt: new Date(),
@@ -72,8 +72,8 @@ describe('validar lo que devolvió el modelo', () => {
   });
 
   it('sin título no hay clasificación', () => {
-    // El título es el punto entero: sin él, media biblioteca no tiene cómo
-    // nombrarse. Una respuesta sin título no sirve de nada.
+    // The title is the whole point: without it, half the library has no way to be
+    // named. A response with no title is worth nothing.
     expect(validate({ ...ok, title: '   ' }, dominios)).toBeNull();
     expect(validate({ ...ok, title: 42 }, dominios)).toBeNull();
   });
@@ -83,7 +83,7 @@ describe('validar lo que devolvió el modelo', () => {
       { ...ok, tags: ['Receta', 'X', 'MÉDICO', 42, 'isapre', 'bono', 'reembolso', 'extra'] },
       dominios,
     );
-    // 'X' se cae por corta y el 42 por no ser texto; el resto baja a minúsculas
+    // The short one is dropped for length and the number for not being text; the
     // y se corta en cinco.
     expect(r?.tags).toEqual(['receta', 'médico', 'isapre', 'bono', 'reembolso']);
   });

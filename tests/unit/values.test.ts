@@ -35,7 +35,7 @@ describe('coerce · la forma canónica', () => {
   });
 });
 
-/** Un campo mínimo: solo el `kind` importa salvo que se prueben los rótulos. */
+/** A minimal field: only the kind matters unless the labels are being tested. */
 const campo = (kind: 'text'|'number'|'uf'|'money'|'date'|'phone', over = {}) =>
   ({ name: 'x', kind, label: 'x', aliases: [], ...over });
 
@@ -57,7 +57,7 @@ describe('grounded · que el documento lo diga', () => {
   });
 
   it('un número de póliza con separadores distintos igual calza', () => {
-    // El documento dice "B-VP- 9344586-4"; el modelo limpia los espacios.
+    // The document has separators the model strips out.
     expect(grounded('B-VP-9344586-4', campo('text'), poliza)).toBe(true);
   });
 
@@ -71,12 +71,12 @@ describe('grounded · que el documento lo diga', () => {
 });
 
 /**
- * El rótulo, no solo la cifra.
+ * The label, not just the figure.
  *
- * Una cartola real trae las dos: `MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR)
- * $886.568` y `MONTO TOTAL FACTURADO A PAGAR $1.747.885`. Las dos cifras están
- * en el documento y las dos pasaban el chequeo — y la respuesta era la del mes
- * pasado, con toda la confianza del mundo.
+ * A real statement carries both rows: one for the previous period and one for
+ * the current total. Both figures are in the document and both passed the check
+ * — and the answer was last month's, with complete confidence.
+ * 
  */
 describe('grounded · bajo qué rótulo', () => {
   const cartola = [
@@ -100,7 +100,7 @@ describe('grounded · bajo qué rótulo', () => {
   });
 
   it('basta con que UNA ocurrencia esté bien rotulada', () => {
-    // 1.747.885 aparece dos veces: bajo "total facturado" y bajo "mínimo".
+    // The figure appears twice: under the total and under the minimum payment.
     // La segunda no descalifica a la primera.
     expect(grounded(1747885, monto, cartola)).toBe(true);
   });
@@ -111,12 +111,12 @@ describe('grounded · bajo qué rótulo', () => {
 });
 
 /**
- * Qué parte del documento ve el extractor.
+ * Which part of the document the extractor sees.
  *
- * En una cartola real el `MONTO TOTAL FACTURADO A PAGAR` estaba en el carácter
- * 6157 y el recorte era 6000: el modelo nunca vio la cifra correcta y devolvió
- * la del período anterior, que sí entraba. Ciento cincuenta y siete caracteres
- * separaban una respuesta buena de una mentira con formato.
+ * In a real statement the correct total sat at character 6157 and the cut was at
+ * 6000: the model never saw the right figure and returned the previous period's,
+ * which did fit. A hundred and fifty-seven characters separated a good answer
+ * from a well-formatted lie.
  */
 describe('el contexto del extractor', () => {
   const tipo = {

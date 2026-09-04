@@ -5,9 +5,9 @@ export interface FakeConverter extends Converter {
 }
 
 /**
- * Un carril de mentira, para probar el *router* sin markitdown, sin API key y
- * sin whisper. Lo que se prueba acá es la regla de §8.1 —cuál se intenta, cuándo
- * se cae al siguiente— que es lógica del producto; que markitdown sepa leer un
+ * A fake lane, to test the *router* with no converter service, no API key and no
+ * speech server. What is tested here is the rule — which lane is tried, when it
+ * falls to the next — which is product logic; whether a converter can read a
  * docx es problema de markitdown.
  */
 export function fakeConverter(
@@ -31,7 +31,7 @@ export function fakeConverter(
   };
 }
 
-/** Por defecto no hay ningún carril externo: solo el de texto, que es del core. */
+/** By default there is no external lane: only the text one, which is the core's. */
 export const fakeConverters = (over: Partial<Converters> = {}): Converters => ({
   document: null,
   vision: null,

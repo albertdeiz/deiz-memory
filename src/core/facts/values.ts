@@ -2,29 +2,28 @@ import { normalizeNumber } from '../recall/grounding';
 import type { FactField, FactValue, FieldKind } from './types';
 
 /**
- * Validar un valor extraído, y comprobar que de verdad esté en el documento.
+ * Validating an extracted value, and checking it is really in the document.
  *
- * Son dos cosas distintas y las dos hacen falta. La primera es de forma: una
- * fecha que no es fecha, un número que no es número. La segunda es la que
- * importa: **que el modelo no lo haya inventado.** Es el mismo principio que
- * `grounding.ts` aplica a la prosa de una respuesta (§6), movido al momento de
- * extraer — que es más barato y se hace una sola vez.
+ * Two different things, and both are needed. The first is shape: a date that is
+ * not a date, a number that is not a number. The second is the one that matters:
+ * **that the model did not invent it.** Same principle the answer path applies
+ * to prose, moved to extraction time — cheaper, and done once.
  *
- * Lógica pura: se prueba sin base, sin red y sin modelo.
+ * Pure logic: tested with no database, no network and no model.
  */
 
-const sinTildes = (s: string): string =>
+const withoutAccents = (s: string): string =>
   s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-/** Solo los dígitos. Un teléfono se escribe de seis formas distintas. */
+/** Digits only. A phone number is written six different ways. */
 const digits = (s: string): string => s.replace(/\D/g, '');
 
 /**
- * Una fecha, venga como venga.
+ * A date, however it arrives.
  *
- * Los documentos chilenos escriben `07/09/2026` y el modelo devuelve
- * `2026-09-07`. Sin normalizar las dos a lo mismo, el chequeo de que el dato
- * está en el texto descartaría justo los valores correctos.
+ * Local documents write `07/09/2026` and the model returns `2026-09-07`. Without
+ * normalizing both to the same thing, the check that the datum is in the text
+ * would discard precisely the correct values.
  */
 export function normalizeDate(raw: string): string | null {
   const s = raw.trim();
@@ -39,7 +38,7 @@ export function normalizeDate(raw: string): string | null {
   return null;
 }
 
-/** Una fecha válida de verdad: 2026-02-31 pasa la regex y no existe. */
+/** An actually valid date: 2026-02-31 passes the regex and does not exist. */
 const realDate = (iso: string): boolean => {
   const [y, m, d] = iso.split('-').map(Number);
   const dt = new Date(Date.UTC(y!, m! - 1, d!));
@@ -47,10 +46,10 @@ const realDate = (iso: string): boolean => {
 };
 
 /**
- * Deja el valor en su forma canónica, o null si no es de este tipo.
+ * Leaves the value in canonical form, or null when it is not of this kind.
  *
- * Los números vuelven como número y las fechas como ISO, así que lo que se
- * guarda en el `payload` ya está listo para comparar y para ordenar.
+ * Numbers come back as numbers and dates as ISO, so what lands in the payload is
+ * already ready to compare and to sort.
  */
 export function coerce(raw: unknown, kind: FieldKind): FactValue | null {
   if (raw === null || raw === undefined) return null;
@@ -79,37 +78,25 @@ export function coerce(raw: unknown, kind: FieldKind): FactValue | null {
   }
 }
 
-/**
- * ¿Este valor está en el documento?
- *
- * No se compara carácter a carácter: un monto que el PDF escribe `$886.568` y
- * el modelo devuelve `886568` es el mismo dato, y una fecha `07/09/2026` es la
- * misma que `2026-09-07`. Se compara **el valor normalizado contra todas las
- * formas en que el documento pudo escribirlo**.
- *
- * Un campo que no pasa por acá no se guarda. Es lo que separa "el modelo dijo"
- * de "el documento dice".
- */
-/** Tope de contexto hacia atrás, cuando la fila es larguísima. */
-const VENTANA = 200;
+/** Cap on how far back to look, for absurdly long rows. */
+const WINDOW = 200;
 
 /**
- * Cada trozo del documento donde aparece este valor, con su rótulo.
+ * Every place in the document where this value appears, with its label.
  *
- * **El contexto se corta en el salto de línea**, y eso no es un detalle de
- * implementación: markitdown deja cada fila de una tabla en su propia línea, así
- * que el rótulo de un valor es lo que está a su izquierda *en esa fila*. Con una
- * ventana que cruzaba líneas, el `MONTO TOTAL FACTURADO A PAGAR` se contaminaba
- * con el `PERÍODO ANTERIOR` de la fila de arriba y quedaba descalificado el
- * valor bueno.
+ * **The context is cut at the line break**, and that is not an implementation
+ * detail: the document converter leaves each table row on its own line, so a
+ * value's label is whatever sits to its left *in that row*. With a window that
+ * crossed lines, the correct total was contaminated by the "previous period" of
+ * the row above and the good value got disqualified.
  */
-function occurrences(value: FactValue, kind: FieldKind, texto: string): string[] {
-  const ventanas: string[] = [];
+function occurrences(value: FactValue, kind: FieldKind, text: string): string[] {
+  const windows: string[] = [];
   const push = (i: number, len: number) => {
-    const salto = texto.lastIndexOf('\n', i);
-    const desde = Math.max(salto + 1, i - VENTANA, 0);
-    const fin = texto.indexOf('\n', i + len);
-    ventanas.push(texto.slice(desde, fin === -1 ? i + len + 40 : fin));
+    const lineStart = text.lastIndexOf('\n', i);
+    const from = Math.max(lineStart + 1, i - WINDOW, 0);
+    const end = text.indexOf('\n', i + len);
+    windows.push(text.slice(from, end === -1 ? i + len + 40 : end));
   };
 
   switch (kind) {
@@ -119,69 +106,69 @@ function occurrences(value: FactValue, kind: FieldKind, texto: string): string[]
       const mm = String(Number(m));
       for (const f of [`${y}-${m}-${d}`, `${d}/${m}/${y}`, `${dd}/${mm}/${y}`,
                        `${d}-${m}-${y}`, `${dd}-${mm}-${y}`, `${d}.${m}.${y}`]) {
-        let i = texto.indexOf(f);
-        while (i >= 0) { push(i, f.length); i = texto.indexOf(f, i + 1); }
+        let i = text.indexOf(f);
+        while (i >= 0) { push(i, f.length); i = text.indexOf(f, i + 1); }
       }
-      return ventanas;
+      return windows;
     }
     case 'phone': {
-      // El documento lo parte con espacios y guiones, así que no hay índice
-      // fiable: se acepta el documento entero como contexto.
-      return digits(texto).includes(digits(String(value))) ? [texto] : [];
+      // Documents split it with spaces and dashes, so there is no reliable
+      // index: the whole document is accepted as context.
+      return digits(text).includes(digits(String(value))) ? [text] : [];
     }
     case 'number':
     case 'uf':
     case 'money': {
-      const objetivo = normalizeNumber(String(value));
-      for (const m of texto.matchAll(/\d[\d.,]*\d|\d/g)) {
-        if (normalizeNumber(m[0]) === objetivo) push(m.index, m[0].length);
+      const target = normalizeNumber(String(value));
+      for (const m of text.matchAll(/\d[\d.,]*\d|\d/g)) {
+        if (normalizeNumber(m[0]) === target) push(m.index, m[0].length);
       }
-      return ventanas;
+      return windows;
     }
     case 'text': {
-      const v = sinTildes(String(value)).replace(/\s+/g, ' ').trim();
+      const v = withoutAccents(String(value)).replace(/\s+/g, ' ').trim();
       if (v.length < 2) return [];
-      let i = texto.indexOf(v);
-      while (i >= 0) { push(i, v.length); i = texto.indexOf(v, i + 1); }
-      if (ventanas.length === 0) {
-        const limpio = (t: string) => t.replace(/[\s.\-/]/g, '');
-        if (limpio(texto).includes(limpio(v))) return [texto];
+      let i = text.indexOf(v);
+      while (i >= 0) { push(i, v.length); i = text.indexOf(v, i + 1); }
+      if (windows.length === 0) {
+        const bare = (t: string) => t.replace(/[\s.\-/]/g, '');
+        if (bare(text).includes(bare(v))) return [text];
       }
-      return ventanas;
+      return windows;
     }
   }
 }
 
 /**
- * ¿Este valor está en el documento, y **bajo el rótulo correcto**?
+ * Is this value in the document, and **under the right label**?
  *
- * No se compara carácter a carácter: un monto que el PDF escribe `$886.568` y
- * el modelo devuelve `886568` es el mismo dato, y `07/09/2026` es la misma
- * fecha que `2026-09-07`. Se compara el valor normalizado contra todas las
- * formas en que el documento pudo escribirlo.
+ * Not compared character by character: an amount the PDF writes as `$886.568`
+ * and the model returns as `886568` is the same datum, and `07/09/2026` is the
+ * same date as `2026-09-07`. The normalized value is compared against every
+ * form the document might have written it in.
  *
- * **Y después se mira alrededor**, que es la parte que costó descubrir. Una
- * cartola trae `MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR) $886.568` y
- * `MONTO TOTAL FACTURADO A PAGAR $1.747.885`: las dos cifras existen, las dos
- * pasaban el chequeo, y la respuesta era la del mes pasado. Que el rótulo del
- * señuelo contenga al del bueno es lo que hace que `notNear` sea la mitad
- * indispensable — lo que los separa no es lo que tienen, es lo que sobra.
+ * **And then the surroundings are checked**, which is the part that took work
+ * to find. A card statement carries `MONTO FACTURADO A PAGAR (PERÍODO ANTERIOR)
+ * $886.568` and `MONTO TOTAL FACTURADO A PAGAR $1.747.885`: both figures exist,
+ * both passed the check, and the answer was last month's. The decoy's label
+ * containing the good one is what makes `notNear` the indispensable half — what
+ * separates them is not what they share but what is extra.
  *
- * Un campo sin `near` ni `notNear` se comporta como antes: basta que el valor
- * esté. La mayoría no necesita más.
+ * A field with neither `near` nor `notNear` behaves as before: the value merely
+ * has to be present. Most fields need nothing more.
  */
 export function grounded(value: FactValue, field: FactField, source: string): boolean {
-  const texto = sinTildes(source);
-  const ventanas = occurrences(value, field.kind, texto);
-  if (ventanas.length === 0) return false;
+  const text = withoutAccents(source);
+  const windows = occurrences(value, field.kind, text);
+  if (windows.length === 0) return false;
 
-  const near = (field.near ?? []).map(sinTildes);
-  const notNear = (field.notNear ?? []).map(sinTildes);
+  const near = (field.near ?? []).map(withoutAccents);
+  const notNear = (field.notNear ?? []).map(withoutAccents);
   if (near.length === 0 && notNear.length === 0) return true;
 
-  // Basta con que UNA ocurrencia esté bien rotulada: el mismo número puede
-  // aparecer diez veces y solo una ser la que responde.
-  return ventanas.some((v) =>
+  // ONE well-labelled occurrence is enough: the same number can appear ten times
+  // and only one of them be the one that answers.
+  return windows.some((v) =>
     (near.length === 0 || near.some((n) => v.includes(n))) &&
     !notNear.some((n) => v.includes(n)),
   );

@@ -40,11 +40,11 @@ export async function listFactTypes(
 }
 
 /**
- * Los tipos que vale la pena intentar sobre una memoria de este dominio.
+ * The types worth trying on a memory in this domain.
  *
- * El filtro por dominio es lo que evita llamar al modelo sobre cada memoria
- * para descubrir que no aplica: una boleta del supermercado no tiene por qué
- * pasar por el extractor de pólizas.
+ * The domain filter is what avoids calling the model on every memory just to
+ * learn it does not apply: a supermarket receipt has no business passing through
+ * the policy extractor.
  */
 export async function typesForDomain(
   db: Db,
@@ -71,12 +71,12 @@ export async function findFactType(db: Db, actor: Actor, ref: string): Promise<F
 }
 
 /**
- * Los dos tipos semilla, sacados de documentos reales del corpus.
+ * The two seed types, drawn from real documents in the corpus.
  *
- * `poliza_auto` es `estado` —hay una vigente— y `tarjeta_credito` es `periodo`
- * —la de agosto no reemplaza a la de julio—. Están los dos desde el principio a
- * propósito: un solo tipo dejaría la rama de `periodo` sin ejercitar, y es
- * justo la que se descubrió tarde.
+ * One is a `state` — there is one current policy — and the other a `period` —
+ * August's statement does not replace July's. Both exist from the start on
+ * purpose: a single type would leave the `period` branch unexercised, and that
+ * is precisely the one discovered late.
  */
 export const SEED_FACT_TYPES: Omit<FactType, 'id' | 'active'>[] = [
   {
@@ -114,12 +114,12 @@ export const SEED_FACT_TYPES: Omit<FactType, 'id' | 'active'>[] = [
     validFromField: 'periodo_desde',
     validUntilField: 'periodo_hasta',
     fields: [
-      // Sin alias a propósito: "tarjeta" está en el nombre del tipo, así que
-      // como alias hacía que toda pregunta sobre la tarjeta arrastrara sus
-      // dígitos. La identidad se muestra al lado del dato, que es donde sirve.
+      // No aliases on purpose: the word for card is in the type's own name, so
+      // as an alias it made every question about the card drag its digits along.
+      // The identity is shown next to the datum, which is where it helps.
       { name: 'tarjeta', kind: 'text', label: 'últimos dígitos de la tarjeta', aliases: [] },
-      // El rótulo del señuelo contiene al del bueno —"monto facturado a pagar
-      // (período anterior)"— así que lo que los separa es `notNear`.
+      // The decoy's label contains the good one — "amount billed (previous
+      // period)" — so what separates them is `notNear`.
       { name: 'monto_a_pagar', kind: 'money', label: 'monto TOTAL facturado a pagar de este período',
         aliases: ['pagar', 'monto', 'facturado', 'deuda'],
         near: ['total facturado a pagar'], notNear: ['anterior', 'minimo', 'pagado', 'cancelado'] },

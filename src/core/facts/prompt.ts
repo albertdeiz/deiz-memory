@@ -2,56 +2,55 @@ import { coerce, grounded } from './values';
 import type { FactField, FactType, FactValue } from './types';
 
 /**
- * El prompt del extractor, armado **en runtime** desde `fact_types`.
+ * The extractor's prompt, assembled **at runtime** from the type registry.
  *
- * Mismo principio que el clasificador (§3.7): no hay una lista de campos
- * escrita en el código. Si la hubiera, agregar `poliza_salud` sería un deploy y
- * todo el diseño de §4 se caería.
+ * Same principle as the classifier: there is no field list written in the code.
+ * If there were, adding a type would be a deploy, and the whole point of the
+ * registry being data would collapse.
  */
 
-/** La cabecera, donde vive la mayoría de los datos duros. */
+/** The header, where most hard data lives. */
 export const MAX_CONTEXT_CHARS = 5000;
 
-/** Tope de líneas rescatadas por rótulo, para no rearmar el documento entero. */
+/** Cap on label-rescued lines, so the whole document is not rebuilt. */
 const MAX_ANCHORED_LINES = 40;
 
 /**
- * Qué parte del documento se le muestra al extractor.
+ * Which part of the document the extractor is shown.
  *
- * **No los primeros N caracteres.** Eso decidía la respuesta por accidente: en
- * una cartola real el `MONTO TOTAL FACTURADO A PAGAR` estaba en el carácter
- * 6157 y el corte era 6000, así que el modelo nunca vio la cifra correcta y
- * devolvió la del período anterior, que sí entraba. Ciento cincuenta y siete
- * caracteres separaban una respuesta buena de una mentira con formato.
+ * **Not the first N characters.** That decided the answer by accident: in a real
+ * statement the correct total sat at character 6157 and the cut was at 6000, so
+ * the model never saw the right figure and returned the previous period's, which
+ * did fit. A hundred and fifty-seven characters separated a good answer from a
+ * well-formatted lie.
  *
- * Así que va la cabecera **más cada línea que trae un rótulo declarado**. Es
- * barato —una pasada sobre las líneas—, cabe en el prompt, y garantiza que la
- * fila que responde esté delante aunque el documento tenga veinte páginas.
+ * So it gets the header **plus every line carrying a declared label**. Cheap —
+ * one pass over the lines — it fits in the prompt, and it guarantees the row
+ * that answers is in front of the model even in a twenty-page document.
  */
 export function relevantContext(type: FactType, text: string): string {
   const t = text.trim();
   if (t.length <= MAX_CONTEXT_CHARS) return t;
 
-  const cabeza = t.slice(0, MAX_CONTEXT_CHARS);
-  const anclas = type.fields
+  const header = t.slice(0, MAX_CONTEXT_CHARS);
+  const anchors = type.fields
     .flatMap((f) => [...(f.near ?? []), ...(f.notNear ?? [])])
     .map((a) => a.toLowerCase());
-  if (anclas.length === 0) return `${cabeza}\n[…recortado]`;
+  if (anchors.length === 0) return `${header}\n[…recortado]`;
 
-  const resto = t.slice(MAX_CONTEXT_CHARS);
-  const rescatadas: string[] = [];
-  for (const linea of resto.split('\n')) {
-    const l = linea.toLowerCase();
-    if (anclas.some((a) => l.includes(a))) rescatadas.push(linea);
-    if (rescatadas.length >= MAX_ANCHORED_LINES) break;
+  const rest = t.slice(MAX_CONTEXT_CHARS);
+  const rescued: string[] = [];
+  for (const line of rest.split('\n')) {
+    if (anchors.some((a) => line.toLowerCase().includes(a))) rescued.push(line);
+    if (rescued.length >= MAX_ANCHORED_LINES) break;
   }
 
-  return rescatadas.length === 0
-    ? `${cabeza}\n[…recortado]`
-    : `${cabeza}\n[…recortado, y estas líneas de más adelante:]\n${rescatadas.join('\n')}`;
+  return rescued.length === 0
+    ? `${header}\n[…recortado]`
+    : `${header}\n[…recortado, y estas líneas de más adelante:]\n${rescued.join('\n')}`;
 }
 
-const COMO: Record<FactField['kind'], string> = {
+const SHAPE: Record<FactField['kind'], string> = {
   text: 'texto corto, tal como aparece',
   number: 'número (usa punto decimal)',
   uf: 'número de UF (solo la cifra, sin la palabra UF)',
@@ -61,11 +60,10 @@ const COMO: Record<FactField['kind'], string> = {
 };
 
 /**
- * El esquema de salida, también armado desde el registro.
+ * The output schema, also assembled from the registry.
  *
- * Nombrar los campos acá y no solo en el texto del prompt es lo que hace que un
- * modelo chico devuelva las claves correctas: se lo pide el servidor, no la
- * buena voluntad.
+ * Naming the fields here and not only in the prompt text is what makes a small
+ * model return the right keys: the server asks for them, not good will.
  */
 export function extractSchema(type: FactType): object {
   const properties: Record<string, object> = {};
@@ -85,14 +83,14 @@ export function buildExtractPrompt(
   type: FactType,
   doc: { text: string; note: string | null },
 ): { system: string; user: string } {
-  const campos = type.fields
+  const fields = type.fields
     .map((f) => {
-      // El rótulo que se va a verificar después va también en el prompt: pedirle
-      // al modelo que apunte al lugar correcto es más barato que descartar lo
-      // que trajo del lugar equivocado.
-      const cerca = f.near?.length ? ` — búscalo junto a "${f.near[0]}"` : '';
-      const lejos = f.notNear?.length ? `, NUNCA el de "${f.notNear[0]}"` : '';
-      return `- ${f.name}: ${f.label} — ${COMO[f.kind]}${cerca}${lejos}`;
+      // The label that gets verified later goes into the prompt too: asking the
+      // model to aim at the right place is cheaper than discarding what it
+      // brought from the wrong one.
+      const near = f.near?.length ? ` — búscalo junto a "${f.near[0]}"` : '';
+      const notNear = f.notNear?.length ? `, NUNCA el de "${f.notNear[0]}"` : '';
+      return `- ${f.name}: ${f.label} — ${SHAPE[f.kind]}${near}${notNear}`;
     })
     .join('\n');
 
@@ -103,11 +101,11 @@ export function buildExtractPrompt(
     type.description,
     '',
     'Campos a extraer:',
-    campos,
+    fields,
     '',
     'Reglas:',
-    // La primera es la que evita que el extractor de pólizas invente una póliza
-    // a partir de una boleta del supermercado.
+    // The first rule is what stops the policy extractor from inventing a policy
+    // out of a supermarket receipt.
     '- Si el documento NO es del tipo esperado, responde exactamente {"aplica": false}.',
     '- Si aplica, responde {"aplica": true, "campos": { ... }}.',
     '- Copia los valores EXACTOS del documento. No calcules, no conviertas, no redondees.',
@@ -126,20 +124,19 @@ export function buildExtractPrompt(
 
 export interface Extraction {
   payload: Record<string, FactValue>;
-  /** Los campos que el modelo dio y el documento no respalda. Van al log. */
-  descartados: string[];
+  /** Fields the model gave that the document does not back. For the log. */
+  discarded: string[];
 }
 
 /**
- * Valida lo que devolvió el modelo contra el documento.
+ * Validates what the model returned against the document.
  *
- * Dos filtros, en orden: la **forma** del valor según su `kind`, y después que
- * el documento **lo diga de verdad**. El segundo es el que importa: es lo que
- * separa un dato extraído de una alucinación con formato correcto, y es la
- * misma idea que `grounding.ts` aplica a la prosa de una respuesta (§6).
+ * Two filters, in order: the **shape** of the value per its kind, and then that
+ * the document **actually says it**. The second is the one that matters: it is
+ * what separates an extracted datum from a well-formatted hallucination.
  *
- * Devuelve `null` cuando el modelo dice que no aplica, o cuando no sobrevivió
- * ningún campo — un hecho vacío no es un hecho.
+ * Returns `null` when the model says the type does not apply, or when no field
+ * survived — an empty fact is not a fact.
  */
 export function validateExtraction(
   raw: unknown,
@@ -150,32 +147,31 @@ export function validateExtraction(
   const o = raw as Record<string, unknown>;
   if (o.aplica === false) return null;
 
-  const campos = (typeof o.campos === 'object' && o.campos !== null
+  const given = (typeof o.campos === 'object' && o.campos !== null
     ? o.campos
     : o) as Record<string, unknown>;
 
   const payload: Record<string, FactValue> = {};
-  const descartados: string[] = [];
+  const discarded: string[] = [];
 
   for (const f of type.fields) {
-    const valor = coerce(campos[f.name], f.kind);
-    if (valor === null) continue;
-    if (!grounded(valor, f, source)) {
-      descartados.push(f.name);
+    const value = coerce(given[f.name], f.kind);
+    if (value === null) continue;
+    if (!grounded(value, f, source)) {
+      discarded.push(f.name);
       continue;
     }
-    payload[f.name] = valor;
+    payload[f.name] = value;
   }
 
   if (Object.keys(payload).length === 0) return null;
 
-  // **Sin el campo identidad no es de este tipo.** Verificado en código y no
-  // confiado a la descripción: sobre el corpus real, tres documentos distintos
-  // del dominio `seguros` —una póliza, una liquidación de siniestro y un
-  // certificado de cobertura— se tipificaron los tres como póliza, aunque la
-  // descripción excluía los otros dos explícitamente. Un modelo chico lee esa
-  // exclusión y la ignora; un `where` no.
+  // **No identity field, no type.** Verified in code rather than trusted to the
+  // description: on the real corpus, three different documents in the insurance
+  // category — a policy, a claim report and a coverage certificate — all typed as
+  // a policy, though the description excluded the other two by name. A small
+  // model reads that exclusion and ignores it. An `if` does not.
   if (type.identityField && payload[type.identityField] === undefined) return null;
 
-  return { payload, descartados };
+  return { payload, discarded };
 }

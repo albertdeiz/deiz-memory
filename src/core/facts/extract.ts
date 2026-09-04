@@ -9,9 +9,9 @@ import type { FactType, FactValue } from './types';
 export interface ExtractOutcome {
   memoryId: Uuid;
   shortId: string;
-  /** Los tipos que produjeron un hecho. Vacío es normal y no es un fallo. */
+  /** The types that produced a fact. Empty is normal and not a failure. */
   extracted: string[];
-  /** Campos que el modelo dio y el documento no respaldaba. */
+  /** Fields the model gave that the document did not back. */
   discarded: string[];
 }
 
@@ -24,14 +24,14 @@ interface MemoryRow {
 }
 
 /**
- * Extrae los datos duros de una memoria (§4).
+ * Extracts the hard data from a memory.
  *
- * Se intenta solo con los tipos que declaran interés en su dominio, que es lo
- * que evita pasarle una boleta del supermercado al extractor de pólizas. Y aun
- * así el modelo puede decir que no aplica: el filtro por dominio recorta el
- * costo, no reemplaza el criterio.
+ * Only the types that declare interest in its domain are tried, which is what
+ * keeps a supermarket receipt away from the policy extractor. Even then the
+ * model can say it does not apply: the domain filter cuts the cost, it does not
+ * replace the judgement.
  *
- * No lanza. Un tipo que falla no invalida a los otros ni a la memoria.
+ * Never throws. One type failing invalidates neither the others nor the memory.
  */
 export async function extractFacts(
   deps: Deps,
@@ -54,38 +54,38 @@ export async function extractFacts(
     return ok({ memoryId: m.id, shortId: shortId(m.id), extracted: [], discarded: [] });
   }
 
-  const tipos = await typesForDomain(deps.db, actor.ownerId, m.domain_slug);
+  const types = await typesForDomain(deps.db, actor.ownerId, m.domain_slug);
 
-  // Los hechos de un tipo que ya no aplica se van.
+  // Facts of a type that no longer applies are dropped.
   //
-  // `fact_types.domain_slug` declara "este tipo aplica a documentos de esta
-  // categoría". Si la memoria se movió de categoría, el tipo dejó de aplicarle
-  // por definición del propio registro, y dejar el hecho ahí contradiría lo que
-  // el registro dice. No se pierde nada: un hecho es derivado del blob como los
-  // trozos (§3.6), y `dm facts extract` lo rehace.
+  // The registry declares "this type applies to documents in this category". If
+  // the memory moved category, the type stopped applying to it by the registry's
+  // own definition, and leaving the fact there would contradict what the
+  // registry says. Nothing is lost: a fact derives from the blob like a chunk,
+  // and re-extracting rebuilds it.
   await deps.db.query(
     `delete from facts where memory_id = $1 and owner_id = $2
        and ($3::uuid[] = '{}' or not (type_id = any($3::uuid[])))`,
-    [m.id, actor.ownerId, tipos.map((t) => t.id)],
+    [m.id, actor.ownerId, types.map((t) => t.id)],
   );
 
   const extracted: string[] = [];
   const discarded: string[] = [];
 
-  for (const type of tipos) {
+  for (const type of types) {
     const { system, user } = buildExtractPrompt(type, { text: source, note: m.note });
     let raw: unknown;
     try {
       raw = await deps.classifier.classify({ system, user, schema: extractSchema(type) });
     } catch {
-      continue; // Un tipo que falla no se lleva a los demás.
+      continue; // One type failing does not take the others with it.
     }
     const parsed = validateExtraction(raw, type, source);
     if (!parsed) continue;
 
     await save(deps, actor, m.id, type, parsed.payload);
     extracted.push(type.slug);
-    discarded.push(...parsed.descartados.map((f) => `${type.slug}.${f}`));
+    discarded.push(...parsed.discarded.map((f: string) => `${type.slug}.${f}`));
   }
 
   return ok({ memoryId: m.id, shortId: shortId(m.id), extracted, discarded });
@@ -121,17 +121,16 @@ async function save(
 }
 
 /**
- * Marca como superado lo que este hecho reemplaza.
+ * Marks what this fact replaces as superseded.
  *
- * **Solo en los tipos `estado`, y solo cuando las vigencias no se solapan.**
+ * **Only for `state` types, and only when the validity windows do not overlap.**
  *
- * Una póliza que empieza cuando termina la otra es una sucesión. Dos vigentes a
- * la vez no lo son: eso es un conflicto, y la regla dura 3 dice que se muestran
- * las dos y jamás se elige una en silencio. Por eso el `where` exige que la
- * anterior haya terminado antes de que esta empiece.
+ * A policy that starts when the other ends is a succession. Two live at once is
+ * not: that is a conflict, shown in full rather than resolved silently. Hence
+ * the `where` requiring the earlier one to have ended before this one begins.
  *
- * En un tipo `periodo` no se llama nunca: la cartola de agosto no reemplaza a
- * la de julio, porque la de julio sigue siendo la verdad sobre julio.
+ * Never called for a `period` type: August's statement does not replace July's,
+ * because July's is still the truth about July.
  */
 async function supersede(
   deps: Deps,

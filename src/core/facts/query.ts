@@ -59,28 +59,27 @@ export async function factsForMemory(db: Db, actor: Actor, memoryId: Uuid): Prom
   return rows.map(toFact);
 }
 
-/** Un campo de un tipo, que es lo que una pregunta puede estar pidiendo. */
+/** A field of a type, which is what a question may be asking for. */
 export interface FieldRef {
   type: FactType;
   field: FactField;
 }
 
-const sinTildes = (s: string): string =>
+const withoutAccents = (s: string): string =>
   s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 /**
- * La raíz aproximada de una palabra en español.
+ * The approximate stem of a Spanish word.
  *
- * Sin esto el match era por palabra exacta, y "cuánto **paga** mi tarjeta" no
- * calzaba con el alias `pagar`. Pedirle a quien define un tipo que enumere
- * `pagar, paga, pago, pagos` es pedirle que se acuerde de conjugar: el sistema
- * puede hacerlo solo.
+ * Without this the match was by exact word, and asking "how much does my card
+ * pay" missed an alias in the infinitive. Asking whoever defines a type to
+ * enumerate every conjugation is asking them to conjugate: the system can do it.
  *
- * Se quita el plural y después la terminación verbal o la vocal final, dejando
- * al menos tres letras: `pagar`, `paga`, `pago` y `pagos` caen todas en `pag`.
+ * The plural comes off first, then the verb ending or the final vowel, keeping
+ * at least three letters, so all forms of the same verb land on one stem.
  */
 const stem = (w: string): string => {
-  let x = sinTildes(w);
+  let x = withoutAccents(w);
   if (x.length > 4 && x.endsWith('es')) x = x.slice(0, -2);
   else if (x.length > 3 && x.endsWith('s')) x = x.slice(0, -1);
   if (x.length > 3 && x.endsWith('r')) x = x.slice(0, -1);
@@ -89,49 +88,49 @@ const stem = (w: string): string => {
 };
 
 /**
- * Dos palabras se refieren a lo mismo.
+ * Two words refer to the same thing.
  *
- * Por prefijo y no por igualdad, porque `vence` y `vencimiento` son la misma
- * pregunta y ninguna raíz razonable las junta. Tres letras de mínimo: con dos
- * empezarían a chocar palabras que no tienen nada que ver.
+ * By prefix and not by equality, because a short form and its long noun are the
+ * same question and no reasonable stem joins them. Three letters minimum: with
+ * two, unrelated words would start colliding.
  */
-const mismaIdea = (a: string, b: string): boolean => {
+const sameIdea = (a: string, b: string): boolean => {
   const [x, y] = [stem(a), stem(b)];
-  const corta = x.length <= y.length ? x : y;
-  return corta.length >= 3 && (x.startsWith(y) || y.startsWith(x));
+  const shorter = x.length <= y.length ? x : y;
+  return shorter.length >= 3 && (x.startsWith(y) || y.startsWith(x));
 };
 
 /**
- * Qué campo está pidiendo esta pregunta, si es que pide alguno.
+ * Which field this question is asking for, if any.
  *
- * **Sin llamar a un modelo.** Los `aliases` del registro son exactamente para
- * esto: si una palabra de la pregunta calza con uno, hay camino de hecho. Que
- * un modelo eligiera el campo metería una decisión no verificable justo en el
- * único camino del sistema que es exacto.
+ * **Without calling a model.** The registry's aliases exist exactly for this: if
+ * a word of the question matches one, there is a fact path. Having a model pick
+ * the field would put an unverifiable decision in the one path of the system
+ * that is exact.
  *
- * Cuando hay más de un tipo con el mismo alias —`vence` sirve para una póliza y
- * para una tarjeta— se devuelven todos y decide quien pregunta, que puede haber
- * nombrado el tipo.
+ * When more than one type shares an alias — "expires" fits a policy and a card —
+ * all of them come back and the asker decides, since they may have named the
+ * type.
  */
 export function matchFields(question: string, types: FactType[]): FieldRef[] {
-  const palabras = new Set(
-    sinTildes(question).replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter((w) => w.length > 2),
+  const words = new Set(
+    withoutAccents(question).replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter((w) => w.length > 2),
   );
-  if (palabras.size === 0) return [];
+  if (words.size === 0) return [];
 
   const out: FieldRef[] = [];
   for (const type of types) {
-    // Nombrar el tipo acota: "el deducible de mi auto" contra "de mi tarjeta".
-    const nombrado = sinTildes(type.label).split(/\s+/).some((w) => w.length > 3 && palabras.has(w));
+    // Naming the type narrows: "my car's deductible" versus "my card's".
+    const named = withoutAccents(type.label).split(/\s+/).some((w) => w.length > 3 && words.has(w));
     for (const field of type.fields) {
-      if (field.aliases.some((a) => [...palabras].some((p) => mismaIdea(p, a)))) {
+      if (field.aliases.some((a) => [...words].some((p) => sameIdea(p, a)))) {
         out.push({ type, field });
       }
     }
-    if (nombrado) {
-      // Un tipo nombrado gana sobre uno que solo comparte un alias.
-      const suyos = out.filter((r) => r.type.id === type.id);
-      if (suyos.length > 0) return suyos;
+    if (named) {
+      // A named type beats one that merely shares an alias.
+      const own = out.filter((r) => r.type.id === type.id);
+      if (own.length > 0) return own;
     }
   }
   return out;
@@ -141,18 +140,18 @@ export interface FactHit {
   ref: FieldRef;
   fact: Fact;
   value: string | number;
-  /** Ya no vale: se dice ANTES del dato (regla dura 10). */
+  /** No longer valid: said BEFORE the datum, never after. */
   expired: boolean;
-  /** Reemplazado por uno posterior. También se dice antes. */
+  /** Replaced by a later one. Also said before. */
   superseded: boolean;
 }
 
 /**
- * Los hechos que responden esta pregunta.
+ * The facts that answer this question.
  *
- * Devuelve **todos** los que aplican, no el mejor: si hay dos pólizas vigentes
- * con deducibles distintos, la regla dura 3 dice que se muestran las dos. Elegir
- * en silencio es el modo de falla que este camino existe para evitar.
+ * Returns **all** that apply, not the best one: with two live policies carrying
+ * different deductibles, both are shown. Choosing silently is the failure mode
+ * this path exists to avoid.
  */
 export async function askFacts(
   db: Db,
@@ -164,10 +163,10 @@ export async function askFacts(
   const refs = matchFields(question, types);
   if (refs.length === 0) return [];
 
-  // Lo superado entra igual: si es lo único que hay, la respuesta correcta no
-  // es "no lo tengo" sino "lo que tengo está superado, y dice esto".
+  // Superseded facts are included: if that is all there is, the correct answer
+  // is not "I do not have it" but "what I have is superseded, and it says this".
   const facts = await listFacts(db, actor, { includeSuperseded: true });
-  const hoy = now.toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
 
   const hits: FactHit[] = [];
   for (const ref of refs) {
@@ -175,24 +174,24 @@ export async function askFacts(
       if (fact.typeId !== ref.type.id) continue;
       const value = fact.payload[ref.field.name];
       if (value === undefined) continue;
-      const hasta = fact.validUntil?.toISOString().slice(0, 10) ?? null;
+      const until = fact.validUntil?.toISOString().slice(0, 10) ?? null;
       hits.push({
         ref,
         fact,
         value,
-        // En un `periodo` no existe "vencido": la cartola de julio no venció,
-        // sigue siendo la verdad sobre julio.
-        expired: ref.type.kind === 'state' && hasta !== null && hasta < hoy,
+        // A `period` has no notion of expiry: July's statement did not expire,
+        // it is still the truth about July.
+        expired: ref.type.kind === 'state' && until !== null && until < today,
         superseded: fact.supersededBy !== null,
       });
     }
   }
 
-  // Vigente primero, y dentro de eso lo más reciente. Un `periodo` responde con
-  // su último período salvo que la pregunta diga otro.
+  // Live first, and within that the most recent. A `period` answers with its
+  // latest window unless the question names another.
   return hits.sort((a, b) => {
-    const vivo = Number(a.expired || a.superseded) - Number(b.expired || b.superseded);
-    if (vivo !== 0) return vivo;
+    const live = Number(a.expired || a.superseded) - Number(b.expired || b.superseded);
+    if (live !== 0) return live;
     const fa = a.fact.validFrom?.getTime() ?? 0;
     const fb = b.fact.validFrom?.getTime() ?? 0;
     return fb - fa;

@@ -4,7 +4,7 @@ import type { Deps, Ingest } from '../../core/ports';
 
 export const NORMALIZE_QUEUE = 'normalize';
 
-/** Su propio esquema, para que las tablas de la cola no se mezclen con las tuyas. */
+/** Its own schema, so the queue's tables do not mix with yours. */
 export const QUEUE_SCHEMA = 'pgboss';
 
 interface NormalizeJob {
@@ -13,14 +13,14 @@ interface NormalizeJob {
 
 /**
  * Arranca pg-boss y deja la cola creada. `start()` corre sus propias migraciones,
- * así que no hay nada que agregar a migrations/ — la cola es infraestructura, no
+ * so there is nothing to add to the migrations — the queue is infrastructure, not
  * parte del modelo de datos.
  */
 export async function startQueue(
   databaseUrl: string,
-  // Un `dm capture` vive medio segundo y solo inserta una fila: levantarle
-  // encima el supervisor de mantenimiento es puro peaje. Ese trabajo es del
-  // worker, que sí se queda.
+  // A capture lives half a second and only inserts a row: standing up the
+  // maintenance supervisor on top of it is pure toll. That work belongs to the
+  // worker, which does stay.
   opts: { supervise?: boolean } = {},
 ): Promise<PgBoss> {
   const boss = new PgBoss({
@@ -29,8 +29,8 @@ export async function startQueue(
     supervise: opts.supervise ?? false,
     schedule: false,
   });
-  // Sin esto, un error de conexión tumba el proceso entero por un evento sin
-  // escuchar. El worker tiene que sobrevivir a que Postgres se reinicie.
+  // Without this, a connection error takes the whole process down over an unhandled
+  // event. The worker has to survive the database restarting.
   boss.on('error', (e) => console.error(`[cola] ${e instanceof Error ? e.message : String(e)}`));
   await boss.start();
   if (!(await boss.getQueue(NORMALIZE_QUEUE))) {
@@ -40,16 +40,16 @@ export async function startQueue(
 }
 
 /**
- * El camino normal: capture() encola y vuelve en milisegundos. Es lo que hace
- * que "guardado ✓" llegue en menos de un segundo aunque detrás haya un OCR de
- * diez (§7, métrica de §15).
+ * The normal path: capture enqueues and returns in milliseconds. It is what makes
+ * the acknowledgement arrive in under a second even with a ten-second OCR pass
+ * behind it.
  */
 export function queueIngest(boss: PgBoss): Ingest {
   return {
     async process(memoryId: string): Promise<void> {
       await boss.send(NORMALIZE_QUEUE, { memoryId } satisfies NormalizeJob, {
-        // Los reintentos son para cuando se cae Postgres o el storage. Un carril
-        // que falla no lanza: se anota en la fila y lo retoma dm reprocess.
+        // Retries are for the database or the object store going down. A lane that fails
+        // does not throw: it is recorded on the row and a reprocess picks it up.
         retryLimit: 3,
         retryDelay: 30,
         retryBackoff: true,
@@ -64,9 +64,9 @@ export interface WorkerHandle {
 }
 
 /**
- * De a uno y sin paralelismo por defecto. No es timidez: el carril de visión se
- * paga por token y el de audio se come una CPU entera. Ir despacio es lo
- * correcto cuando nadie está esperando del otro lado.
+ * One at a time and no parallelism by default. Not timidity: a hosted visual lane
+ * is paid per token and the audio one eats a whole CPU. Going slowly is correct
+ * when nobody is waiting on the other side.
  */
 export async function runWorker(
   boss: PgBoss,
@@ -82,13 +82,13 @@ export async function runWorker(
       if (!job) return;
       const result = await normalizeMemory(deps, job.data.memoryId);
       if (!result.ok) {
-        // No se relanza: reintentar no va a hacer aparecer una memoria purgada
-        // ni un blob que no está. Se dice y se sigue.
+        // Not rethrown: retrying will not make a purged memory or a missing blob
+        // appear. It is stated and the run continues.
         say(`✗ ${job.data.memoryId}  ${result.message}`);
         return;
       }
       const v = result.value;
-      // El dominio va en la línea porque su ausencia fue invisible durante toda
+      // The domain goes on the line because its absence was invisible for a whole
       // F2: quince documentos normalizados, ninguno categorizado, y el worker
       // diciendo ✓ en todos.
       const cat = v.domain ? ` → ${v.domain}` : '';

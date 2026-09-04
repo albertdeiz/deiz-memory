@@ -5,7 +5,7 @@ import { err, ok, type Result } from '../result';
 import { buildPrompt, classifySchema, validate, type Classification } from './prompt';
 
 /**
- * Debajo de esto la clasificación se guarda pero se marca para revisar (§3.4):
+ * Below this the classification is stored but flagged for review: the system
  * el sistema duda, no bloquea, y deja la duda en la bandeja de F1.6.
  */
 export const LOW_CONFIDENCE = 0.6;
@@ -30,11 +30,11 @@ interface Row {
 }
 
 /**
- * Clasifica una memoria: dominio, título y fecha del hecho.
+ * Classifies a memory: domain, title and date of the event.
  *
- * No pisa lo que puso la persona. Si escribiste un título o una fecha al
- * capturar, eso gana — el clasificador rellena lo que falta, no corrige lo que
- * decidiste. Es la misma línea que separa `note` de `normalized_text`: lo tuyo
+ * It does not overwrite what the person put there. A title or a date you set at
+ * capture wins — the classifier fills gaps, it does not revise your decisions.
+ * Same line that separates your note from the extracted text: yours is not
  * no se regenera.
  */
 export async function classifyMemory(
@@ -59,7 +59,7 @@ export async function classifyMemory(
     return err('invalid', 'No hay dominios activos contra los que clasificar.');
   }
 
-  // Sin nada que leer no hay nada que clasificar, y adivinar sería inventar.
+  // With nothing to read there is nothing to classify, and guessing would be inventing.
   if (!m.note && !m.normalized_text && !m.original_filename) {
     return err('invalid', 'Esta memoria no tiene texto todavía: normalízala primero.');
   }
@@ -78,11 +78,11 @@ export async function classifyMemory(
 
   await save(deps, actor, m, c);
 
-  // Reclasificar cambia qué extractores aplican (§4), así que los hechos hay
-  // que rehacerlos. Sin esto, mover una memoria de categoría a mano dejaba los
-  // hechos de la categoría vieja: la tubería completa hacía las dos cosas y
-  // `dm classify` solo una — el mismo tipo de hueco que dejó al clasificador
-  // sin quien lo llamara.
+  // Reclassifying changes which extractors apply, so the facts have to be rebuilt.
+  // Without this, moving a memory to another category by hand left the facts of
+  // the old one: the full pipeline did both things and this command did only one —
+  // the same kind of gap that left the classifier with nobody calling it.
+  // 
   await reextract(deps, actor, m.id);
 
   return ok({
@@ -95,7 +95,7 @@ export async function classifyMemory(
   });
 }
 
-/** Rehace los hechos. Que falle no invalida la clasificación, que ya está guardada. */
+/** Rebuilds the facts. Failing does not invalidate the stored classification. */
 async function reextract(deps: Deps, actor: Actor, id: Uuid): Promise<void> {
   const { extractFacts } = await import('../facts/extract');
   await extractFacts(deps, actor, id).catch(() => {});
@@ -109,7 +109,7 @@ async function save(deps: Deps, actor: Actor, m: Row, c: Classification): Promis
       )).rows[0]?.id ?? null
     : null;
 
-  // `coalesce(existente, nuevo)`: lo que la persona puso gana siempre. El
+  // Coalescing existing over new: what the person put always wins. The
   // clasificador rellena huecos, no corrige decisiones.
   await deps.db.query(
     `update memories

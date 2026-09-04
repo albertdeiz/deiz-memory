@@ -52,17 +52,17 @@ function emit<T>(result: Result<T>, render: (v: T) => string): void {
     console.log(json ? JSON.stringify(result.value) : render(result.value));
   } else {
     const payload = { error: { kind: result.kind, message: result.message, ...('affects' in result ? { affects: result.affects } : {}), ...('detail' in result ? { detail: result.detail } : {}) } };
-    // stdout es el canal del valor; todo lo demás va a stderr, confirmaciones
-    // incluidas. Así `dm --json ls | jq` nunca recibe algo que no sea el dato.
+    // stdout is the value channel; everything else goes to stderr, confirmations
+    // included. That way piping JSON into a parser never receives anything but data.
     console.error(json ? JSON.stringify(payload) : renderFailure(result));
   }
   process.exitCode = exitCodeFor(result);
 }
 
 /**
- * `wait: true` corre los carriles acá mismo; `false` los encola. capture() no
- * distingue: recibe un Ingest y ya. Es lo único que hay que cambiar el día que
- * el que llame sea Telegram y no una terminal.
+ * Waiting runs the lanes inline; otherwise they are queued. capture() cannot
+ * tell: it receives an ingest port and that is all. It is the only thing that
+ * changes when the caller is a chat channel and not a terminal.
  */
 function buildDeps(pool: pg.Pool, cfg: ReturnType<typeof loadConfig>, boss: PgBoss | null): Deps {
   const db = pgDb(pool);
@@ -78,7 +78,7 @@ function buildDeps(pool: pg.Pool, cfg: ReturnType<typeof loadConfig>, boss: PgBo
   return deps;
 }
 
-/** Toda la fontanería de una invocación: config, pool, actor, render y cierre limpio. */
+/** All the plumbing of one invocation: config, pool, actor, render, clean close. */
 async function run<T>(
   fn: (ctx: Ctx) => Promise<Result<T>>,
   render: (v: T) => string,
@@ -89,8 +89,8 @@ async function run<T>(
   try {
     const cfg = loadConfig();
     pool = createPool(cfg.databaseUrl);
-    // Solo los comandos que encolan pagan el arranque de pg-boss. `dm ls` no
-    // tiene por qué correr las migraciones de una cola que no va a usar.
+    // Only the commands that enqueue pay for starting the queue. Listing has no
+    // business running the migrations of a queue it will not use.
     boss = opts.enqueues && !opts.wait ? await startQueue(cfg.databaseUrl) : null;
     const deps = buildDeps(pool, cfg, boss);
     const actor = await resolveActor(deps.db, globals().actor ?? cfg.ownerId);
@@ -105,7 +105,7 @@ async function run<T>(
   }
 }
 
-/** Lo que el canal devolvió, en la terminal. Un archivo se anuncia, no se vuelca. */
+/** What the channel returned, in the terminal. A file is announced, not dumped. */
 const renderReplies = (replies: Reply[]): string =>
   replies
     .map((r) =>
@@ -116,22 +116,22 @@ const renderReplies = (replies: Reply[]): string =>
     .join('\n\n');
 
 /**
- * Si hay un `dm serve` vivo en esta máquina.
+ * Whether a bot process is alive on this machine.
  *
- * Mirar la tabla de procesos es tosco, pero es lo único que responde la
- * pregunta real —¿hay alguien atendiendo?— sin inventar un heartbeat en la
- * base para un sistema de una persona.
+ * Reading the process table is crude, but it is the only thing that answers the
+ * real question — is anyone listening? — without inventing a heartbeat table for
+ * a single-person system.
  */
 const serveActivo = (): boolean => {
   try {
     const ps = execFileSync('ps', ['-Ao', 'args'], { encoding: 'utf8' });
     // Exige `node …index.js serve` y no solo la cadena suelta: buscar el texto
     // a secas cuenta como un bot vivo cualquier `grep index.js serve` o el
-    // propio `pkill` que lo mató — que es exactamente cómo esta comprobación
-    // se equivocó la primera vez.
+    // very kill command that ended it — which is exactly how this check got it wrong
+    // the first time.
     return ps.split('\n').some((l) => /(^|\/)node\s+\S*index\.js\s+serve(\s|$)/.test(l));
   } catch {
-    // Sin `ps` no se puede saber, y afirmar que falta sería peor que callar.
+    // Without the process table there is no way to know, and claiming it is missing
     return true;
   }
 };
@@ -162,9 +162,9 @@ program
       const db = pgDb(pool);
       const existing = await listOwners(db);
       if (existing.length > 0) {
-        // Idempotente: las semillas se rellenan también sobre un dueño que ya
-        // existe. Sin esto, un tipo de hecho nuevo solo lo tendría quien
-        // empiece de cero, que es justo al revés de lo útil.
+        // Idempotent: seeds are filled in for an owner that already exists too. Without
+        // this, a new fact type would only reach whoever starts from scratch, which is
+        // exactly backwards.
         await seedDomains(db, existing[0]!.id);
         await seedFactTypes(db, existing[0]!.id);
         emit({ ok: true, value: existing[0]! }, (o) => `Ya existe el dueño ${o.id} (${o.label}). Semillas al día.`);
@@ -184,9 +184,9 @@ program
   .description('revisa config, base de datos, migraciones, bucket, dueño y carriles')
   .action(async () => {
     let pool: pg.Pool | null = null;
-    // `required` separa lo roto de lo simplemente no configurado. Sin esa
-    // distinción, no tener whisper instalado pintaría el sistema entero de rojo
-    // y el rojo dejaría de significar nada.
+    // `required` separates broken from merely unconfigured. Without that distinction,
+    // not having a speech service would paint the whole system red, and red would
+    // stop meaning anything.
     const checks: { check: string; ok: boolean; detail: string; required: boolean }[] = [];
     try {
       const cfg = loadConfig();
@@ -229,9 +229,9 @@ program
         checks.push({ check: 'dueño', ok: false, detail: 'no se pudo consultar', required: true });
       }
 
-      // Los tres carriles, uno por uno. Un carril caído no rompe el sistema
-      // —lo que llega se guarda igual— pero deja de ser buscable por dentro,
-      // que es justo lo que F1 vino a arreglar. Tiene que verse.
+      // The three lanes, one by one. A lane being down does not break the system —
+      // what arrives is stored anyway — but it stops being searchable by content,
+      // which is the whole point of reading files. It has to be visible.
       const converters = buildConverters(cfg.normalize);
       const lanes: [string, string][] = [
         ['carril doc', 'document'],
@@ -248,7 +248,7 @@ program
         checks.push({ check: label, ok: state.ok, detail: state.detail, required: false });
       }
 
-      // El canal, si hay token. Sin token no está roto: está sin configurar.
+      // The channel, if there is a token. No token is not broken: it is unconfigured.
       if (!cfg.telegram) {
         checks.push({ check: 'canal', ok: false, required: false, detail: 'sin TELEGRAM_BOT_TOKEN' });
       } else {
@@ -265,14 +265,14 @@ program
       }
 
       try {
-        // Filtrado por dueño como toda query del sistema (regla dura 9). Sin
-        // esto, en cuanto exista una segunda persona `dm doctor` te reportaría
-        // su pila de pendientes como si fuera tuya: el `WHERE` olvidado de §14,
+        // Filtered by owner like every query in the system. Without this, the moment a
+        // second person exists the health check would report their pending pile as
+        // yours: the forgotten WHERE, in the command whose job is spotting problems.
         // en el comando cuyo trabajo es justamente detectar problemas.
         const who = await resolveActor(db, globals().actor ?? cfg.ownerId);
         if (!who.ok) {
-          // Con varios dueños y sin decir cuál, contar sería inventar: filtrar
-          // por nadie da cero, y un cero falso se lee como "está todo al día".
+          // With several owners and none named, counting would be inventing: filtering by
+          // nobody yields zero, and a false zero reads as "everything is up to date".
           checks.push({ check: 'normalizar', ok: false, required: false,
             detail: 'hay más de un dueño: indica cuál con --actor para ver su pendiente' });
         } else {
@@ -286,8 +286,8 @@ program
           const { pendientes } = rows[0]!;
           const bandeja = await countReview(db, { ownerId: who.value });
           const idle = pendientes === '0' && bandeja.total === 0;
-          // Se distingue lo que un reproceso arregla de lo que no: mandar a
-          // reintentar algo que no puede mejorar enseña a desconfiar del consejo.
+          // What a reprocess fixes is distinguished from what it does not: telling someone
+          // to retry something that cannot improve teaches distrust of the advice.
           const consejo = bandeja.retryable > 0 ? ' — dm reprocess --failed' : ' — dm review';
           checks.push({
             check: 'normalizar',
@@ -300,10 +300,10 @@ program
             required: false,
           });
 
-          // Su propia fila, y no un renglón de la anterior, porque la ausencia
-          // de categoría fue invisible durante toda F2: quince documentos
+          // Its own row, and not a line of the previous one, because a missing category
+          // was invisible for a whole phase: fifteen documents normalized, none
           // normalizados, ninguno clasificado, y `doctor` en verde. Un chequeo
-          // que no mira el paso siguiente da una calma falsa.
+          // categorized, and a green check. A check that ignores the next step gives
           const { rows: sin } = await db.query<{ n: string }>(
             `select count(*)::text as n from memories
               where owner_id = $1 and not hidden and domain_id is null
@@ -329,8 +329,8 @@ program
       await pool?.end().catch(() => {});
     }
 
-    // El código de salida solo mira lo obligatorio: un carril apagado se ve,
-    // pero no convierte a `dm doctor` en algo que siempre falla.
+    // The exit code only looks at what is required: a lane being off is visible but
+    // does not turn the health check into something that always fails.
     const broken = checks.some((c) => c.required && !c.ok);
     emit({ ok: true, value: checks }, (cs) =>
       cs.map((c) => `${c.ok ? '✓' : c.required ? '✗' : '·'} ${c.check.padEnd(13)} ${c.detail}`).join('\n'));
@@ -493,14 +493,14 @@ program
       (c) => {
         const minutos = Math.round((c.expiresAt.getTime() - Date.now()) / 60000);
         const bot = opts.bot?.replace(/^@/, '');
-        // Un código sin nadie atendiendo es un link que no puede funcionar, y
-        // callarlo manda a la persona a mirar el código —que está bien— en vez
-        // del proceso que falta.
+        // A code with nobody listening is a link that cannot work, and staying quiet
+        // sends the person to inspect the code — which is fine — instead of the process
+        // that is missing.
         const sinBot = !serveActivo()
           ? '\n\n⚠ No veo "dm serve" corriendo: el bot no va a contestar. Levántalo en otra terminal.'
           : '';
-        // El link es el punto entero de §10: tu mamá lo abre y está adentro. Sin
-        // cuenta, sin contraseña, sin instalar nada que no tenga ya.
+        // The link is the entire point: someone opens it and is inside. No account, no
+        // password, nothing to install that they do not already have.
         const link = bot ? `\n\nhttps://t.me/${bot}?start=${c.code}` : '';
         return `código  ${c.code}   (vence en ${minutos} min, un solo uso)${link}${sinBot}`;
       },
@@ -535,9 +535,9 @@ program
       boss = await startQueue(cfg.databaseUrl);
       const deps = buildDeps(pool, cfg, boss);
 
-      // supportsButtons: false a propósito. Este canal es el que mantiene
-      // honesta la degradación de §7.1 — si solo existiera Telegram, la rama
-      // sin botones no la ejercitaría nunca nadie.
+      // No button support, on purpose. This channel is what keeps degradation honest —
+      // if only the real one existed, the button-free branch would never be exercised
+      // by anyone.
       const channel = fakeChannel(opts.as ? { externalUserId: opts.as } : {});
       await serveChannel(channel, deps);
 
@@ -570,9 +570,9 @@ program
         return;
       }
       pool = createPool(cfg.databaseUrl);
-      // Encola, no corre inline: si el acuse esperara al OCR se rompería el
-      // contrato de menos de un segundo (§7). Implica que el worker tiene que
-      // estar corriendo, y por eso la respuesta de búsqueda dice qué falta leer.
+      // Enqueues rather than running inline: if the acknowledgement waited for OCR it
+      // would break the sub-second contract. That implies the worker has to be running,
+      // which is why a search reply says what is still unread.
       boss = await startQueue(cfg.databaseUrl);
       const deps = buildDeps(pool, cfg, boss);
 
@@ -602,7 +602,7 @@ program
     }
   });
 
-// ---------------------------------------------------------------- normalización
+// --------------------------------------------------------------- normalization
 
 // ---------------------------------------------------------------- dominios
 
@@ -697,8 +697,8 @@ domains
           ].join('\n')) };
       }
 
-      // Se compara contra el slug y no contra la palabra: una etiqueta como
-      // "fondo de pantalla" trae espacios y no se puede escribir como argumento.
+      // Compared against the slug and not the word: a tag with spaces in it cannot be
+      // typed as an argument.
       const buscado = String(opts.accept).toLowerCase();
       const elegida = r.value.find((p) => p.keyword === buscado || p.slug === buscado);
       if (!elegida) {
@@ -767,8 +767,8 @@ program
       const hechas: string[] = [];
       for (const memId of ids) {
         const r = await classifyMemory(deps, actor, memId);
-        // Un fallo no detiene el lote: se anota y se sigue. Reventar a la
-        // mitad dejaría medio corpus clasificado y medio no, sin decir dónde.
+        // One failure does not stop the batch: it is noted and the run continues. Dying
+        // halfway would leave half the corpus classified and half not, silently.
         hechas.push(
           r.ok
             ? `✓ ${r.value.id.slice(0, 8)}  ${r.value.domain ?? '—'}  ${r.value.title}` +
@@ -888,8 +888,8 @@ facts
         return out.ok ? ok([linea(out.value)]) : out;
       }
 
-      // Sin id: todo lo que tenga categoría y texto. Es idempotente — el unique
-      // sobre (memory_id, type_id) hace que reextraer reemplace, no duplique.
+      // With no id: everything with a category and text. Idempotent — the uniqueness
+      // constraint makes re-extraction replace rather than duplicate.
       const { rows } = await deps.db.query<{ id: string }>(
         `select m.id from memories m
           where m.owner_id = $1 and not m.hidden and m.domain_id is not null
@@ -920,8 +920,8 @@ program
       const handle = await runWorker(boss, deps);
       console.error('escuchando. ctrl-c para salir.');
 
-      // Terminar de procesar lo que está en la mano antes de morir: si no, una
-      // memoria queda a medio normalizar y con normalized_at ya escrito.
+      // Finish what is in hand before dying: otherwise a memory is left half
+      // normalized with its timestamp already written.
       await new Promise<void>((resolve) => {
         const bye = () => { console.error('\ncerrando…'); resolve(); };
         process.once('SIGINT', bye);

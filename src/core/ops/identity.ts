@@ -4,14 +4,14 @@ import type { Db } from '../ports';
 import { err, ok, type Result } from '../result';
 
 /**
- * Sin vocales y sin los caracteres que se confunden a mano: nada de 0/O ni
- * 1/I/L. El código se dicta por teléfono o se copia de una terminal, y un
- * "cero" leído como "o" es una llamada perdida.
+ * No vowels and none of the characters people confuse by hand: no 0 or O, no
+ * 1, I or L. The code gets dictated over the phone or copied from a terminal,
+ * and a zero read as an O is a wasted call.
  */
 const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 const CODE_LENGTH = 8;
 
-/** Quince minutos: suficiente para abrir el link, corto para que no quede vivo. */
+/** Fifteen minutes: enough to open the link, short enough not to linger. */
 export const PAIRING_TTL_MS = 15 * 60 * 1000;
 
 export interface PairingCode {
@@ -28,10 +28,10 @@ export interface Identity {
 }
 
 const generate = (): string => {
-  // rejection sampling: 256 % 31 ≠ 0, así que tomar el módulo directo sesgaría
-  // las primeras letras del alfabeto. Con 8 caracteres da igual en la práctica,
-  // pero un generador de credenciales sesgado no es algo que uno quiera dejar
-  // escrito para que alguien lo copie después a un lugar donde sí importe.
+  // Rejection sampling: the alphabet size does not divide 256, so taking the
+  // modulus directly would bias the first letters. With 8 characters it makes no
+  // practical difference, but a biased credential generator is not something to
+  // leave written down for someone to copy where it does matter.
   const out: string[] = [];
   const limit = 256 - (256 % ALPHABET.length);
   while (out.length < CODE_LENGTH) {
@@ -44,7 +44,7 @@ const generate = (): string => {
   return out.join('');
 };
 
-/** Acuña un código de un solo uso para vincular una identidad de canal a un dueño. */
+/** Mints a single-use code that links a channel identity to an owner. */
 export async function mintPairingCode(
   db: Db,
   ownerId: Uuid,
@@ -64,11 +64,11 @@ export async function mintPairingCode(
 }
 
 /**
- * Canjea el código y deja la identidad vinculada.
+ * Redeems the code and links the identity.
  *
- * El `update ... where used_at is null` es la parte que importa: es lo que hace
- * que "de un solo uso" sea cierto aunque dos mensajes lleguen a la vez. Sin esa
- * condición en el UPDATE, comprobar y después escribir deja una ventana.
+ * The update guarded on the code being unused is the part that matters: it is
+ * what makes "single use" true even when two messages arrive at once. Without
+ * that condition, checking and then writing leaves a window.
  */
 export async function redeemPairingCode(
   db: Db,
@@ -91,9 +91,9 @@ export async function redeemPairingCode(
     );
 
     if (claimed.rowCount === 0) {
-      // No se distingue entre "no existe", "ya se usó" y "venció, a propósito:
-      // los tres se arreglan igual —pide otro— y separarlos le diría a un
-      // extraño si un código existe.
+      // No distinction between "does not exist", "already used" and "expired", on
+      // purpose: all three are fixed the same way — ask for another — and separating
+      // them would tell a stranger whether a code exists.
       return err('not_found', 'Ese código no sirve. Pide uno nuevo con "dm pair".');
     }
 
@@ -113,8 +113,8 @@ export async function redeemPairingCode(
 }
 
 /**
- * Quién es quien escribe. `null` significa desconocido, y desconocido significa
- * que no hay Actor — o sea que no hay nada que este mensaje pueda hacer.
+ * Who is writing. Null means unknown, and unknown means there is no actor — that
+ * is, there is nothing this message can do.
  */
 export async function identityOwner(
   db: Db,
@@ -135,7 +135,7 @@ export async function identityOwner(
   };
 }
 
-/** Marca actividad. Se escribe aparte para no meterla en el camino de lectura. */
+/** Marks activity. Written separately to keep it off the read path. */
 export async function touchIdentity(
   db: Db,
   channel: string,
@@ -154,7 +154,7 @@ export interface LinkedIdentity extends Identity {
   lastSeenAt: Date | null;
 }
 
-/** Para `dm doctor` y para saber si ya hay alguien conectado. */
+/** For the health check, and to know whether anyone is connected. */
 export async function listIdentities(db: Db, ownerId?: Uuid): Promise<LinkedIdentity[]> {
   const { rows } = await db.query<{
     channel: string; external_user_id: string; owner_id: string;

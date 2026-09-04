@@ -4,23 +4,23 @@ import { ok, type Result } from '../result';
 import { MEMORY_COLUMNS, MEMORY_FROM, type MemoryRow, toSummary } from './rows';
 
 /**
- * La bandeja de revisión de §3.4.
+ * The review inbox.
  *
- * El principio dice que si el sistema duda, guarda igual y deja la duda en una
- * bandeja. Desde F1 la primera mitad funcionaba —la captura nunca se bloquea y
- * el problema queda anotado— pero la bandeja no existía, así que revisar era
- * abrir psql. Esto es la otra mitad.
+ * The principle: if the system is unsure, it stores anyway and leaves the doubt
+ * in an inbox. The first half always worked — capture never blocks and the
+ * problem is recorded — but the inbox did not exist, so reviewing meant opening
+ * a SQL client. This is the other half.
  */
 export interface ReviewItem extends MemorySummary {
   lane: Lane | null;
   error: string;
   /**
-   * Si `dm reprocess` puede ayudar. `null` es "no se sabe": son las filas que
-   * fallaron antes de que el sistema supiera distinguir, y se resuelve solo la
-   * próxima vez que corran.
+   * Whether a reprocess can help. Null is "unknown": rows that failed before the
+   * system could tell the difference, resolved on their own the next time they
+   * run.
    */
   retryable: boolean | null;
-  /** Lo que igual quedó guardado. Que sea poco es justo lo que hay que mirar. */
+  /** What was stored anyway. Its being little is exactly what to look at. */
   chars: number;
 }
 
@@ -33,11 +33,11 @@ const clampLimit = (n: number | undefined) =>
   !n || !Number.isFinite(n) ? 20 : Math.min(Math.max(Math.trunc(n), 1), 200);
 
 /**
- * Lo que quedó dudoso, de lo más reciente a lo más viejo.
+ * What came out doubtful, newest first.
  *
- * Filtra por dueño como toda consulta del sistema (regla dura 9), y usa el
- * índice parcial `memories_review_idx`, que es parcial porque lo normal es que
- * esta lista esté vacía.
+ * Filtered by owner like every query in the system, and backed by a partial
+ * index — partial because the normal state of this list is empty.
+ * 
  */
 export async function listReview(
   deps: Deps,
@@ -74,10 +74,10 @@ export interface ReviewCounts {
 }
 
 /**
- * Para `dm doctor` y para el chat: el número, sin traerse las filas.
+ * For the health check and the chat: the number, without fetching the rows.
  *
- * Recibe `Db` y no `Deps` —como `listOwners`— porque doctor corre antes de que
- * exista un `Deps` armado, y pedirle uno solo para contar sería inventar
+ * It takes a database handle and not the full dependency set because the health
+ * check runs before one is assembled, and demanding one just to count would be
  * ceremonia.
  */
 export async function countReview(db: Db, actor: Actor): Promise<ReviewCounts> {

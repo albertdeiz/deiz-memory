@@ -1,7 +1,7 @@
 /**
- * Lo poco que comparten los carriles ahora que todos salen por HTTP a un
- * servicio de al lado. Node 22 trae fetch, FormData y Blob nativos, así que
- * esto no agrega una sola dependencia.
+ * The little the lanes share now that all of them go out over HTTP to a service
+ * next door. The runtime brings fetch, FormData and Blob natively, so this adds
+ * not one dependency.
  */
 
 export class ServiceError extends Error {
@@ -13,7 +13,7 @@ export class ServiceError extends Error {
 
 const describe = (service: string, url: string, e: unknown): ServiceError => {
   const raw = e instanceof Error ? e.message : String(e);
-  // Un ECONNREFUSED crudo no le dice nada a nadie a las once de la noche.
+  // A raw connection-refused tells nobody anything at eleven at night.
   if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
     return new ServiceError(service, `${service} no respondió a tiempo (${url})`);
   }
@@ -45,7 +45,7 @@ export async function postJson<T>(opts: PostOpts): Promise<T> {
   }
 
   if (!res.ok) {
-    // El cuerpo del error casi siempre trae el motivo de verdad; se recorta
+    // The error body almost always carries the real reason; it is clipped
     // porque a veces viene un stacktrace entero.
     const detail = await res.text().catch(() => '');
     throw new ServiceError(
@@ -62,7 +62,7 @@ export async function postJson<T>(opts: PostOpts): Promise<T> {
   }
 }
 
-/** Un GET corto para `dm doctor`: ¿está vivo el servicio? */
+/** A short GET for the health check: is the service alive? */
 export async function probe(
   service: string,
   url: string,
@@ -72,8 +72,8 @@ export async function probe(
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers });
     if (res.ok) return { ok: true, detail: url };
-    // Un 401 no es "el servicio está caído": está vivo y nos rechaza. Decir lo
-    // segundo manda a revisar la credencial; decir lo primero manda a revisar
+    // A 401 is not "the service is down": it is alive and rejecting us. Saying the
+    // latter sends you to check the credential; saying the former sends you to check
     // docker, que es media hora perdida en el lugar equivocado.
     if (res.status === 401 || res.status === 403) {
       return { ok: false, detail: `${service} responde pero rechaza la credencial (revisa su API key)` };
@@ -92,7 +92,7 @@ export const formWithFile = (
 ): FormData => {
   const form = new FormData();
   // Uint8Array y no Buffer: Blob no acepta el Buffer de Node en todos los
-  // runtimes. El nombre importa — markitdown elige el conversor por extensión.
+  // runtimes. The name matters — the converter is chosen by extension.
   form.append('file', new Blob([new Uint8Array(bytes)], { type: mediaType }), filename);
   for (const [k, v] of Object.entries(extra)) form.append(k, v);
   return form;

@@ -14,9 +14,9 @@ export * from './vision-openai';
 export * from './whisper-http';
 
 /**
- * Cuál motor atiende el carril de visión. Es una variable de entorno y no una
- * decisión de arquitectura: los tres caminos implementan el mismo `Converter`,
- * reciben el mismo prompt y devuelven lo mismo.
+ * Which engine serves the visual lane. An environment variable and not an
+ * architectural decision: all three paths implement the same converter port,
+ * take the same prompt and return the same thing.
  */
 export type VisionBackend = 'ocr' | 'anthropic' | 'openai' | 'none';
 
@@ -34,22 +34,22 @@ export interface NormalizeConfig {
 }
 
 /**
- * Arma los tres carriles desde la config. Que un carril *funcione* no se decide
- * acá: lo dice `available()`, y a falta de eso lo dice el error que queda en la
- * fila. Un carril mal configurado no puede verse igual que uno apagado a
- * propósito, o una memoria se queda sin texto y nadie sabe por qué.
+ * Builds the three lanes from config. Whether a lane *works* is not decided
+ * here: the availability probe says that, and failing that the error left on the
+ * row does. A misconfigured lane must not look the same as one deliberately off,
+ * or a memory ends up with no text and nobody knows why.
  *
- * La única ranura que puede ser `null` es visión con `backend: 'none'`, y ahí sí
- * es deliberado: es cómo se dice "por ahora no quiero transcribir imágenes".
+ * The only slot that may be null is the visual one with its backend set to none,
+ * and there it is deliberate: it is how you say "I do not want image transcription".
  */
 export function buildConverters(cfg: NormalizeConfig): Converters {
   const documents = documentsConverter(cfg.documents);
 
-  // Ni el OCR ni el chat de OpenAI saben recibir un PDF, así que se lo pasan a
-  // quien ya tiene pypdfium cargado. Anthropic es el único que no lo necesita
-  // —recibe el PDF entero— y por eso ahí el rasterizador ni se inyecta.
+  // Neither OCR nor a chat-style API can take a PDF, so they hand it to whoever
+  // already has the PDF library loaded. One provider does not need it — it takes
+  // the whole PDF — so there the rasterizer is not even injected.
   const rasterize = (bytes: Buffer) => rasterizePdf(cfg.documents, bytes);
-  // Mismo sidecar, misma idea: el carril no sabe convertir y no tiene por qué.
+  // Same service, same idea: the lane cannot convert and has no business doing so.
   const transcode = (bytes: Buffer, filename: string | null) =>
     transcodeImage(cfg.documents, bytes, filename);
 

@@ -3,7 +3,7 @@ import type { Converter, ExtractInput } from '../../core/ports';
 import { formWithFile, postJson, probe } from './http';
 
 export interface SpeechConfig {
-  /** Base de una API compatible con OpenAI: termina antes de /audio/transcriptions. */
+  /** Base of an OpenAI-compatible API: it ends before the transcriptions path. */
   baseUrl: string;
   model: string;
   language: string;
@@ -13,9 +13,9 @@ export interface SpeechConfig {
 
 export const defaultSpeechConfig: SpeechConfig = {
   baseUrl: 'http://localhost:8082/v1',
-  // El servidor expone el modelo cargado con este nombre. Coincide con lo que
-  // pone el compose; si no coincidiera, la mayoría de los servidores ignoran el
-  // campo y transcriben igual con el que tienen cargado.
+  // The server exposes its loaded model under this name. It matches the compose;
+  // if it did not, most servers ignore the field and transcribe with whatever they
+  // have loaded anyway.
   model: 'small',
   language: 'es',
   apiKey: null,
@@ -29,17 +29,17 @@ interface TranscriptionResponse {
 }
 
 /**
- * Carril C (§8.1): notas de voz, contra un servidor de transcripción propio.
+ * The audio lane: voice notes, against a self-hosted transcription server.
  *
- * El contrato es `POST /v1/audio/transcriptions` de OpenAI, y se eligió por ser
- * el que ya hablan casi todos los servidores de Whisper self-hosted. La
- * consecuencia práctica es la que se pidió: cambiar de motor —whisper.cpp,
- * faster-whisper, o la API de OpenAI si algún día conviene— es cambiar una URL,
+ * The contract is the OpenAI transcriptions endpoint, chosen because almost
+ * every self-hosted speech server already speaks it. The practical consequence
+ * is the one that was asked for: changing engine is changing a URL, with no
+ * code to touch.
  * no escribir un adapter.
  *
- * El servidor por defecto corre en el mismo compose, así que el audio no sale
- * del host. Eso sigue siendo lo importante: es el único de los tres carriles
- * donde los bytes pueden quedarse en casa sin perder calidad.
+ * The default server runs in the same compose, so audio never leaves the host.
+ * That is what matters: it is the one lane of the three where the bytes can stay
+ * home without losing quality.
  */
 export function speechConverter(cfg: SpeechConfig = defaultSpeechConfig): Converter {
   const url = `${cfg.baseUrl.replace(/\/$/, '')}/audio/transcriptions`;
@@ -50,8 +50,8 @@ export function speechConverter(cfg: SpeechConfig = defaultSpeechConfig): Conver
       const name = input.filename ?? `audio.${extensionOf(input.filename) || extensionForMediaType(input.mediaType)}`;
 
       const extra: Record<string, string> = { model: cfg.model, response_format: 'json' };
-      // `language` vacío deja que el servidor detecte. Fijarlo en español mejora
-      // bastante el resultado cuando el audio es corto o empieza con ruido.
+      // An empty language lets the server detect. Pinning it improves the result
+      // noticeably when the audio is short or starts with noise.
       if (cfg.language) extra.language = cfg.language;
 
       const res = await postJson<TranscriptionResponse>({
@@ -74,23 +74,23 @@ export function speechConverter(cfg: SpeechConfig = defaultSpeechConfig): Conver
     },
 
     async available() {
-      // /models es parte de la API de OpenAI y lo exponen los servidores
-      // compatibles: sirve de latido sin subir un audio de mentira.
+      // The models endpoint is part of the same API and compatible servers expose it:
+      // it works as a heartbeat without uploading a fake audio file.
       const base = cfg.baseUrl.replace(/\/$/, '');
       const state = await probe('whisper', `${base}/models`, 5_000, auth);
       if (!state.ok) return state;
 
-      // Se reporta el modelo que el servidor tiene CARGADO, no el que pide la
-      // config. La diferencia importa: en español `tiny` y `small` no son lo
-      // mismo ni de lejos, y creer que corres uno mientras corres el otro es
-      // justo el tipo de sorpresa que dm doctor existe para evitar.
+      // The model reported is the one the server has LOADED, not the one config asks
+      // for. The difference matters: the small and tiny variants are nowhere near the
+      // same in Spanish, and believing you run one while running the other is exactly
+      // the kind of surprise the health check exists to prevent.
       try {
         const res = await fetch(`${base}/models`, { headers: auth, signal: AbortSignal.timeout(5_000) });
         const body = (await res.json()) as { data?: { id?: string }[] };
         const cargado = body.data?.map((m) => m.id).filter(Boolean).join(', ');
         if (cargado) return { ok: true, detail: `${cargado} @ ${base}` };
       } catch {
-        // El latido ya pasó; no saber el nombre exacto no es motivo de alarma.
+        // The heartbeat already passed; not knowing the exact name is not alarming.
       }
       return { ok: true, detail: `${cfg.model} @ ${base}` };
     },

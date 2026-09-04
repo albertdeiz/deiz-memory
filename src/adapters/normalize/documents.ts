@@ -76,12 +76,12 @@ export interface Transcoded {
  * An image no lane can read, turned into JPEG.
  *
  * It exists because of HEIC: the default for iPhone photos, which neither the
- * acepta ni el OCR ni la API de visión. Sin esto, mandar una foto desde el
- * teléfono la guarda muda.
+ * OCR nor the vision API accepts. Without this, sending a photo from the phone
+ * stores it mute.
  *
- * El original no se toca (§3.6). Esto produce bytes nuevos solo para leer; el
- * blob sigue siendo el HEIC, así que el día que algo lo lea nativo se reprocesa
- * y se gana calidad sin haber perdido nada.
+ * The original is untouched. This produces new bytes only in order to read; the
+ * blob is still the HEIC, so the day something reads it natively a reprocess
+ * gains quality with nothing lost.
  */
 export async function transcodeImage(
   cfg: DocumentsConfig,
@@ -98,11 +98,11 @@ export async function transcodeImage(
 }
 
 /**
- * Páginas de PDF a PNG.
+ * PDF pages to PNG.
  *
- * Vive acá y no en el carril de visión porque el sidecar ya tiene pypdfium
- * cargado, y porque quién sabe rasterizar no debería depender de a qué modelo
- * le vayas a mandar las imágenes después.
+ * It lives here and not in the vision lane because this service already has the
+ * PDF library loaded, and because who knows how to rasterize should not depend
+ * on which model gets the images afterwards.
  */
 export async function rasterizePdf(
   cfg: DocumentsConfig,

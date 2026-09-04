@@ -25,13 +25,13 @@ export interface Config {
 type VisionEffort = 'low' | 'medium' | 'high';
 
 /**
- * Un backend desconocido cae al default con un aviso, en vez de dejar el carril
- * apagado en silencio: un typo en el .env no debería parecer una decisión.
+ * An unknown backend falls back to the default with a warning, rather than
+ * leaving the lane silently off: a typo should not look like a decision.
  */
 const visionBackend = (): VisionBackend => {
   const raw = process.env.DM_VISION_BACKEND;
   // El default es el OCR local: gratis, sin red, reproducible, y en documentos
-  // impresos mejor que un modelo chico justo donde importa (los dígitos).
+  // printed documents better than a small model exactly where it matters: digits.
   if (!raw) return 'ocr';
   if ((VISION_BACKENDS as readonly string[]).includes(raw)) return raw as VisionBackend;
   console.error(
@@ -42,9 +42,9 @@ const visionBackend = (): VisionBackend => {
 
 /**
  * Un `Number('mucho')` da NaN, y Node aplica el timeout solo `if (timeout > 0)`:
- * NaN no lo es, así que el timeout se apaga en silencio y un proceso colgado no
- * lo mata nadie. Un valor basura tiene que caer al default, no desarmar la
- * única defensa contra un servicio que no responde.
+ * NaN is not, so the timeout silently switches off and nothing kills a hung
+ * process. A garbage value has to fall back to the default, not disarm the
+ * only defence against a service that does not answer.
  */
 const positive = (raw: string | undefined, fallback: number): number => {
   const n = Number(raw);
@@ -65,9 +65,9 @@ export function loadConfig(): Config {
   const envFile = process.env.DM_ENV_FILE ?? '.env';
 
   // `.env.local` primero, y no es un detalle de orden: `npm run up` reescribe
-  // .env entero cada vez que corre, así que una ANTHROPIC_API_KEY puesta ahí
-  // dura hasta el próximo arranque del stack. dotenv no pisa lo ya cargado, de
-  // modo que cargar local primero es lo que hace que tus llaves ganen y
+  // the whole .env every run, so a provider key placed there lasts until the next
+  // stack start. The loader does not overwrite what is already loaded, so loading
+  // the local file first is what makes your keys win and
   // sobrevivan.
   if (existsSync('.env.local')) loadEnv({ path: '.env.local', quiet: true });
   if (existsSync(envFile)) loadEnv({ path: envFile, quiet: true });
@@ -82,8 +82,8 @@ export function loadConfig(): Config {
       secretAccessKey: need('S3_SECRET_ACCESS_KEY'),
     },
     ownerId: process.env.DM_OWNER_ID ?? null,
-    // `null` cuando no hay token, y eso es un estado legítimo: el sistema
-    // funciona por CLI sin canal. `dm doctor` lo reporta como no configurado,
+    // Null when there is no token, and that is a legitimate state: the system works
+    // over the CLI with no channel. The health check reports it as unconfigured,
     // no como roto.
     telegram: process.env.TELEGRAM_BOT_TOKEN
       ? {
@@ -102,8 +102,8 @@ export function loadConfig(): Config {
     embed: {
       baseUrl: process.env.DM_EMBED_URL ?? defaultEmbedConfig.baseUrl,
       model: process.env.DM_EMBED_MODEL ?? defaultEmbedConfig.model,
-      // Cambiar de modelo cambia esta dimensión y obliga a reindexar: el
-      // esquema declara vector(768) y otro tamaño simplemente no entra.
+      // Changing model changes this dimension and forces a reindex: the schema
+      // declares a fixed vector width and another size simply does not fit.
       dimensions: positive(process.env.DM_EMBED_DIMS, defaultEmbedConfig.dimensions),
       apiKey: process.env.DM_EMBED_API_KEY ?? null,
       timeoutMs: positive(process.env.DM_EMBED_TIMEOUT_MS, defaultEmbedConfig.timeoutMs),
@@ -123,8 +123,8 @@ export function loadConfig(): Config {
           model: process.env.DM_VISION_MODEL ?? defaultVisionConfig.model,
           effort: (process.env.DM_VISION_EFFORT ?? defaultVisionConfig.effort) as VisionEffort,
           maxTokens: positive(process.env.DM_VISION_MAX_TOKENS, defaultVisionConfig.maxTokens),
-          // Sin esto el SDK igual busca credenciales por su cuenta (perfil de
-          // `ant auth login`): que no esté la variable no significa que no haya key.
+          // Without this the SDK still looks for credentials on its own: the variable
+          // being absent does not mean there is no key.
           apiKey: process.env.ANTHROPIC_API_KEY,
         },
         openai: {

@@ -1,17 +1,17 @@
 /**
- * La instrucción del carril B, en un solo lugar.
+ * The visual lane's instruction, in one place.
  *
- * Vive aparte de cualquier proveedor a propósito. El carril de visión ahora
- * puede salir por Anthropic, por OpenAI o por un modelo local, y si cada
- * adapter llevara su propia copia, la calidad de la transcripción dependería
- * en silencio de cuál te tocó. El proveedor es intercambiable; lo que se le
+ * It sits apart from any provider on purpose. The visual lane can now go out
+ * through several providers, and if each adapter carried its own copy the
+ * quality of the transcript would silently depend on which one you got. The
+ * provider is interchangeable; what it is asked for is not.
  * pide, no.
  *
- * markitdown sobre una imagen da una *descripción* ("una boleta de
- * supermercado"), y una descripción no sirve para encontrar nada: lo que se
- * busca es el monto, la fecha, el número de póliza. Por eso todo acá empuja
- * hacia transcripción literal, y en especial la regla de los dígitos — un
- * número de póliza inventado es exactamente el modo de falla que este sistema
+ * A document converter on an image yields a *description* ("a supermarket
+ * receipt"), and a description finds nothing: what you look for is the amount,
+ * the date, the policy number. So everything here pushes toward literal
+ * transcription, and especially the rule about digits — an invented policy
+ * number is exactly the failure mode this system exists to prevent.
  * existe para evitar (regla dura 2, "nunca inventar").
  */
 export const TRANSCRIPTION_PROMPT = `Transcribe fielmente el contenido de este documento.
@@ -25,12 +25,12 @@ export const TRANSCRIPTION_PROMPT = `Transcribe fielmente el contenido de este d
 
 import { PermanentError } from '../../core/result';
 
-/** Los únicos formatos que aceptan tanto la API de Anthropic como las compatibles con OpenAI. */
+/** The only formats every supported provider accepts. */
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 export const unsupportedImage = (mediaType: string): Error =>
-  // Permanente: el mismo archivo por el mismo carril va a fallar igual mañana.
-  // Se arregla convirtiendo el archivo o enseñándole el formato al carril, no
+  // Permanent: the same file through the same lane will fail the same tomorrow.
+  // It is fixed by converting the file or teaching the lane the format, not by
   // reintentando.
   new PermanentError(
     `la API no acepta ${mediaType} como imagen (solo ${IMAGE_TYPES.join(', ')} y PDF). ` +

@@ -3,10 +3,10 @@ import type { RasterResult } from './documents';
 import { postJson, probe } from './http';
 import { IMAGE_TYPES, TRANSCRIPTION_PROMPT, unsupportedImage } from './prompt';
 
-/** Rasterizar un PDF es trabajo del sidecar de documentos; acá solo se pide. */
+/** Rasterizing a PDF is the document service's job; here it is only requested. */
 export type Rasterizer = (bytes: Buffer) => Promise<RasterResult>;
 
-/** Convierte una imagen que el carril no acepta a uno que sí. Ver `transcodeImage`. */
+/** Converts an image the lane rejects into one it accepts. */
 export type Transcoder = (bytes: Buffer, filename: string | null) => Promise<{ mediaType: string; bytes: Buffer }>;
 
 export interface VisionHttpConfig {
@@ -36,17 +36,17 @@ const dataUrl = (mediaType: string, base64: string) => `data:${mediaType};base64
 
 /**
  * Carril B contra cualquier API compatible con OpenAI: Ollama, llama.cpp, vLLM,
- * LM Studio, la propia OpenAI, o una pasarela como LiteLLM apuntando a donde sea.
+ * a local server, the vendor itself, or a gateway pointing anywhere.
  *
- * Es el adapter que hace real lo de "el modelo es un servicio, no una decisión
+ * This is the adapter that makes "the model is a service, not an architectural
  * de arquitectura". Cambiar de motor es cambiar `baseUrl` y `model`; no hay
- * código que tocar ni imagen que reconstruir.
+ * code to touch and no image to rebuild.
  *
- * La diferencia con el adapter de Anthropic es una sola, y viene del formato:
- * **el chat de OpenAI no sabe recibir un PDF**, solo imágenes. Así que un PDF
- * escaneado se rasteriza primero, página por página, y se manda como varias
- * imágenes en un mismo mensaje. Esa es exactamente la dependencia de poppler
- * que el camino de Anthropic se ahorra — acá la paga el sidecar, que ya tiene
+ * There is exactly one difference from the other provider's adapter, and it comes
+ * from the format: **this chat API cannot take a PDF**, only images. So a scanned
+ * PDF is rasterized first, page by page, and sent as several images in one
+ * message. That is exactly the rasterizing dependency the other path avoids —
+ * here the document service pays it, since it already has the library loaded.
  * pypdfium cargado.
  */
 export function openAiVisionConverter(
@@ -86,8 +86,8 @@ export function openAiVisionConverter(
         body: JSON.stringify({
           model: cfg.model,
           max_tokens: cfg.maxTokens,
-          // Determinismo: transcribir no es una tarea creativa, y un modelo que
-          // improvisa sobre un número de póliza es peor que uno que no responde.
+          // Determinism: transcribing is not a creative task, and a model that improvises
+          // on a policy number is worse than one that does not answer.
           temperature: 0,
           messages: [
             {
@@ -107,8 +107,8 @@ export function openAiVisionConverter(
       const choice = res.choices?.[0];
       const text = (choice?.message?.content ?? '').trim();
 
-      // Mismo criterio que en Anthropic: media transcripción con cara de
-      // transcripción entera es el modo de falla de la regla dura 2.
+      // Same criterion as the other provider: half a transcript looking like a whole
+      // one is the failure mode of never inventing anything.
       const cutByTokens = choice?.finish_reason === 'length';
       const cutByPages = rasterNote?.truncated === true;
       const incomplete = cutByTokens

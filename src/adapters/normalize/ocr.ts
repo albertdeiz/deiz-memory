@@ -22,19 +22,19 @@ interface OcrResponse {
 }
 
 /**
- * Carril B por OCR clásico: el camino local, gratis y determinista.
+ * The visual lane via classical OCR: the local, free and deterministic path.
  *
- * Para documentos impresos —boletas, pólizas, carnets— esto es *mejor* que un
+ * For printed documents — receipts, policies, ID cards — this is *better* than a
  * modelo multimodal chico, no un premio de consuelo. Los VLM leen bien el texto
- * corrido y fallan en cadenas que no se pueden adivinar por contexto: un número
- * de póliza, un RUT, un monto. Y ese es justo el dato que uno viene a buscar.
+ * and fail on strings that cannot be guessed from context: a policy number, a
+ * tax id, an amount. Which is exactly the datum you came looking for.
  *
- * Además cumple una promesa que la nube no puede: es reproducible. El mismo
- * blob da el mismo texto, hoy y en dos años (§3.6).
+ * It also keeps a promise the cloud cannot: it is reproducible. The same blob
+ * gives the same text, today and in two years.
  *
- * **Lo que este carril no puede hacer**, y por lo que el de visión sigue
- * existiendo: manuscrito, y describir una foto sin texto. A la foto de un choque
- * el OCR no le encuentra nada; un modelo multimodal al menos dice qué se ve.
+ * **What this lane cannot do**, and why the model-backed one still exists:
+ * handwriting, and describing a photo with no text. In a photo of a car crash
+ * OCR finds nothing; a multimodal model at least says what is visible.
  */
 export function ocrConverter(
   cfg: OcrConfig = defaultOcrConfig,
@@ -64,8 +64,8 @@ export function ocrConverter(
         if (raster.pages.length === 0) throw new Error('el PDF no tiene páginas que rasterizar');
 
         const results: OcrResponse[] = [];
-        // En serie y no en paralelo: en un host que además corre Postgres y
-        // Garage, lanzar N inferencias a la vez hace más lento el total.
+        // Serial and not parallel: on a host that also runs the database and the object
+        // store, firing N inferences at once makes the total slower.
         for (const page of raster.pages) {
           results.push(await read(Buffer.from(page.dataBase64, 'base64'), `p${page.index}.png`, page.mediaType));
         }
@@ -97,8 +97,8 @@ export function ocrConverter(
 
       let leible = { bytes, mediaType };
       if (!IMAGE_TYPES.includes(mediaType)) {
-        // Un HEIC llega acá. Antes de darlo por perdido se intenta convertir:
-        // el original queda intacto y solo cambia lo que se le pasa al motor.
+        // A HEIC lands here. Before giving up, conversion is attempted: the original
+        // stays intact and only what is handed to the engine changes.
         if (!transcode) throw unsupportedImage(mediaType);
         const jpeg = await transcode(bytes, filename);
         leible = { bytes: jpeg.bytes, mediaType: jpeg.mediaType };
@@ -107,9 +107,9 @@ export function ocrConverter(
       const res = await read(leible.bytes, filename ?? 'imagen', leible.mediaType);
       return {
         text: res.text,
-        // Que el servicio diga "leí con poca confianza" y quede marcado es lo
-        // que convierte una transcripción dudosa en algo que dm reprocess puede
-        // retomar, en vez de un dato que parece firme y no lo es.
+        // The service saying "I read this with low confidence", recorded, is what turns
+        // a doubtful transcript into something a reprocess can pick up, rather than a
+        // datum that looks firm and is not.
         ...(res.low_confidence
           ? { incomplete: `el OCR quedó con poca confianza (${res.mean_confidence}): conviene revisarlo` }
           : {}),

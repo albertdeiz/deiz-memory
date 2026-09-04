@@ -21,8 +21,8 @@ export function s3BlobStore(cfg: S3Config): BlobStore {
     endpoint: cfg.endpoint,
     region: cfg.region,
     credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
-    // Garage habla S3 en path style. Es también lo que hace que cambiar a R2
-    // sea un cambio de variables de entorno y nada más.
+    // The self-hosted store speaks S3 in path style. It is also what makes moving to
+    // a hosted one a change of environment variables and nothing else.
     forcePathStyle: true,
   });
 

@@ -320,6 +320,15 @@ Telegram ──> Channel Adapter ──> Ingest Queue (ack inmediato)
             Postgres + pgvector ◄──── Retriever
 ```
 
+**Todo corre en contenedores, la app incluida.** `postgres` · `garage` ·
+`documents` · `ocr` · `whisper` · `ollama` · `app-worker` · `app-bot`. Nada
+necesita Node en el host: la única dependencia para usar el sistema es Docker.
+
+El core sigue siendo **un módulo, no seis servicios**. Partirlo en microservicios
+para un sistema de un dueño multiplicaría la superficie operativa sin comprar
+nada; lo que sí compra algo es que el despliegue sea uniforme y que cada
+dependencia se pueda reemplazar por una variable de entorno.
+
 **Puntos no negociables:**
 - El adapter de canal está detrás de una interfaz. Telegram hoy, otro después, sin tocar
   el core.
@@ -329,6 +338,9 @@ Telegram ──> Channel Adapter ──> Ingest Queue (ack inmediato)
 - Todo lo derivado es re-ejecutable desde el blob original.
 - **El prompt del clasificador se construye en runtime** desde la tabla `domains`.
 - **Un módulo único habla con el storage.** Cambiar de proveedor es una variable.
+- **Cada servicio es intercambiable por una URL.** Las dependencias de los
+  contenedores de la app se resuelven por nombre de red, y cada una tiene su
+  variable `*_INTERNAL` para apuntarla a un servicio gestionado sin tocar código.
 
 ### 7.1 El contrato del adapter de canal
 
@@ -370,7 +382,8 @@ apuntando a un blob que no existe es peor que no tener la fila.
 | Capa | Elección | Por qué |
 |---|---|---|
 | Canal | Telegram Bot API + **grammY** | gratis, sin aprobación, soporta fotos/audio/docs/PDF nativo |
-| Runtime | TypeScript + Node | — |
+| Runtime | TypeScript + Node, en contenedor | nada corre en el host |
+| Build | esbuild | los imports son relativos y sin extensión, así que `tsc` solo verifica tipos y el artefacto lo produce el bundler |
 | DB | Postgres + pgvector | estructurado, full-text y vectores en un motor. Una DB, un backup |
 | Cola | pg-boss | sin Redis extra |
 | Blobs | **Garage** self-hosted (API S3), direccionable por contenido | §14.1 |

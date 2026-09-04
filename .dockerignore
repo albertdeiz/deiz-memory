@@ -1,0 +1,9 @@
+node_modules
+dist
+tests
+fixtures
+.git
+.env
+.env.local
+garage
+*.md

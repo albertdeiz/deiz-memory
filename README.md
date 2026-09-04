@@ -18,19 +18,28 @@ los blobs viven en un solo host y un blob perdido no se reprocesa desde nada.
 ## Arrancar
 
 ```bash
-npm install
-npm run up          # levanta el stack y escribe las credenciales en .env
-npm run migrate
-npm run build
-node dist/dm.js init "tu nombre"
-npm run worker      # en otra terminal: procesa lo que va llegando
+npm run up
 ```
 
-La primera vez tarda: se construyen dos imágenes, Whisper baja su modelo y Ollama los
-suyos. Para que `dm` quede en el PATH: `npm link`.
+Eso es todo. Levanta la infraestructura, acuña las credenciales del storage,
+aplica el esquema y deja corriendo el worker y el bot — **todo en contenedores**.
+Termina imprimiendo el diagnóstico.
 
-`dm doctor` dice qué está vivo. Ningún carril es obligatorio: lo que llegue se guarda
-igual, solo que sin carril no es buscable por dentro.
+La primera vez tarda: se construyen tres imágenes, Whisper baja su modelo y
+Ollama los suyos.
+
+```bash
+npm run logs                    # qué está haciendo el worker y el bot
+npm run dm -- doctor            # cualquier comando, dentro de un contenedor
+npm run dm -- ask "..."
+npm run down                    # bajar todo
+```
+
+**Nada corre en el host.** Ni Node, ni los carriles, ni el modelo: la única
+dependencia para usarlo es Docker. `npm` solo hace falta para desarrollar.
+
+Si prefieres el binario en tu PATH para el día a día, `npm install && npm run
+build && npm link` te deja `dm` apuntando al mismo stack por localhost.
 
 ## Comandos
 
@@ -397,9 +406,9 @@ bytes: sin eso volvía como `a1b2c3d4.bin` y ningún visor lo abría.
 
 ## Configurar
 
-`npm run up` levanta los servicios y escribe las URLs en `.env`. **Reescribe `.env`
-entero cada vez**, así que tus llaves van en **`.env.local`**, que está gitignoreado, se
-carga primero y gana:
+`scripts/garage-init.sh` escribe en `.env` todo lo que hace falta para hablar
+con el compose. **Ese archivo se reescribe entero en cada arranque**, así que tus
+llaves van en **`.env.local`**, que está gitignoreado:
 
 ```bash
 # .env.local
@@ -408,13 +417,26 @@ ANTHROPIC_API_KEY=sk-ant-...        # solo si usas DM_VISION_BACKEND=anthropic
 DM_SPEECH_MODEL_NAME=small          # tiny | base | small | medium | large-v3
 ```
 
-**El modelo de Whisper importa más que el motor.** En español `base` da 18,4% de WER y
-`small` 9,7%. Con 18% se destrozan justo los nombres propios y los números —lo único que
-uno guarda—, así que el compose usa `small`. Medido acá dictando un teléfono de ocho
-dígitos: `tiny` se comió uno, `small` los transcribió todos.
+**Cualquier servicio es intercambiable por una variable.** Los contenedores de la
+app resuelven sus dependencias por nombre de red, y cada una tiene su
+`*_INTERNAL` para apuntarla a otra parte sin tocar código:
 
-Los servicios publican en `127.0.0.1`, no en `0.0.0.0`: procesan documentos médicos y
-financieros y no tienen por qué ser alcanzables desde fuera del host.
+| Variable | Qué reemplaza |
+|---|---|
+| `DATABASE_URL_INTERNAL` | Postgres por uno gestionado |
+| `S3_ENDPOINT_INTERNAL` | Garage por R2, B2 o S3 |
+| `DM_CLASSIFY_URL_INTERNAL` · `DM_EMBED_URL_INTERNAL` | Ollama por una pasarela o un proveedor |
+| `DM_SPEECH_URL_INTERNAL` | Whisper por cualquier servidor compatible |
+| `DM_DOCUMENTS_URL_INTERNAL` · `DM_OCR_URL_INTERNAL` | los carriles por otros |
+| `DM_VISION_BACKEND` | `ocr` · `anthropic` · `openai` · `none` |
+
+**El modelo de Whisper importa más que el motor.** En español `base` da 18,4% de
+WER y `small` 9,7%. Con 18% se destrozan justo los nombres propios y los números
+—lo único que uno guarda—, así que el compose usa `small`. Medido acá dictando un
+teléfono de ocho dígitos: `tiny` se comió uno, `small` los transcribió todos.
+
+Los servicios publican en `127.0.0.1`, no en `0.0.0.0`: procesan documentos
+médicos y financieros y no tienen por qué ser alcanzables desde fuera del host.
 
 ## Tests
 

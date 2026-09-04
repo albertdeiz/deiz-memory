@@ -11,16 +11,17 @@
   },
   "scripts": {
     "build": "esbuild src/adapters/cli/index.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/dm.js --sourcemap && chmod +x dist/dm.js",
-    "dm": "tsx src/adapters/cli/index.ts",
-    "migrate": "tsx scripts/migrate.ts",
-    "worker": "tsx src/adapters/cli/index.ts worker",
-    "up": "docker compose up -d && ./scripts/garage-init.sh",
-    "down": "docker compose down",
+    "dm": "docker compose run --rm app-worker",
+    "migrate": "docker compose --profile setup run --rm app-migrate",
+    "up": "./scripts/up.sh",
+    "down": "docker compose --profile chat --profile setup down",
     "test": "npm run build && vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:cli": "npm run build && vitest run tests/cli",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "logs": "docker compose logs -f app-worker app-bot",
+    "migrate:local": "tsx scripts/migrate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

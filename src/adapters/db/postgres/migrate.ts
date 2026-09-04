@@ -7,7 +7,7 @@ export interface MigrationResult {
   alreadyApplied: string[];
 }
 
-/** Idempotente: lo usan el script de migración y el arranque de los tests. */
+/** Idempotent: used by the migration script and by the test bootstrap. */
 export async function runMigrations(db: Db, dir = 'migrations'): Promise<MigrationResult> {
   await db.query(`create table if not exists schema_migrations (
     name text primary key,

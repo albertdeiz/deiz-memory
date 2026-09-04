@@ -5,15 +5,15 @@ import { err, needsConfirmation, ok, type Result } from '../result';
 import { resolveMemoryId } from './resolve';
 
 export interface ReprocessInput {
-  /** Una memoria concreta. Excluye a los demás selectores. */
+  /** One specific memory. Excludes the other selectors. */
   ref?: string | null;
-  /** Las que fallaron o quedaron a medias. El selector que vas a usar siempre. */
+  /** The ones that failed or came out partial. The selector you will always use. */
   failed?: boolean;
-  /** Las que nunca pasaron por un carril. */
+  /** The ones that never went through a lane. */
   pending?: boolean;
-  /** Todas las que tienen archivo. Para cuando mejora el prompt. */
+  /** Everything with a file. For when a prompt improves. */
   all?: boolean;
-  /** Acota a un carril: "solo las fotos". */
+  /** Narrows to one lane: "photos only". */
   lane?: Lane | null;
   limit?: number;
   confirm?: boolean;
@@ -22,23 +22,23 @@ export interface ReprocessInput {
 export interface ReprocessResult {
   queued: number;
   ids: Uuid[];
-  /** Los mismos, en prefijo, para mostrar. `ids` promete uuid y tiene que cumplirlo. */
+  /** The same ones as prefixes, for display. `ids` promises uuids and must keep it. */
   shortIds: string[];
 }
 
-// Number('abc') es NaN, y NaN sobrevive a Math.min/Math.max sin inmutarse: sin
-// esta guarda termina en un `limit $1` y Postgres devuelve un error de sintaxis
-// crudo en vez de un mensaje útil.
+// Number('abc') is NaN, and NaN survives min/max unchanged: without this guard
+// it ends up in a `limit $1` and the database returns a raw syntax error rather
+// than a useful message.
 const clampLimit = (n: number | undefined) =>
   !n || !Number.isFinite(n) ? 100 : Math.min(Math.max(Math.trunc(n), 1), 5_000);
 
 /**
- * Todo lo derivado es regenerable desde el blob, y esta es la puerta:
- * mejoras el prompt del carril de visión y vuelves a pasar el histórico entero.
+ * Everything derived is regenerable from the blob, and this is the door: improve
+ * a lane's prompt and run the whole history through again.
  *
- * No es destructivo —el original no se toca y por eso se puede— pero sí cuesta
- * plata: el carril de visión se paga por token. Por eso en lote pide `--yes`,
- * igual que purge, aunque por una razón completamente distinta.
+ * Not destructive — the original is untouched, which is why this is possible —
+ * but it does cost: a hosted vision lane is paid per token. So in bulk it asks
+ * for confirmation, like purge, for a completely different reason.
  */
 export async function reprocess(
   deps: Deps,
@@ -63,8 +63,8 @@ export async function reprocess(
       where.push(`m.normalization_lane = $${params.length}`);
     }
 
-    // Sin selector esto reprocesaría la biblioteca completa porque sí. Exigir
-    // que digas cuál es más barato que explicarte después la factura.
+    // With no selector this would reprocess the entire library for no reason.
+    // Demanding you name one is cheaper than explaining the bill afterwards.
     if (!input.failed && !input.pending && !input.lane && !input.all) {
       return err(
         'invalid',
@@ -72,10 +72,10 @@ export async function reprocess(
       );
     }
 
-    // Los selectores se combinan con AND, y dos de esas combinaciones no pueden
-    // dar nada nunca: lo pendiente todavía no tiene carril, y lo fallido ya
-    // corrió. Devolver "no hay nada que reprocesar" sería peor que un error —
-    // dirías "ah, entonces está todo bien" y te irías tranquilo.
+    // Selectors combine with AND, and two of those combinations can never return
+    // anything: pending has not run a lane yet, and failed already did. Answering
+    // "nothing to reprocess" would be worse than an error — you would read it as
+    // everything being fine and walk away.
     if (input.pending && input.lane) {
       return err('invalid', 'Lo pendiente todavía no tiene carril asignado: --pending y --lane se excluyen.');
     }
@@ -84,9 +84,9 @@ export async function reprocess(
     }
 
     params.push(clampLimit(input.limit));
-    // Se trae también con qué nombrarlas: una confirmación que dice "3
-    // memorias" no te deja decidir nada. `Affected[]` existe para esto y purge
-    // ya lo usa así.
+    // The names come along too: a confirmation that says "3 memories" leaves you
+    // nothing to decide on. That is what the affected list is for, and purge
+    // already uses it this way.
     const { rows } = await deps.db.query<{ id: string; label: string | null }>(
       `select m.id, coalesce(m.title, m.original_filename) as label
          from memories m
@@ -102,7 +102,7 @@ export async function reprocess(
   if (ids.length === 0) return ok({ queued: 0, ids: [], shortIds: [] });
 
   if (ids.length > 1 && !input.confirm) {
-    // Se nombran hasta diez: más que eso es un muro y deja de informar.
+    // Up to ten are named: more than that is a wall and stops informing.
     const shown = ids.slice(0, 10);
     const affects = shown.map((id) => ({
       kind: 'memory',

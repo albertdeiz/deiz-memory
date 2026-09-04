@@ -10,11 +10,11 @@ export interface EmbedConfig {
 }
 
 /**
- * `nomic-embed-text` en Ollama: 768 dimensiones, local, y bueno en español.
+ * A local embedding model: 768 dimensions, on-host, and good in Spanish.
  *
  * Cambiar de modelo **obliga a reindexar**: la columna `vector(768)` del
- * esquema depende de esta elección, y un vector de otro tamaño no entra. Por
- * eso `dimensions` está acá y no escondido en el adapter.
+ * schema depends on this choice, and a vector of another size does not fit. That
+ * is why the dimension count travels with the port instead of hiding here.
  */
 export const defaultEmbedConfig: EmbedConfig = {
   baseUrl: 'http://localhost:11434/v1',
@@ -48,8 +48,8 @@ export function ollamaEmbedder(cfg: EmbedConfig = defaultEmbedConfig): Embedder 
 
       const out = (res.data ?? []).map((d) => d.embedding);
       if (out.length !== texts.length) {
-        // Guardar un vector desalineado con su trozo es peor que no guardarlo:
-        // la búsqueda devolvería la cita equivocada, con total seguridad.
+        // Storing a vector misaligned with its chunk is worse than not storing it:
+        // search would return the wrong citation, with complete confidence.
         throw new Error(`pedí ${texts.length} vectores y volvieron ${out.length}`);
       }
       for (const v of out) {

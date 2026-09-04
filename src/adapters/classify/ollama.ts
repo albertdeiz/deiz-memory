@@ -12,13 +12,13 @@ export interface ClassifyConfig {
 /**
  * `qwen2.5:3b` y no un modelo razonador.
  *
- * Se probó `qwen3:4b` primero y se pasó del timeout: gasta el presupuesto
+ * A reasoning model was tried first and blew the timeout: it spends the whole
  * entero pensando en voz alta antes de responder, y clasificar en ocho
- * categorías no necesita razonamiento en cadena. El de 3B responde en ~12 s en
+ * budget thinking out loud, and choosing among eight categories needs no chain
  * CPU y acierta.
  *
- * Nota de despliegue: en Docker sobre macOS esto corre en CPU, sin Metal. En un
- * VPS Linux es lo mismo; si quieres que vuele en tu Mac, Ollama nativo usa la
+ * Deployment note: in Docker on macOS this runs on CPU. On a Linux VPS it is the
+ * same; to make it fly on a Mac, point the URL at a native host install that can
  * GPU y basta apuntar `DM_CLASSIFY_URL` al host.
  */
 export const defaultClassifyConfig: ClassifyConfig = {
@@ -35,14 +35,14 @@ interface ChatResponse {
 /**
  * El clasificador, contra cualquier API compatible con OpenAI.
  *
- * Por defecto apunta a Ollama en el mismo compose, y esa elección es distinta
- * de la del OCR a propósito: clasificar es elegir entre ocho categorías y
- * escribir un título de cinco palabras, y para eso un modelo chico rinde bien.
- * En el carril de visión no, porque ahí los modelos chicos fallan justo en los
- * dígitos —un número de póliza, un RUT— y por eso ahí ganó el OCR clásico.
+ * By default it points at the model server in the same compose, and that choice
+ * differs from the OCR one on purpose: classifying is picking among eight
+ * categories and writing a five-word title, which a small model does well.
+ * Not so in the vision lane, where small models fail exactly on the digits — a
+ * policy number, a tax id — which is why classical OCR won there.
  *
- * Nada sale del host, no cuesta por documento, y §14 deja de exigir verificar
- * la retención de un tercero antes de mandarle una receta médica. Cambiar a
+ * Nothing leaves the host, it costs nothing per document, and there is no
+ * third party whose retention policy has to be verified before sending it a
  * OpenAI o a una pasarela es cambiar `DM_CLASSIFY_URL`.
  */
 export function ollamaClassifier(cfg: ClassifyConfig = defaultClassifyConfig): Classifier {
@@ -59,11 +59,11 @@ export function ollamaClassifier(cfg: ClassifyConfig = defaultClassifyConfig): C
         timeoutMs: cfg.timeoutMs,
         body: JSON.stringify({
           model: cfg.model,
-          // Clasificar no es creativo: dos corridas sobre el mismo documento
-          // deberían dar lo mismo.
+          // Classifying is not creative: two runs over the same document should give the
+          // same result.
           temperature: 0,
-          // Le pide al servidor JSON válido en vez de rezar. El que no lo
-          // soporte lo ignora, y por eso igual se parsea a la defensiva abajo.
+          // Asks the server for valid JSON instead of praying. One that does not support
+          // it ignores the field, which is why parsing below is still defensive.
           response_format: {
             type: 'json_schema',
             json_schema: { name: 'salida', schema },
@@ -93,8 +93,8 @@ export function ollamaClassifier(cfg: ClassifyConfig = defaultClassifyConfig): C
           ],
         }),
       });
-      // Se limpia el bloque <think> igual que al clasificar, pero no se busca
-      // JSON: acá la respuesta ES el texto.
+      // The thinking block is stripped as when classifying, but no JSON is looked
+      // for: here the answer IS the text.
       return (res.choices?.[0]?.message?.content ?? '')
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .trim();
@@ -108,11 +108,11 @@ export function ollamaClassifier(cfg: ClassifyConfig = defaultClassifyConfig): C
 }
 
 /**
- * Saca el JSON de una respuesta que puede venir con adornos.
+ * Pulls the JSON out of a response that may arrive decorated.
  *
  * Un modelo chico a veces envuelve la respuesta en ```json, antepone una frase,
- * o —los que razonan, como qwen3— deja un bloque <think> antes. Nada de eso es
- * motivo para descartar una clasificación que por dentro está bien.
+ * or a reasoning model leaves a thinking block first. None of that is grounds
+ * for discarding a classification that is fine inside.
  */
 function parseLoose(raw: string): unknown {
   const sinPensar = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
@@ -121,7 +121,7 @@ function parseLoose(raw: string): unknown {
   try {
     return JSON.parse(sinCerca);
   } catch {
-    // Último intento: el primer objeto balanceado que aparezca.
+    // Last resort: the first balanced object that appears.
     const start = sinCerca.indexOf('{');
     if (start < 0) return null;
     let depth = 0;

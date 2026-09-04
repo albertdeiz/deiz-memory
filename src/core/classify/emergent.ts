@@ -6,18 +6,18 @@ import { ok, type Result } from '../result';
 /**
  * Dominios emergentes (§9).
  *
- * El punto de esto no es ahorrar tipeo: es que **no tienes que anticipar tus
- * propias categorías**. Hoy no sabes qué vas a necesitar guardar en dos años, y
- * el sistema puede descubrirlo mirando lo que ya no calza en ningún lado.
+ * The point is not saving typing: it is that **you do not have to anticipate
+ * your own categories**. You do not know today what you will need to store in
+ * two years, and the system can discover it from what fits nowhere.
  *
- * Con una regla dura encima: **el bot propone, nunca crea solo** (§9). Una
+ * With one hard rule on top: **the bot proposes, it never creates on its own.**
  * propuesta es una pregunta, y la respuesta es tuya.
  */
 
-/** Cuántas memorias sueltas hacen un racimo. §9 usa tres como ejemplo. */
+/** How many loose memories make a cluster. */
 export const MIN_CLUSTER = 3;
 
-/** Palabras que aparecen en todo y no distinguen nada. */
+/** Words that appear in everything and distinguish nothing. */
 const STOP = new Set([
   'imagen', 'foto', 'fotografia', 'documento', 'archivo', 'pdf', 'png', 'jpg',
   'escaneo', 'captura', 'personal', 'copia', 'nota', 'texto', 'prueba', 'test',
@@ -25,14 +25,14 @@ const STOP = new Set([
 ]);
 
 export interface Proposal {
-  /** La etiqueta que comparten, y que da nombre a la categoría propuesta. */
+  /** The tag they share, which names the proposed category. */
   keyword: string;
   label: string;
   slug: string;
-  /** Descripción sugerida, armada con lo que de verdad comparten. */
+  /** Suggested description, built from what they actually share. */
   description: string;
   memoryIds: string[];
-  /** Títulos de ejemplo, para que puedas decidir mirando y no a ciegas. */
+  /** Sample titles, so you can decide by looking rather than blindly. */
   examples: string[];
 }
 
@@ -43,12 +43,12 @@ interface Row {
 }
 
 /**
- * Busca racimos entre lo que quedó sin dominio.
+ * Looks for clusters among whatever was left uncategorized.
  *
- * Usa las etiquetas que ya puso el clasificador, no una segunda pasada del
- * modelo. Es más barato, es determinista, y sobre todo: si el modelo ya
- * etiquetó diez cosas como "webdox", ese acuerdo entre diez documentos es mejor
- * señal que preguntarle otra vez.
+ * It uses the tags the classifier already assigned, not a second pass of the
+ * model. Cheaper, deterministic, and above all: if the model already tagged ten
+ * things the same way, that agreement across ten documents is better signal
+ * than asking it again.
  */
 export async function proposeDomains(
   deps: Deps,
@@ -68,7 +68,7 @@ export async function proposeDomains(
   const existentes = await activeDomains(deps.db, actor);
   const yaCubierto = coveredWords(existentes);
 
-  // Una etiqueta → las memorias que la comparten.
+  // One tag to the memories that share it.
   const porEtiqueta = new Map<string, Row[]>();
   for (const r of rows) {
     for (const t of new Set((r.tags ?? []).map(normalize))) {
@@ -83,9 +83,9 @@ export async function proposeDomains(
     .filter(([, ms]) => ms.length >= min)
     .sort((a, b) => b[1].length - a[1].length);
 
-  // Una memoria pertenece a un solo racimo: al más grande que la contenga. Sin
-  // esto, "webdox" y "corporativo" propondrían dos categorías para las mismas
-  // diez cosas, que es justo la proliferación que §9 quiere evitar.
+  // A memory belongs to exactly one cluster: the largest that contains it. Without
+  // this, two overlapping tags would propose two categories for the same
+  // ten things, which is precisely the proliferation to avoid.
   const tomadas = new Set<string>();
   const propuestas: Proposal[] = [];
 
@@ -109,11 +109,11 @@ export async function proposeDomains(
 }
 
 /**
- * Arma una descripción con las palabras que el racimo comparte de verdad.
+ * Builds a description from the words the cluster genuinely shares.
  *
- * Sirve como punto de partida, no como respuesta final: §9 dice que la
- * descripción es el prompt del clasificador, así que conviene revisarla antes
- * de aceptarla. Por eso la propuesta la muestra en vez de aplicarla callada.
+ * A starting point, not a final answer: the description IS the classifier's
+ * prompt, so it is worth reviewing before accepting. Which is why the proposal
+ * shows it instead of applying it quietly.
  */
 function describe(keyword: string, memorias: Row[]): string {
   const frecuencia = new Map<string, number>();
@@ -139,7 +139,7 @@ const normalize = (s: string): string =>
 const usable = (t: string, yaCubierto: Set<string>): boolean =>
   t.length > 3 && !STOP.has(t) && !yaCubierto.has(t) && !/^\d+$/.test(t);
 
-/** Palabras que ya viven en la descripción de un dominio activo. */
+/** Words that already live in an active domain's description. */
 function coveredWords(domains: Domain[]): Set<string> {
   const out = new Set<string>();
   for (const d of domains) {
@@ -158,19 +158,19 @@ export interface AcceptResult {
 }
 
 /**
- * Acepta una propuesta: crea el dominio y mueve las memorias del racimo.
+ * Accepts a proposal: creates the domain and moves the cluster's memories.
  *
- * Existe como operación aparte y no dentro de `proposeDomains` porque esa
- * separación **es** la regla: proponer no cambia nada, y solo esto —que exige
- * una decisión tuya— escribe.
+ * A separate operation and not part of proposing, because that separation **is**
+ * the rule: proposing changes nothing, and only this — which requires a decision
+ * from you — writes.
  */
 export async function acceptProposal(
   deps: Deps,
   actor: Actor,
   p: { label: string; description: string; memoryIds: string[] },
 ): Promise<Result<AcceptResult>> {
-  // `confirm: true`: el chequeo de solapamiento ya corrió al proponer, porque
-  // se descartaron las palabras que viven en un dominio activo.
+  // Confirmation is implied: the overlap check already ran while proposing,
+  // since words living in an active domain were discarded there.
   const creado = await createDomain(deps.db, actor, {
     label: p.label,
     description: p.description,
@@ -188,7 +188,7 @@ export async function acceptProposal(
   return ok({ domain: creado.value, moved: rowCount });
 }
 
-/** Para que el chat pueda decir "hay algo que proponerte" sin traerse todo. */
+/** So the chat can say "there is something to propose" without fetching all. */
 export async function hasProposals(deps: Deps, actor: Actor): Promise<number> {
   const r = await proposeDomains(deps, actor);
   return r.ok ? r.value.length : 0;

@@ -39,8 +39,8 @@ export const telegramCapabilities = (maxDownloadBytes = 20 * 1024 * 1024): Capab
   maxDownloadBytes,
   supportsButtons: true,
   supportsRichFormatting: true,
-  // Telegram sí permitiría escribir primero. §2 dice que no lo hacemos, y el
-  // puerto no expone un método para hacerlo aunque se quisiera.
+  // The platform would allow writing first. We do not, and the port exposes no
+  // method to do it even if someone wanted to.
   canInitiate: true,
 });
 
@@ -66,11 +66,11 @@ const chunk = (s: string): string[] => {
 /**
  * De un mensaje de Telegram a un adjunto nuestro.
  *
- * Telegram entrega una foto de dos formas distintas y conviene entender la
- * diferencia: como `photo` viene comprimida y sin nombre, y como `document`
- * viene el original. Mandar el original preserva el archivo (§3.6) pero desde
- * un iPhone eso es un HEIC, que hoy el OCR no lee. No se fuerza ninguna de las
- * dos: se guarda lo que llegue, tal cual llegó.
+ * The platform delivers a photo two different ways, and the difference matters:
+ * sent as a photo it arrives compressed and unnamed, sent as a document the
+ * original arrives. The original preserves the file, but from an iPhone that is
+ * a HEIC. Neither is forced: whatever arrives is stored, exactly as it arrived.
+ *
  */
 function attachmentOf(ctx: Context): Attachment | null {
   const m = ctx.message;

@@ -41,10 +41,10 @@ const nameFor = (input: ExtractInput): string => {
  *
  * El cambio no es de herramienta —sigue siendo markitdown— sino de frontera:
  * antes el core necesitaba Python y uv instalados en el host, y ahora necesita
- * una URL. Eso es lo que hace que el mismo compose corra en tu Mac, en un VPS y
- * en una Raspberry Pi sin tocar nada.
+ * a URL. That is what lets the same compose run on a laptop, on a VPS and on a
+ * small board without touching anything.
  *
- * Sigue sin hacer OCR, que es la razón de que exista el carril B.
+ * It still does no OCR, which is the reason the visual lane exists.
  */
 export function documentsConverter(cfg: DocumentsConfig = defaultDocumentsConfig): Converter {
   return {
@@ -73,9 +73,9 @@ export interface Transcoded {
 }
 
 /**
- * Una imagen que ningún carril sabe leer, a JPEG.
+ * An image no lane can read, turned into JPEG.
  *
- * Existe por el HEIC: es el formato por defecto de las fotos de iPhone y no lo
+ * It exists because of HEIC: the default for iPhone photos, which neither the
  * acepta ni el OCR ni la API de visión. Sin esto, mandar una foto desde el
  * teléfono la guarda muda.
  *

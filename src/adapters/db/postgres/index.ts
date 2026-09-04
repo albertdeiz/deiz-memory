@@ -16,7 +16,7 @@ const wrap = (runner: pg.Pool | pg.PoolClient, inTx: boolean): Db => ({
   },
 
   async tx<T>(fn: (db: Db) => Promise<T>): Promise<T> {
-    // Anidar transacciones reutiliza la actual: sin savepoints, que acá no hacen falta.
+    // Nesting a transaction reuses the current one: no savepoints, not needed here.
     if (inTx) return fn(wrap(runner, true));
 
     const client = await (runner as pg.Pool).connect();

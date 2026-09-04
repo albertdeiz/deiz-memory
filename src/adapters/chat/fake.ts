@@ -5,9 +5,9 @@ import type { Attachment, Capabilities, Channel, Incoming, Reply, Turn } from '.
 /**
  * Un canal en memoria. No es solo un doble de test: es el **segundo canal**.
  *
- * Y por eso declara `supportsButtons: false`. Si el único canal real tuviera
- * botones, la rama degradada de §7.1 no la ejercitaría nadie y sería una
- * intención escrita en un comentario. Con este, cada corrida de `dm chat` y
+ * Which is why it declares no button support. If the only real channel had
+ * buttons, nobody would exercise the degraded branch and it would be an
+ * intention written in a comment. With this, every CLI chat run exercises it.
  * cada test la prueba gratis.
  */
 export interface FakeChannelOptions {
@@ -26,9 +26,9 @@ export const FAKE_CAPS: Capabilities = {
 };
 
 export interface FakeChannel extends Channel {
-  /** Empuja un mensaje y devuelve lo que el bot respondió en ese turno. */
+  /** Pushes a message and returns what the bot replied in that turn. */
   send(input: { text?: string | null; attachment?: Attachment | null; action?: string | null; at?: Date }): Promise<Reply[]>;
-  /** Como `send`, pero desde otra persona. Para probar aislamiento. */
+  /** Like `send`, but from someone else. For testing isolation. */
   sendAs(externalUserId: string, input: { text?: string | null; at?: Date }): Promise<Reply[]>;
 }
 
@@ -41,8 +41,8 @@ export function fakeChannel(opts: FakeChannelOptions = {}): FakeChannel {
   const deliver = async (msg: Incoming): Promise<Reply[]> => {
     if (!handler) throw new Error('el canal falso no está escuchando');
     const out: Reply[] = [];
-    // El turno se cierra al volver: `reply` deja de servir después, igual que
-    // en un canal de verdad. Es §2 sostenida por el tipo, y acá se comprueba.
+    // The turn closes on return: `reply` stops working afterwards, exactly as in a
+    // real channel. The no-initiating rule held up by the type, checked here.
     let open = true;
     const turn: Turn = {
       incoming: msg,
@@ -100,11 +100,11 @@ export function fakeChannel(opts: FakeChannelOptions = {}): FakeChannel {
 }
 
 /**
- * Un adjunto desde el disco, para tests y para `dm chat --file`.
+ * An attachment from disk, for tests and for the CLI chat's file flag.
  *
- * Necesita el tamaño de verdad: el límite del canal se compara ANTES de bajar,
- * así que un adjunto que dice `sizeBytes: null` esquiva la comprobación entera
- * y la deja de adorno. Se hace `stat` al construirlo, no al leerlo.
+ * It needs the real size: the channel's cap is compared BEFORE downloading, so
+ * an attachment claiming a null size skips the check entirely and leaves it
+ * decorative. It stats on construction, not on read.
  */
 export const fileAttachment = async (path: string, sizeOverride?: number): Promise<Attachment> => ({
   filename: basename(path),
@@ -113,7 +113,7 @@ export const fileAttachment = async (path: string, sizeOverride?: number): Promi
   fetch: () => readFile(path),
 });
 
-/** Un adjunto que se pasa del límite sin existir: prueba que no se baja nada. */
+/** An attachment over the cap that does not exist: proves nothing is downloaded. */
 export const oversizedAttachment = (sizeBytes: number): Attachment => ({
   filename: 'enorme.pdf',
   declaredMediaType: 'application/pdf',

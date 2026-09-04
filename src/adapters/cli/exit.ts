@@ -1,8 +1,8 @@
 import type { Result } from '../../core/result';
 
 /**
- * El código de salida es lo que hace testeable el CLI sin leer prosa.
- * Es también el contrato que un adapter HTTP mapeará a status codes.
+ * The exit code is what makes the CLI testable without reading prose.
+ * It is also the contract an HTTP adapter would map to status codes.
  */
 export const EXIT = {
   ok: 0,

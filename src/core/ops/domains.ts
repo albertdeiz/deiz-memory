@@ -5,10 +5,10 @@ import { err, needsConfirmation, ok, type Result } from '../result';
 /**
  * Los dominios de §9.
  *
- * No hay borrado duro, y no es una omisión: eliminar un dominio con memorias
- * adentro las dejaría huérfanas o —peor— se las llevaría. Las dos operaciones
- * honestas son **archivar** y **fusionar**, y en la práctica fusionar es la que
- * se usa el 90% de las veces ("esto de 'papeles' en realidad era 'documentos'").
+ * There is no hard delete, and that is not an omission: deleting a domain with
+ * memories inside would orphan them or — worse — take them along. The two honest
+ * operations are **archive** and **merge**, and in practice merge is the one used
+ * 90% of the time, when you realise two categories were always the same one.
  */
 export interface Domain {
   id: Uuid;
@@ -17,7 +17,7 @@ export interface Domain {
   description: string;
   aliases: string[];
   active: boolean;
-  /** Cuántas memorias tiene. Lo pide `/dominios` (§9). */
+  /** How many memories it holds. The listing asks for it. */
   count?: number;
 }
 
@@ -36,7 +36,7 @@ const toDomain = (r: Row): Domain => ({
   ...(r.n === undefined ? {} : { count: Number(r.n) }),
 });
 
-/** Un slug es para escribirlo en un comando: sin tildes, sin espacios, corto. */
+/** A slug is for typing into a command: unaccented, no spaces, short. */
 export const slugify = (s: string): string =>
   s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
@@ -60,9 +60,9 @@ export async function listDomains(
 }
 
 /**
- * Los dominios activos, para armar el prompt del clasificador en runtime.
+ * The active domains, to assemble the classifier's prompt at runtime.
  *
- * Es la razón por la que esto es una tabla y no un enum: agregar una categoría
+ * This is why it is a table and not an enum: adding a category must not require
  * no puede requerir un deploy (§3.7).
  */
 export async function activeDomains(db: Db, actor: Actor): Promise<Domain[]> {
@@ -93,16 +93,16 @@ export interface CreateDomainInput {
   confirm?: boolean;
 }
 
-/** Debajo de esto dos descripciones se parecen lo bastante como para avisar. */
+/** Below this, two descriptions are close enough to warn about. */
 const OVERLAP_WORDS = 3;
 
 /**
  * Crea un dominio.
  *
- * §9 nombra la proliferación como **el** modo de falla: crear categorías sin
- * freno termina en cuarenta dominios con la mitad solapados ("salud", "médico",
- * "doctores"). Por eso antes de crear se compara contra las descripciones que
- * ya existen y se avisa — el bot propone, nunca crea solo.
+ * Proliferation is **the** failure mode: creating categories unchecked ends in
+ * forty domains with half of them overlapping. So before creating, the new
+ * description is compared against the ones that already exist and a warning is
+ * raised — the bot proposes, it never creates on its own.
  */
 export async function createDomain(
   db: Db,
@@ -113,7 +113,7 @@ export async function createDomain(
   const description = input.description.trim();
   if (!label) return err('invalid', 'El dominio necesita un nombre.');
   if (!description) {
-    // No es burocracia: la descripción ES el prompt del clasificador (§9).
+    // Not bureaucracy: the description IS the classifier's prompt.
     return err('invalid', 'El dominio necesita una descripción de una línea: es lo que usa el clasificador para decidir.');
   }
 
@@ -142,7 +142,7 @@ export async function createDomain(
   return ok(toDomain(rows[0]!));
 }
 
-/** Palabras compartidas entre descripciones. Tosco a propósito: solo avisa. */
+/** Words shared between descriptions. Crude on purpose: it only warns. */
 async function mostSimilar(db: Db, actor: Actor, description: string): Promise<Domain | null> {
   const words = new Set(
     description.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -171,8 +171,8 @@ export async function editDomain(
   const d = await findDomain(db, actor, ref);
   if (!d) return err('not_found', `No existe el dominio "${ref}".`);
 
-  // El slug NO se regenera al renombrar. La identidad es el id (§9), y cambiar
-  // el slug rompería los comandos que la persona ya tiene en la cabeza.
+  // The slug is NOT regenerated on rename. The identity is the id, and changing
+  // the slug would break the commands the person already has memorised.
   const { rows } = await db.query<Row>(
     `update domains set label = coalesce($3, label),
                         description = coalesce($4, description),
@@ -185,7 +185,7 @@ export async function editDomain(
   return ok(toDomain(rows[0]!));
 }
 
-/** Archivar: deja de proponerse al clasificar, sus memorias siguen ahí (§9). */
+/** Archive: stops being offered when classifying; its memories stay. */
 export async function archiveDomain(db: Db, actor: Actor, ref: string): Promise<Result<Domain>> {
   const d = await findDomain(db, actor, ref);
   if (!d) return err('not_found', `No existe el dominio "${ref}".`);
@@ -207,9 +207,9 @@ export interface MergeResult {
 /**
  * Fusionar: mueve las memorias de A a B y archiva A.
  *
- * Es la operación que de verdad se usa cuando te das cuenta de que dos
- * categorías eran la misma. Pide confirmación porque mueve memorias, y nombra
- * cuántas.
+ * This is the operation actually used when you realise two categories were the
+ * same one. It asks for confirmation because it moves memories, and it names
+ * how many.
  */
 export async function mergeDomains(
   deps: Deps,
@@ -256,13 +256,13 @@ export async function mergeDomains(
 /**
  * La semilla de §9, contexto Chile.
  *
- * Vive acá y no solo en la migración porque un dueño nuevo también la necesita,
- * y leerla de la tabla sería circular: en una base recién creada no hay de
- * dónde copiar. La 006 la repite para los dueños que ya existían — es una
- * migración, o sea historia congelada, y duplicar una lista de ocho filas es
- * más barato que inventar un mecanismo para compartirla.
+ * Lives here and not only in a migration because a new owner needs it too, and
+ * reading it from the table would be circular: a freshly created database has
+ * nothing to copy from.
  *
- * Es semilla, no lista cerrada: se renombra, se archiva y se fusiona desde el
+ *
+ *
+ * A seed, not a closed list: renamed, archived and merged from the chat.
  * chat sin tocar el repo (§3.7).
  */
 export const SEED_DOMAINS: { slug: string; label: string; description: string }[] = [
@@ -284,7 +284,7 @@ export const SEED_DOMAINS: { slug: string; label: string; description: string }[
     description: 'Cumpleaños, tallas, preferencias, contactos de emergencia y datos de gente cercana' },
 ];
 
-/** Un dueño nuevo nace con la semilla. Idempotente. */
+/** A new owner is born with the seed. Idempotent. */
 export async function seedDomains(db: Db, ownerId: Uuid): Promise<void> {
   for (const d of SEED_DOMAINS) {
     await db.query(

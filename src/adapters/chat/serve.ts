@@ -7,17 +7,17 @@ import { readSession } from '../../core/router/session';
 import { present } from './present';
 
 /**
- * El bucle: llega un mensaje, se resuelve quién es, se enruta, se responde.
+ * The loop: a message arrives, who it is gets resolved, it is routed, it is
  *
- * Todo lo interesante ya pasó antes de acá — este archivo solo pega las piezas.
- * Que sea aburrido es la señal de que las fronteras quedaron donde debían.
+ * answered. Everything interesting happened before here — this file only glues
+ * the pieces. Its being boring is the sign the boundaries landed where they should.
  */
 
-/** Un desconocido recibe una línea y después silencio, para no ser un eco. */
+/** A stranger gets one line and then silence, so the bot is not an echo. */
 const SILENCE_MS = 10 * 60 * 1000;
 
 export interface ServeOptions {
-  /** Para el log. Nunca se loguean cuerpos de mensaje (§14). */
+  /** For the log. Message bodies are never logged. */
   onEvent?: (line: string) => void;
 }
 
@@ -30,11 +30,11 @@ export async function serveChannel(
   const shushed = new Map<string, number>();
 
   /**
-   * Una cadena de promesas por conversación.
+   * One promise chain per conversation.
    *
-   * `getUpdates` entrega en orden pero el handler es async: sin esto, dos
-   * mensajes seguidos se interleavan y se pisan `chat_sessions`. Diez líneas
-   * que evitan un bug que después cuesta mucho reproducir.
+   * The platform delivers in order but the handler is async: without this, two
+   * consecutive messages interleave and clobber the session row. Ten lines that
+   * avoid a bug that is very expensive to reproduce later.
    */
   const queues = new Map<string, Promise<void>>();
   const serialize = (key: string, work: () => Promise<void>): Promise<void> => {
@@ -54,10 +54,10 @@ export async function serveChannel(
     const who = await identityOwner(deps.db, msg.conversation.channel, msg.externalUserId);
 
     if (!who) {
-      // Sin identidad no hay Actor, y sin Actor no hay operación posible.
-      // Tampoco se guarda para revisar después: el user id de un canal de chat
-      // no es falsificable, y archivar lo que manda un extraño bajo tu owner_id
-      // sería peor que descartarlo.
+      // With no identity there is no actor, and with no actor no operation is possible.
+      // Nor is it stored for later review: a chat platform's user id cannot be forged,
+      // and filing what a stranger sends under your owner id would be worse than
+      // discarding it.
       const code = onlyPairingCode(msg);
       if (code) {
         const res = await pair(deps, msg.conversation, msg.externalUserId, code, now, msg.displayName);
@@ -92,7 +92,7 @@ export async function serveChannel(
     for (const r of present(res, turn.caps)) await turn.reply(r);
     await touchIdentity(deps.db, msg.conversation.channel, msg.externalUserId, now);
 
-    // Ids y verbos, jamás cuerpos ni nombres de archivo (§14).
+    // Ids and verbs, never bodies and never filenames.
     say(`${msg.externalUserId} ${intent.verb}${res.ok ? '' : ` · ${res.kind}`}`);
   };
 
@@ -100,10 +100,10 @@ export async function serveChannel(
 }
 
 /**
- * Lo único que un desconocido puede hacer: presentar un código.
+ * The only thing a stranger can do: present a code.
  *
- * Se acepta `/start CODIGO` y el código pelado, porque quien lo copia de una
- * terminal a un teléfono lo va a pegar solo la mitad de las veces.
+ * Both the command with the code and the bare code are accepted, because whoever
+ * copies it from a terminal to a phone will paste it whole only half the time.
  */
 function onlyPairingCode(msg: Incoming): string | null {
   const t = msg.text?.trim() ?? '';

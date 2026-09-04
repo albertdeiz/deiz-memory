@@ -7,7 +7,7 @@ const MAX_BYTES = 22 * 1024 * 1024;
 
 export interface VisionConfig {
   model: string;
-  /** Transcribir es percepción, no razonamiento: pensar más no lee mejor un papel. */
+  /** Transcribing is perception, not reasoning: more thinking does not read paper better. */
   effort: 'low' | 'medium' | 'high';
   maxTokens: number;
   apiKey?: string | undefined;
@@ -20,9 +20,9 @@ export const defaultVisionConfig: VisionConfig = {
 };
 
 /**
- * Sin API key el SDK no lanza al construirse: falla recién al llamar, y con un
- * mensaje largo en inglés sobre métodos de autenticación. Eso terminaría tal
- * cual dentro de `normalization_error`, que es lo que la persona va a leer.
+ * With no key the SDK does not throw on construction: it fails on the call, with
+ * a long message about authentication methods. That would land verbatim inside
+ * the stored error, which is what the person ends up reading.
  */
 const NO_CREDENTIALS = 'Could not resolve authentication method';
 const explain = (e: unknown): string => {
@@ -33,14 +33,14 @@ const explain = (e: unknown): string => {
 };
 
 /**
- * Carril B por Anthropic: el camino de mejor calidad, y el único que acepta un
+ * The hosted visual lane: the highest-quality path, and the only one that takes
  * PDF entero sin rasterizarlo.
  *
- * Los PDF van enteros como bloque `document`, que no tiene equivalente en el
- * formato de chat de OpenAI: por eso el adapter compatible (`vision-openai.ts`)
- * tiene que rasterizar y este no.
+ * PDFs go whole as a document block, which has no equivalent in the other
+ * provider's chat format: that is why the compatible adapter has to rasterize
+ * and this one does not.
  *
- * Es el carril caro. Solo se llega acá cuando el carril A no tenía nada que dar.
+ * This is the expensive lane. It is only reached when the cheap one had nothing.
  */
 export function claudeVisionConverter(cfg: VisionConfig = defaultVisionConfig): Converter {
   const client = new Anthropic(cfg.apiKey ? { apiKey: cfg.apiKey } : {});
@@ -58,8 +58,8 @@ export function claudeVisionConverter(cfg: VisionConfig = defaultVisionConfig): 
 
   return {
     async extract({ bytes, mediaType }: ExtractInput) {
-      // heic —lo que sale de un iPhone— cae acá. Decirlo con el nombre del
-      // formato ahorra el rato de mirar por qué "no se transcribió" una foto
+      // HEIC — what an iPhone produces — lands here. Naming the format saves the
+      // time spent wondering why a photo was not transcribed.
       // perfectamente legible.
       if (mediaType !== 'application/pdf' && !IMAGE_TYPES.includes(mediaType)) {
         throw unsupportedImage(mediaType);
@@ -71,7 +71,7 @@ export function claudeVisionConverter(cfg: VisionConfig = defaultVisionConfig): 
       }
 
       try {
-        // Streaming porque un escaneo de 40 páginas produce mucho texto y una
+        // Streaming, because a 40-page scan produces a lot of text and a single
         // request no-streaming se muere de timeout antes de terminar.
         const stream = client.messages.stream({
           model: cfg.model,
@@ -93,8 +93,8 @@ export function claudeVisionConverter(cfg: VisionConfig = defaultVisionConfig): 
           .join('\n')
           .trim();
 
-        // Un corte por max_tokens deja media póliza guardada con cara de póliza
-        // entera. Se conserva el texto —sirve— pero se marca, para que salga en
+        // A token-limit cut leaves half a policy stored looking like a whole policy.
+        // The text is kept — it is useful — but flagged, so it shows up in the review
         // `dm show` y la agarre `dm reprocess --failed`.
         const cut = response.stop_reason === 'max_tokens';
         return {
@@ -127,10 +127,10 @@ export function claudeVisionConverter(cfg: VisionConfig = defaultVisionConfig): 
 
     async available() {
       try {
-        // Un GET autenticado, no una inferencia: valida la key Y que el modelo
-        // exista, sin generar un token. `dm doctor` se corre a cada rato —y en
-        // los tests— y un diagnóstico que factura cada vez que preguntas cómo
-        // está el sistema es una sorpresa desagradable.
+        // An authenticated GET, not an inference: it validates the key AND that the
+        // model exists, without generating a token. The health check runs constantly —
+        // including in tests — and a diagnostic that bills every time you ask how the
+        // system is doing is an unpleasant surprise.
         await client.models.retrieve(cfg.model);
         return { ok: true, detail: `${cfg.model} · esfuerzo ${cfg.effort}` };
       } catch (e) {

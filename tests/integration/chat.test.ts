@@ -366,6 +366,50 @@ describe('"ver 2" es el 2 de la lista que estoy mirando', () => {
     // The category is empty, so "view 1" cannot open the earlier result.
     expect(text(await ch.send({ text: 'view:1' }))).not.toContain('mudanza');
   });
+
+  /**
+   * The other half of the same failure, and the one a session table cannot fix.
+   *
+   * A chat history stays on screen and stays tappable. Pressing the button of an
+   * older list resolves a position against the list shown NOW — it does not
+   * fail, it opens a different document. So the button carries the id and the
+   * typed number stays relative, which is what §7.1 states.
+   */
+  it('el botón de una lista vieja sigue abriendo lo suyo', async () => {
+    await guardar('contrato de arriendo del departamento');
+    await guardar('presupuesto de la mudanza');
+
+    const vieja = await ch.send({ text: '/search arriendo' });
+    const boton = vieja
+      .flatMap((r) => (r.kind === 'text' ? r.options ?? [] : []))
+      .find((o) => o.action.startsWith('view:'));
+    expect(boton).toBeDefined();
+    // What travels is the id; what is typed is still the position.
+    expect(boton!.action).toMatch(/^view:[0-9a-f]{8}$/);
+    expect(boton!.typed).toBe('view:1');
+
+    // Another list takes over the session, as any new listing does.
+    await ch.send({ text: '/search mudanza' });
+
+    // Scrolling up and pressing the old button: it opens what it always named.
+    const detalle = text(await ch.send({ action: boton!.action }));
+    expect(detalle).toContain('arriendo');
+    expect(detalle).not.toContain('mudanza');
+
+    // Typing the number, on the other hand, means the list on screen. Both are
+    // right; they answer different questions.
+    expect(text(await ch.send({ text: 'view:1' }))).toContain('mudanza');
+  });
+
+  it('un id escrito no necesita lista en pantalla', async () => {
+    const r = await guardar('póliza de incendio del departamento');
+    const id = /([0-9a-f]{8})/.exec(text(r))?.[1];
+    expect(id).toBeTruthy();
+
+    // Nothing was listed in this conversation, and it opens anyway: an id points
+    // at itself. A bare number here would be someone capturing a number.
+    expect(text(await ch.send({ text: `view:${id}` }))).toContain('incendio');
+  });
 });
 
 describe('bajar el archivo desde la lista', () => {
@@ -387,8 +431,10 @@ describe('bajar el archivo desde la lista', () => {
     });
 
     const lista = await ch.send({ text: '/search amoladora' });
-    const acciones = lista.flatMap((r) => (r.kind === 'text' ? (r.options ?? []).map((o) => o.action) : []));
-    expect(acciones).toContain('open:1');
+    const opciones = lista.flatMap((r) => (r.kind === 'text' ? r.options ?? [] : []));
+    // The button names the memory; the typed form names the position.
+    expect(opciones.map((o) => o.typed ?? o.action)).toContain('open:1');
+    expect(opciones.some((o) => /^open:[0-9a-f]{8}$/.test(o.action))).toBe(true);
 
     const out = await ch.send({ text: 'open:1' });
     const file = out.find((r) => r.kind === 'file');

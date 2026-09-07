@@ -61,8 +61,22 @@ export interface Incoming {
 
 export interface Option {
   label: string;
-  /** The SAME string a person could type. See the action vocabulary. */
+  /**
+   * What travels in the button. The same verb a person could type — see the
+   * action vocabulary — pointing at an id, which is what makes a button from an
+   * old message still correct today.
+   */
   action: string;
+  /**
+   * What to TYPE for this same action where the channel has no buttons.
+   *
+   * Absent means `action` itself is typable, which is the case for everything
+   * that carries no target. It exists only for the numbered ones: the button
+   * says `view:a3f2c1d0` and the person says `view:2`, because nobody types
+   * eight hex characters on a phone. One verb, two ways of pointing — not two
+   * vocabularies to keep in sync.
+   */
+  typed?: string;
   /**
    * Grouping hint: options sharing a `group` belong together.
    *

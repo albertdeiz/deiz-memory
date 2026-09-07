@@ -7,7 +7,7 @@ El diseño está en [CLAUDE.md](./CLAUDE.md). Esto es lo que hace falta para cor
 **Estado.** Captura, normalización por tres carriles, búsqueda full-text y semántica,
 clasificación con IA local, preguntas en lenguaje natural con cita verificada, y **datos
 tipados** para los campos que no toleran un ranking. Todo por Telegram o por terminal.
-340 tests.
+345 tests.
 
 El sistema se vació el 3 de septiembre de 2026 para poblarlo desde cero; si vienes de
 antes, hay que **volver a vincular el chat** con `dm pair`.
@@ -62,6 +62,8 @@ build && npm link` te deja `dm` apuntando al mismo stack por localhost.
 
 view:N  los datos   ·  open:N  el archivo  ·  hide:N  sacar de resultados
 more    siguiente   ·  save    guardar lo que buscaste  ·  yes / no
+
+view:<id>  las tres numeradas aceptan también el id, como `dm show a3f2`
 ```
 
 El separador es `:` porque tanto el nombre como la descripción llevan espacios.
@@ -154,10 +156,17 @@ fallar es peor que no estar.
 `view:N` muestra **los datos** —categoría, fecha del hecho, tipo, tamaño, tu nota y un
 asomo de lo leído—, no la transcripción entera.
 
-**El número siempre es de la última lista que viste.** No salió gratis: `/documentos`
+**El número es de la última lista que viste.** No salió gratis: `/documentos`
 numeraba sus resultados y ofrecía los botones sin registrar esos ids, así que `view:2`
 abría el segundo de la *búsqueda anterior*. Numerar y registrar vivían en archivos
 distintos; ahora el registro cuelga de la forma del `Outcome`, en un solo lugar.
+
+**El botón no usa el número: lleva el id.** En un chat el historial queda ahí y se puede
+tocar. Si subes tres días después y aprietas el botón de una lista vieja, un índice
+relativo se resolvería contra la lista de *ahora* — y no falla, abre otro documento, que
+es la peor forma de fallar. Con el id adentro ese botón sigue siendo correcto para
+siempre. El número se queda para lo escrito, porque nadie teclea ocho hex en un teléfono;
+las dos formas son el mismo verbo con distinto direccionamiento, no dos vocabularios.
 
 ### El bot nunca te escribe primero
 

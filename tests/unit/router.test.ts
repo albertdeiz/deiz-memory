@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodeAction, parseAction } from '../../src/core/router/actions';
+import { encodeAction, isAbsolute, parseAction } from '../../src/core/router/actions';
 import { classify, contentWords } from '../../src/core/router/intent';
 import type { Attachment, Incoming } from '../../src/core/channel/types';
 
@@ -33,9 +33,32 @@ describe('acciones · el botón y el teclado son lo mismo', () => {
     expect(parseAction('MORE', true)).toEqual({ kind: 'more' });
   });
 
-  it('acepta ver:3 del botón y 3 pelado del teclado', () => {
-    expect(parseAction(encodeAction({ kind: 'view', n: 3 }), true)).toEqual({ kind: 'view', n: 3 });
-    expect(parseAction('3', true)).toEqual({ kind: 'view', n: 3 });
+  it('acepta view:3 del botón y 3 pelado del teclado', () => {
+    const porIndice = { kind: 'view', target: { by: 'index', n: 3 } } as const;
+    expect(parseAction(encodeAction(porIndice), true)).toEqual(porIndice);
+    expect(parseAction('3', true)).toEqual(porIndice);
+  });
+
+  it('el índice y el id son el mismo verbo apuntando distinto', () => {
+    expect(parseAction('view:3', true)).toEqual({ kind: 'view', target: { by: 'index', n: 3 } });
+    expect(parseAction('view:a3f2c1d0', true))
+      .toEqual({ kind: 'view', target: { by: 'id', id: 'a3f2c1d0' } });
+    // One or two digits is a position, four or more hex is an id: the ranges do
+    // not overlap, so there is no precedence rule to remember.
+    expect(parseAction('open:12', true)).toEqual({ kind: 'open', target: { by: 'index', n: 12 } });
+    expect(parseAction('open:12ab', true)).toEqual({ kind: 'open', target: { by: 'id', id: '12ab' } });
+    // Three digits is neither: no list has a hundred items and no id prefix is
+    // that short.
+    expect(parseAction('view:123', true)).toBeNull();
+  });
+
+  it('un id vale sin lista en pantalla; un índice no', () => {
+    // This is what a button carries, and why one from a message three days old
+    // still opens the right document instead of the third of today's list.
+    expect(parseAction('view:a3f2c1d0', false))
+      .toEqual({ kind: 'view', target: { by: 'id', id: 'a3f2c1d0' } });
+    expect(isAbsolute({ kind: 'view', target: { by: 'id', id: 'a3f2c1d0' } })).toBe(true);
+    expect(isAbsolute({ kind: 'view', target: { by: 'index', n: 3 } })).toBe(false);
   });
 
   it('un número pelado no es una acción si no hay lista en pantalla', () => {
@@ -141,22 +164,31 @@ describe('los comandos son los del CLI, en inglés', () => {
   });
 
   it('las acciones se emiten y se aceptan solo en inglés', () => {
-    expect(encodeAction({ kind: 'view', n: 3 })).toBe('view:3');
-    expect(encodeAction({ kind: 'open', n: 2 })).toBe('open:2');
-    expect(encodeAction({ kind: 'hide', n: 1 })).toBe('hide:1');
+    const idx = (n: number) => ({ by: 'index', n }) as const;
+    expect(encodeAction({ kind: 'view', target: idx(3) })).toBe('view:3');
+    expect(encodeAction({ kind: 'open', target: idx(2) })).toBe('open:2');
+    expect(encodeAction({ kind: 'hide', target: idx(1) })).toBe('hide:1');
+    expect(encodeAction({ kind: 'view', target: { by: 'id', id: 'a3f2c1d0' } })).toBe('view:a3f2c1d0');
     expect(encodeAction({ kind: 'more' })).toBe('more');
     expect(encodeAction({ kind: 'yes' })).toBe('yes');
 
     for (const [escrito, esperado] of [
-      ['view:3', { kind: 'view', n: 3 }],
-      ['open:2', { kind: 'open', n: 2 }],
-      ['hide:1', { kind: 'hide', n: 1 }],
+      ['view:3', { kind: 'view', target: idx(3) }],
+      ['open:2', { kind: 'open', target: idx(2) }],
+      ['hide:1', { kind: 'hide', target: idx(1) }],
       ['more', { kind: 'more' }],
       ['MORE', { kind: 'more' }],
       ['yes', { kind: 'yes' }],
     ] as const) {
       expect(parseAction(escrito, true), escrito).toEqual(esperado);
     }
+  });
+
+  it('el payload del botón cabe en el límite de la plataforma', () => {
+    // Telegram caps callback_data at 64 bytes. `view:` plus an eight-character
+    // short id is 13, so carrying the id costs nothing that matters.
+    const payload = encodeAction({ kind: 'view', target: { by: 'id', id: 'a3f2c1d0' } });
+    expect(Buffer.byteLength(payload, 'utf8')).toBeLessThanOrEqual(64);
   });
 
   it('deja solo las palabras que sirven para buscar', () => {

@@ -49,6 +49,13 @@ const resultados = (n: number, hasMore: boolean): Resultados => ({
 const actionsOf = (rs: Reply[]): string[] =>
   rs.flatMap((r) => (r.kind === 'text' ? (r.options ?? []).map((o) => o.action) : []));
 
+/** What a person would type for those same options. */
+const typedOf = (rs: Reply[]): string[] =>
+  rs.flatMap((r) => (r.kind === 'text' ? (r.options ?? []).map((o) => o.typed ?? o.action) : []));
+
+/** The verb alone, with whatever it points at stripped off. */
+const verbsOf = (rs: Reply[]): string[] => actionsOf(rs).map((a) => a.split(':')[0]!);
+
 /** The first text reply, already narrowed. A file reply has no body. */
 const textReply = (rs: Reply[]) => {
   const r = rs.find((x) => x.kind === 'text');
@@ -73,9 +80,21 @@ describe('degradación · las mismas acciones con y sin botones', () => {
     const conB = present(ok(out), conBotones);
     const sinB = present(ok(out), sinBotones);
 
+    // The same options, in the same order, both ways. The verbs match too, and
+    // that is the part degradation rests on: what differs is only what each one
+    // points at.
     expect(actionsOf(conB)).toEqual(actionsOf(sinB));
-    // Two actions per result: the data and the file.
+    expect(verbsOf(conB)).toEqual(verbsOf(sinB));
+
+    // Two actions per result: the data and the file. The button carries the id,
+    // so it keeps opening this document after the list is long gone.
     expect(actionsOf(conB)).toEqual([
+      'view:id1', 'open:id1', 'view:id2', 'open:id2', 'view:id3', 'open:id3',
+      'view:id4', 'open:id4', 'view:id5', 'open:id5', 'more',
+    ]);
+    // What is typed carries the position, which is the only thing a person can
+    // say out loud.
+    expect(typedOf(sinB)).toEqual([
       'view:1', 'open:1', 'view:2', 'open:2', 'view:3', 'open:3',
       'view:4', 'open:4', 'view:5', 'open:5', 'more',
     ]);
@@ -199,8 +218,8 @@ describe('los dos botones de cada resultado', () => {
     // Grouping is what avoids eleven stacked rows on a page of five.
     const [r] = present(ok(resultados(2, false)), conBotones);
     const opts = r?.kind === 'text' ? r.options ?? [] : [];
-    expect(opts.filter((o) => o.group === 1).map((o) => o.action)).toEqual(['view:1', 'open:1']);
-    expect(opts.filter((o) => o.group === 2).map((o) => o.action)).toEqual(['view:2', 'open:2']);
+    expect(opts.filter((o) => o.group === 1).map((o) => o.action)).toEqual(['view:id1', 'open:id1']);
+    expect(opts.filter((o) => o.group === 2).map((o) => o.action)).toEqual(['view:id2', 'open:id2']);
   });
 
   it('una nota suelta no ofrece "archivo": no tiene', () => {
@@ -209,7 +228,7 @@ describe('los dos botones de cada resultado', () => {
       ...resultados(1, false),
       items: [{ ...item(1), mediaType: null, sizeBytes: null }],
     };
-    expect(actionsOf(present(ok(soloTexto), conBotones))).toEqual(['view:1']);
+    expect(actionsOf(present(ok(soloTexto), conBotones))).toEqual(['view:id1']);
   });
 
   it('el original del detalle es el que estás mirando, no el primero de la lista', () => {
@@ -316,6 +335,10 @@ describe('todo listado ofrece las mismas acciones', () => {
     it(`${nombre} ofrece datos y archivo por cada elemento`, () => {
       const acciones = actionsOf(present(ok(out), conBotones));
       expect(acciones, nombre).toEqual(
+        expect.arrayContaining(['view:id1', 'open:id1', 'view:id2', 'open:id2']),
+      );
+      // And the same list typed, which is what a channel without buttons shows.
+      expect(typedOf(present(ok(out), sinBotones)), nombre).toEqual(
         expect.arrayContaining(['view:1', 'open:1', 'view:2', 'open:2']),
       );
     });

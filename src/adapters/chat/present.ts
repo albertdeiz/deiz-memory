@@ -46,9 +46,12 @@ const day = (d: Date | null): string =>
 const withOptions = (body: string, options: Option[], caps: Capabilities): Reply => {
   if (options.length === 0) return { kind: 'text', body };
   if (caps.supportsButtons) return { kind: 'text', body, options };
+  // `typed` where the action points at an id: a button can carry eight hex
+  // characters and a person cannot. Same verb, so this is still one list of
+  // options rendered two ways, not two lists to keep in sync.
   return {
     kind: 'text',
-    body: `${body}\n\n${options.map((o) => `· ${o.action}  — ${o.label}`).join('\n')}`,
+    body: `${body}\n\n${options.map((o) => `· ${o.typed ?? o.action}  — ${o.label}`).join('\n')}`,
     options,
   };
 };
@@ -70,15 +73,23 @@ const withOptions = (body: string, options: Option[], caps: Capabilities): Reply
  * `group` places them side by side where the channel has rows. Where it does
  * not, they are listed like any other action: degradation does not depend on it.
  */
-const porItem = (items: readonly { mediaType: string | null }[]): Option[] =>
+const porItem = (items: readonly { shortId: string; mediaType: string | null }[]): Option[] =>
   items.flatMap((m, i) => {
     const n = i + 1;
-    const fila: Option[] = [{ label: `${n} · datos`, action: encodeAction({ kind: 'view', n }), group: n }];
+    // The button points at the id and the typed form at the position. A message
+    // stays scrollable and tappable for as long as the chat exists, so a button
+    // resolved against "the last list" opens whatever is on screen today — a
+    // real document, of something else. The id makes it right forever.
+    const boton = (kind: 'view' | 'open', etiqueta: string): Option => ({
+      label: `${n} · ${etiqueta}`,
+      action: encodeAction({ kind, target: { by: 'id', id: m.shortId } }),
+      typed: encodeAction({ kind, target: { by: 'index', n } }),
+      group: n,
+    });
+    const fila: Option[] = [boton('view', 'datos')];
     // With no original file, downloading is not offered: a button that knows it
     // fallar es peor que no estar.
-    if (m.mediaType) {
-      fila.push({ label: `${n} · archivo`, action: encodeAction({ kind: 'open', n }), group: n });
-    }
+    if (m.mediaType) fila.push(boton('open', 'archivo'));
     return fila;
   });
 

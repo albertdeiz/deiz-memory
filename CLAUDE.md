@@ -369,10 +369,25 @@ export interface Turn {
 ```
 
 **Cómo degrada.** Sin botones → la misma acción escrita: el botón lleva `more` y la
-persona escribe `more`. Solo funciona porque **el estado vive en `chat_sessions`, no en
-el payload del botón**; si el cursor viajara en el `callback_data`, un canal sin botones
-no podría reproducirlo. `dm chat` declara `supportsButtons: false`, así que cada corrida
-de los tests ejercita la rama degradada.
+persona escribe `more`. El verbo es idéntico en los dos caminos; lo que cambia es **a qué
+apunta**, y tiene que cambiar: el botón viaja con el id de la memoria (`view:a3f2c1d0`) y
+lo escrito con el número de la lista (`view:2`). No son dos vocabularios que haya que
+mantener sincronizados —es un verbo con dos formas de direccionar, la misma que el CLI ya
+acepta cuando `dm show a3f2` resuelve por prefijo.
+
+Cada forma existe porque la otra no sirve en su lugar. **El historial de un chat es
+persistente y tocable:** alguien sube tres días después y aprieta el botón de una lista
+vieja, y un índice relativo se resuelve contra la lista *actual* — no falla, abre otro
+documento. Es el mismo fallo silencioso que §11 registra, y con el id adentro el botón
+viejo sigue siendo correcto para siempre. Al revés, nadie va a teclear ocho hex en un
+teléfono: por eso la rama sin botones se queda con el número, que es lo único que un
+humano puede decir.
+
+**El estado sigue donde estaba.** El cursor de `more`, el texto que ofrece `save` y la
+operación que espera un `yes` viven en `chat_sessions`, no en el payload. Meter el id en
+el botón le quita estado a tres acciones de ocho; las otras cinco lo necesitan igual, así
+que la decisión nunca fue "con o sin estado" sino cuánto. `dm chat` declara
+`supportsButtons: false`, así que cada corrida de los tests ejercita la rama degradada.
 
 **Descarga sobre el límite → negativa honesta, y no se crea la memoria.** Una fila
 apuntando a un blob que no existe es peor que no tener la fila.
@@ -495,12 +510,16 @@ mismo es una que hay que mantener sincronizada con la otra para siempre.
 
 view:N   los datos      open:N  el archivo     hide:N  sacar de resultados
 more     página siguiente   save  guardar lo que buscaste   yes / no
+
+view:<id>  las tres numeradas aceptan también el id — es lo que llevan los botones
 ```
 
-**El número siempre es de la última lista que viste.** El registro cuelga de la forma del
-`Outcome`, en un solo lugar, para que una lista nueva quede cubierta sin que nadie se
-acuerde: cuando numerar y registrar vivían en archivos distintos, `/documentos` ofrecía
-botones sin registrar los ids y `view:2` abría el segundo de la búsqueda anterior.
+**El número es de la última lista que viste; el id no depende de ninguna.** El registro
+cuelga de la forma del `Outcome`, en un solo lugar, para que una lista nueva quede
+cubierta sin que nadie se acuerde: cuando numerar y registrar vivían en archivos
+distintos, `/documentos` ofrecía botones sin registrar los ids y `view:2` abría el segundo
+de la búsqueda anterior. Los botones ya no dependen de ese registro —viajan con el id
+(§7.1)—, y el número escrito sí, que es exactamente donde hace falta.
 
 ### Terminal
 
@@ -527,7 +546,7 @@ con auditoría — el chat solo oculta) y la mantención (`classify`, `index`, `
 Construido y en verde: captura, los tres carriles, canal de chat, bandeja de revisión,
 dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
-`tarjeta_credito` (período). **340 tests.**
+`tarjeta_credito` (período). **345 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.

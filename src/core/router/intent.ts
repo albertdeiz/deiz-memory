@@ -1,5 +1,5 @@
 import type { Attachment, Incoming } from '../channel/types';
-import { parseAction, type Action } from './actions';
+import { isAbsolute, parseAction, type Action } from './actions';
 
 /**
  * The verbs, decided with pure logic.
@@ -139,8 +139,12 @@ export function classify(msg: Incoming, session: Session | null): Intent {
   //     This is the branch that makes button-free degradation real.
   if (!msg.attachment && text) {
     // Only with something on screen: with no list, "more" or "2" is text.
+    //
+    // Unless it names an id. `view:a3f2c1d0` points at itself, so it means the
+    // same thing with an empty conversation as with five results on screen —
+    // the same reason a button can carry one and survive the list it came from.
     const a = parseAction(text, pending);
-    if (a && pending) return { verb: 'action', action: a };
+    if (a && (pending || isAbsolute(a))) return { verb: 'action', action: a };
   }
 
   // 4 · there is a file: it gets stored, and the text becomes its note

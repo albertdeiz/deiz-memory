@@ -5,6 +5,7 @@ import { err, ok, type Result } from '../result';
 import { capture, type CaptureResult } from '../ops/capture';
 import { fetchBlob, search, show, type BlobPayload } from '../ops/query';
 import { setHidden } from '../ops/lifecycle';
+import { resolveMemoryId } from '../ops/resolve';
 import { answer, type Answer } from '../recall/answer';
 import { redeemPairingCode } from '../ops/identity';
 import { listReview, type ReviewItem } from '../ops/review';
@@ -15,6 +16,7 @@ import {
 import { proposeDomains, type Proposal } from '../classify/emergent';
 import { list } from '../ops/query';
 import type { Intent } from './intent';
+import type { Target } from './actions';
 import {
   confirmIsFresh, pendingCount, readSession, writeSession,
   type ChatSession, type Pending,
@@ -382,6 +384,28 @@ async function doSearch(
   return ok({ kind: 'results', query: q, items, offset, hasMore, pendientes, offerSave, exhausted });
 }
 
+/**
+ * The memory a targeted action points at.
+ *
+ * The two ways of pointing meet here and nowhere else. An index is looked up in
+ * the list the session recorded; an id is resolved like any other reference —
+ * by prefix, filtered by owner, and it does not care whether a list is on
+ * screen. That is the whole point of a button carrying one: it stays right after
+ * the list it came from is long gone.
+ */
+async function aim(
+  deps: Deps,
+  actor: Actor,
+  session: ChatSession | null,
+  target: Target,
+): Promise<Result<string>> {
+  if (target.by === 'id') return resolveMemoryId(deps.db, actor, target.id);
+  const id = (session?.pending?.ids ?? [])[target.n - 1];
+  return id
+    ? ok(id)
+    : err('invalid', `No hay un ${target.n} en la última lista. Busca de nuevo.`);
+}
+
 async function doAction(
   deps: Deps,
   actor: Actor,
@@ -405,27 +429,23 @@ async function doAction(
     }
 
     case 'hide': {
-      const ids = session?.pending?.ids ?? [];
-      const id = ids[a.n - 1];
-      if (!id) return err('invalid', `No hay un ${a.n} en la última lista.`);
+      const t = await aim(deps, actor, session, a.target);
+      if (!t.ok) return t;
       // Hide, not purge: the chat deletes nothing irreversibly. That is what
       // the terminal is for, with its confirmation and its audit log.
-      const r = await setHidden(deps, actor, id, true);
+      const r = await setHidden(deps, actor, t.value, true);
       return r.ok ? ok({ kind: 'hidden', shortId: r.value.shortId }) : r;
     }
 
     case 'view':
     case 'open': {
-      const ids = session?.pending?.ids ?? [];
-      const id = ids[a.n - 1];
-      if (!id) {
-        return err('invalid', `No hay un ${a.n} en la última lista. Busca de nuevo.`);
-      }
+      const t = await aim(deps, actor, session, a.target);
+      if (!t.ok) return t;
       if (a.kind === 'view') {
-        const d = await show(deps, actor, id);
+        const d = await show(deps, actor, t.value);
         return d.ok ? ok({ kind: 'detail', memory: d.value }) : d;
       }
-      const b = await fetchBlob(deps, actor, id);
+      const b = await fetchBlob(deps, actor, t.value);
       return b.ok ? ok({ kind: 'file', blob: b.value }) : b;
     }
 

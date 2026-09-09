@@ -26,3 +26,22 @@ COPY migrations ./migrations
 # a one-off command — is the compose's call, not the image's.
 ENTRYPOINT ["node", "/app/dist/dm.js"]
 CMD ["doctor"]
+
+# ---------------------------------------------------------------- the backup
+#
+# The same app, plus the three binaries the backup shells out to. A separate
+# stage and not the runtime image because the worker and the bot have no use for
+# restic, rclone or a VPN client, and an image is not a place to keep options
+# open.
+FROM runtime AS backup
+
+# restic encrypts and versions; rclone is only transport. Tailscale is how the
+# destination gets reached without anything being exposed to the internet — the
+# Nextcloud on the other end publishes no port and resolves to a tailnet address.
+RUN apk add --no-cache restic rclone tailscale bash
+
+COPY services/backup/entrypoint.sh /usr/local/bin/dm-backup
+RUN chmod +x /usr/local/bin/dm-backup
+
+ENTRYPOINT ["/usr/local/bin/dm-backup"]
+CMD ["backup", "status"]

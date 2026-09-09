@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
+import { mkdtempSync, readdirSync, rmSync, type Dirent } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
@@ -27,7 +29,13 @@ import {
   mergeDomains, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
   answer, indexMemory, pendingIndex, proposeDomains, resolveMemoryId, show, unindexed, LANES,
   seedDomains, seedFactTypes, extractFacts, listFacts, listFactTypes, contextOf, renderValue, warningFor,
+  exportOwner, checkExport, importInto, readBackupConfig, setBackupDestination,
+  recordBackupRun, recordBackupVerified, secretsNeededBy,
+  type BackupConfig, type BackupManifest, type CheckReport,
 } from '../../core/index';
+import { fsSink, fsSource, dirSize, passphraseFor, transportSecretFor, envNamesFor } from '../backup/fs';
+import { Restic, missingTools } from '../backup/restic';
+import { runMigrations } from '../db/postgres/migrate';
 import { EXIT, exitCodeFor } from './exit';
 import { renderAnswer, renderDetail, renderFailure, renderList, renderReview } from './format';
 
@@ -227,6 +235,46 @@ program
         });
       } catch {
         checks.push({ check: 'dueño', ok: false, detail: 'no se pudo consultar', required: true });
+      }
+
+      // The backup, which is the one check whose failure is silent and permanent.
+      // Not `required`: an unconfigured backup is not a broken system. But a stale
+      // one looks exactly like a healthy one from every other angle, so the age is
+      // the number that matters, not the fact that a row exists.
+      try {
+        const owners = await listOwners(db);
+        const owner = owners[0];
+        if (!owner) {
+          checks.push({ check: 'respaldo', ok: false, detail: 'sin dueño', required: false });
+        } else {
+          const cfgBackup = await readBackupConfig({ db } as Deps, { ownerId: owner.id });
+          const b = cfgBackup.ok ? cfgBackup.value : null;
+          if (!b) {
+            checks.push({ check: 'respaldo', ok: false, required: false, detail: 'sin configurar — dm backup set <repositorio>' });
+          } else if (!b.lastRunAt) {
+            checks.push({ check: 'respaldo', ok: false, required: false, detail: `configurado en ${b.repository}, nunca corrió` });
+          } else {
+            const days = Math.floor((Date.now() - b.lastRunAt.getTime()) / 86_400_000);
+            const when = b.lastRunAt.toISOString().slice(0, 10);
+            const age = days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days} días`;
+            const verified = b.lastVerifiedAt
+              ? `verificado ${b.lastVerifiedAt.toISOString().slice(0, 10)}`
+              : 'NUNCA verificado';
+            // A week is the line: on demand and no reminders (§2) means the only
+            // thing that can tell you it went stale is this.
+            const fresh = b.lastOk === true && days <= 7;
+            checks.push({
+              check: 'respaldo',
+              ok: fresh,
+              required: false,
+              detail: b.lastOk === false
+                ? `${when} (${age}) FALLÓ: ${b.lastError ?? 'sin detalle'}`
+                : `${when} (${age}) · ${verified}`,
+            });
+          }
+        }
+      } catch {
+        checks.push({ check: 'respaldo', ok: false, detail: 'no se pudo consultar', required: false });
       }
 
       // The three lanes, one by one. A lane being down does not break the system —
@@ -976,5 +1024,315 @@ program
       { enqueues: true, wait },
     );
   });
+
+// ---------------------------------------------------------------- backup
+//
+// The verbs are restic's because the concepts are restic's, and inventing new
+// names for snapshot, forget and prune would only mean translating them back
+// when something goes wrong at three in the morning.
+
+const backup = program
+  .command('backup')
+  .description('el respaldo cifrado off-site, por dueño (§14.3)');
+
+/** Everything a run needs, refusing early and by name when something is missing. */
+async function openRepo(
+  deps: Deps,
+  actor: Actor,
+  log: (s: string) => void,
+): Promise<{ repo: Restic; cfg: BackupConfig } | { error: string }> {
+  const stored = await readBackupConfig(deps, actor);
+  if (!stored.ok) return { error: stored.message };
+  if (!stored.value) {
+    return { error: 'No hay destino configurado. Ponlo con: dm backup set <repositorio>' };
+  }
+  const cfg = stored.value;
+
+  // Before anything else: restic and rclone live in the backup container, not on
+  // a host that only has Node. Saying so beats `spawn rclone ENOENT`.
+  const missing = missingTools(cfg.transport);
+  if (missing.length > 0) {
+    return { error: `Falta ${missing.join(' y ')} en este equipo. El respaldo corre en su contenedor: npm run backup -- <comando>` };
+  }
+
+  // The address came from the table; the secrets come from the environment and
+  // are never written anywhere (§14.3). Both are reported by the name of the
+  // variable to set, because "falta un secreto" is not actionable.
+  const passphrase = passphraseFor(actor.ownerId);
+  if (!passphrase) {
+    return { error: `Falta la passphrase. Ponla en ${envNamesFor('passphrase', actor.ownerId)[1]}. La guardas tú; si la pierdes, el respaldo es un ladrillo.` };
+  }
+  const transportSecret = transportSecretFor(cfg.transport, actor.ownerId);
+  if (secretsNeededBy(cfg).includes('transport') && !transportSecret) {
+    return { error: `El destino es ${cfg.transport} y falta su credencial. Ponla en ${envNamesFor(cfg.transport, actor.ownerId)[1]}.` };
+  }
+
+  return {
+    repo: await Restic.open({
+      repository: cfg.repository,
+      passphrase,
+      transport: cfg.transport,
+      transportConfig: cfg.transportConfig,
+      transportSecret,
+    }, log),
+    cfg,
+  };
+}
+
+const staging = (): string => mkdtempSync(join(tmpdir(), 'dm-backup-'));
+
+backup
+  .command('status', { isDefault: true })
+  .description('el destino, cuándo corrió y cuándo se verificó')
+  .action(async () => {
+    await run(
+      async ({ deps, actor }): Promise<Result<{ cfg: BackupConfig | null; missing: string[] }>> => {
+        const c = await readBackupConfig(deps, actor);
+        if (!c.ok) return c;
+        if (!c.value) return ok({ cfg: null, missing: [] });
+        // The only thing that can be said about a secret without storing it:
+        // whether it is there.
+        const transport = c.value.transport;
+        const missing = secretsNeededBy(c.value)
+          .filter((n) => (n === 'passphrase'
+            ? passphraseFor(actor.ownerId)
+            : transportSecretFor(transport, actor.ownerId)) === null)
+          .map((n) => envNamesFor(n === 'passphrase' ? 'passphrase' : transport, actor.ownerId)[1]!);
+        return ok({ cfg: c.value, missing });
+      },
+      ({ cfg, missing }) => {
+        if (!cfg) return 'Sin respaldo configurado. dm backup set <repositorio>';
+        const when = (d: Date | null): string => (d ? d.toISOString().slice(0, 16).replace('T', ' ') : 'nunca');
+        const lines = [
+          `destino     ${cfg.repository}`,
+          `transporte  ${cfg.transport}${cfg.transport === 'webdav' ? `  ${String(cfg.transportConfig.url ?? '')} (${String(cfg.transportConfig.user ?? '')})` : ''}`,
+          // "Never ran" and "ran and failed" are different problems and only one
+          // is urgent, so they never collapse into one line.
+          `último      ${when(cfg.lastRunAt)}${cfg.lastRunAt ? (cfg.lastOk ? ' · ok' : ` · falló: ${cfg.lastError ?? 'sin detalle'}`) : ''}`,
+          `verificado  ${when(cfg.lastVerifiedAt)}`,
+        ];
+        lines.push(missing.length === 0
+          ? 'secretos    presentes en el entorno'
+          : `secretos    FALTAN: ${missing.join(' · ')}`);
+        return lines.join('\n');
+      },
+    );
+  });
+
+backup
+  .command('set')
+  .description('dónde respaldar: b2:bucket:ruta · una ruta local · rclone:nc:ruta con --webdav-url')
+  .argument('<repository>')
+  .option('--webdav-url <url>', 'endpoint WebDAV, con /remote.php/dav/files/<usuario>/')
+  .option('--webdav-user <user>', 'usuario del WebDAV')
+  .action(async (repository: string, opts: Record<string, string>) => {
+    await run(
+      ({ deps, actor }) => {
+        // The transport is inferred from what you gave, not asked for twice: a
+        // WebDAV URL is what makes it a WebDAV destination.
+        const webdav = opts.webdavUrl !== undefined || opts.webdavUser !== undefined;
+        return setBackupDestination(deps, actor, {
+          repository,
+          transport: webdav ? 'webdav' : 'none',
+          transportConfig: webdav ? { url: opts.webdavUrl ?? '', user: opts.webdavUser ?? '' } : {},
+        });
+      },
+      (c) => [
+        `destino     ${c.repository}`,
+        `transporte  ${c.transport}`,
+        // Said here rather than discovered later: the address is stored, the
+        // secret is not, and the run will refuse without it.
+        `secretos    ${envNamesFor('passphrase', c.ownerId)[1]}${c.transport === 'webdav' ? ` · ${envNamesFor(c.transport, c.ownerId)[1]}` : ''}`,
+      ].join('\n'),
+    );
+  });
+
+backup
+  .command('run', {})
+  .description('exporta lo tuyo y lo manda al destino')
+  .action(async () => {
+    await run(
+      async ({ deps, actor }): Promise<Result<{ snapshot: string; manifest: BackupManifest; bytes: number }>> => {
+        const opened = await openRepo(deps, actor, (l) => console.error(l));
+        if ('error' in opened) return { ok: false, kind: 'invalid', message: opened.error };
+
+        const dir = staging();
+        try {
+          // The core produces it, filtered by owner, with its Actor. This is the
+          // whole point of §14.3: the `where owner_id` is checked by the compiler
+          // rather than by whoever last edited a shell script.
+          const exported = await exportOwner(deps, actor, fsSink(dir));
+          if (!exported.ok) return exported;
+
+          await opened.repo.ensureRepo();
+          try {
+            const snapshot = await opened.repo.backup(dir, `owner:${actor.ownerId}`);
+            await recordBackupRun(deps, actor, { ok: true, snapshotId: snapshot });
+            return ok({ snapshot, manifest: exported.value, bytes: dirSize(dir) });
+          } catch (e) {
+            // A failed run is recorded as a failed run. A backup that fails
+            // silently is worse than one that is not configured.
+            const message = e instanceof Error ? e.message : String(e);
+            await recordBackupRun(deps, actor, { ok: false, error: message });
+            return { ok: false, kind: 'invalid', message };
+          }
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+      ({ snapshot, manifest, bytes }) => {
+        const rows = Object.entries(manifest.tables).map(([t, n]) => `  ${t.padEnd(20)} ${n}`);
+        return [
+          `snapshot ${snapshot}  ·  ${(bytes / 1e6).toFixed(1)} MB preparados`,
+          ...rows,
+          '',
+          'verifica con: dm backup verify',
+        ].join('\n');
+      },
+    );
+  });
+
+backup
+  .command('verify')
+  .description('lo restaura de verdad: re-hashea los blobs y carga la base')
+  .action(async () => {
+    await run(
+      async ({ deps, actor }): Promise<Result<CheckReport & { loaded: Record<string, number> }>> => {
+        const opened = await openRepo(deps, actor, () => {});
+        if ('error' in opened) return { ok: false, kind: 'invalid', message: opened.error };
+
+        const dir = staging();
+        let scratch: pg.Pool | null = null;
+        try {
+          console.error('· integridad del repositorio');
+          await opened.repo.check();
+          console.error('· restaurando el último snapshot');
+          await opened.repo.restore('latest', dir);
+
+          // restic keeps absolute paths, so the export is somewhere under the
+          // target. Finding it by its manifest beats hardcoding the depth.
+          const root = findExport(dir);
+          if (!root) return { ok: false, kind: 'invalid', message: 'el snapshot no trae un manifest.json' };
+
+          console.error('· re-hasheando blobs y revisando referencias');
+          const report = await checkExport(fsSource(root));
+          if (!report.ok) return report;
+
+          console.error('· cargando en una base desechable');
+          const cfg = loadConfig();
+          // Named for what it is and dropped when done. The guard is here and not
+          // in a comment because the cost of the check is nothing and the cost of
+          // being wrong is the corpus.
+          const name = 'deiz_memory_verify';
+          if (!name.endsWith('_verify')) throw new Error('la base de verificación debe terminar en _verify');
+          const admin = createPool(cfg.databaseUrl.replace(/\/[^/]+$/, '/postgres'));
+          try {
+            await admin.query(`drop database if exists ${name}`);
+            await admin.query(`create database ${name}`);
+          } finally {
+            await admin.end().catch(() => {});
+          }
+          scratch = createPool(cfg.databaseUrl.replace(/\/[^/]+$/, `/${name}`));
+          const sdb = pgDb(scratch);
+          await runMigrations(sdb);
+          const loaded = await importInto(sdb, fsSource(root));
+          if (!loaded.ok) return loaded;
+          await scratch.end().catch(() => {});
+          scratch = null;
+          const admin2 = createPool(cfg.databaseUrl.replace(/\/[^/]+$/, '/postgres'));
+          try {
+            await admin2.query(`drop database if exists ${name}`);
+          } finally {
+            await admin2.end().catch(() => {});
+          }
+
+          if (report.value.problems.length === 0) await recordBackupVerified(deps, actor);
+          return ok({ ...report.value, loaded: loaded.value });
+        } finally {
+          await scratch?.end().catch(() => {});
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+      (r) => {
+        const lines = [
+          `✓ ${r.blobsHashed} blobs re-hasheados y con su referencia`,
+          `✓ ${Object.entries(r.loaded).map(([t, n]) => `${t} ${n}`).join(' · ')}`,
+        ];
+        if (r.problems.length > 0) {
+          return [...lines, '', `✗ ${r.problems.length} problema(s):`, ...r.problems.map((p) => `  · ${p}`)].join('\n');
+        }
+        return [...lines, '', '✓ el respaldo restaura. Eso es lo único que lo hace existir.'].join('\n');
+      },
+    );
+  });
+
+backup
+  .command('snapshots')
+  .description('qué hay en el destino')
+  .action(async () => {
+    await run(
+      async ({ deps, actor }): Promise<Result<{ id: string; time: string }[]>> => {
+        const opened = await openRepo(deps, actor, () => {});
+        if ('error' in opened) return { ok: false, kind: 'invalid', message: opened.error };
+        return ok(await opened.repo.snapshots());
+      },
+      (ss) => (ss.length === 0 ? 'Ningún snapshot todavía.' : ss.map((s) => `${s.id}  ${s.time.slice(0, 16).replace('T', ' ')}`).join('\n')),
+    );
+  });
+
+backup
+  .command('restore')
+  .description('trae un snapshot a un directorio')
+  .argument('[snapshot]', 'id o latest', 'latest')
+  .argument('<dir>')
+  .action(async (snapshot: string, dir: string) => {
+    await run(
+      async ({ deps, actor }): Promise<Result<string>> => {
+        const opened = await openRepo(deps, actor, (l) => console.error(l));
+        if ('error' in opened) return { ok: false, kind: 'invalid', message: opened.error };
+        await opened.repo.restore(snapshot, dir);
+        return ok(dir);
+      },
+      (d) => `restaurado en ${d}`,
+    );
+  });
+
+backup
+  .command('forget')
+  .description('aplica la retención y poda — donde un purge se hace real')
+  .option('--keep-daily <n>', 'diarios', '7')
+  .option('--keep-weekly <n>', 'semanales', '8')
+  .option('--keep-monthly <n>', 'mensuales', '12')
+  .action(async (opts: Record<string, string>) => {
+    await run(
+      async ({ deps, actor }): Promise<Result<string>> => {
+        const opened = await openRepo(deps, actor, (l) => console.error(l));
+        if ('error' in opened) return { ok: false, kind: 'invalid', message: opened.error };
+        return ok(await opened.repo.forget({
+          daily: Number(opts.keepDaily),
+          weekly: Number(opts.keepWeekly),
+          monthly: Number(opts.keepMonthly),
+        }));
+      },
+      () => 'podado',
+    );
+  });
+
+/** The export inside a restic restore, wherever the absolute paths put it. */
+function findExport(root: string): string | null {
+  const stack = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    if (entries.some((e) => e.isFile() && e.name === 'manifest.json')) return dir;
+    for (const e of entries) if (e.isDirectory()) stack.push(join(dir, e.name));
+  }
+  return null;
+}
 
 program.parseAsync(process.argv);

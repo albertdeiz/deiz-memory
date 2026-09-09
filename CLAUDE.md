@@ -321,8 +321,9 @@ Telegram ──> Channel Adapter ──> Ingest Queue (ack inmediato)
 ```
 
 **Todo corre en contenedores, la app incluida.** `postgres` · `garage` ·
-`documents` · `ocr` · `whisper` · `ollama` · `app-worker` · `app-bot`. Nada
-necesita Node en el host: la única dependencia para usar el sistema es Docker.
+`documents` · `ocr` · `whisper` · `ollama` · `app-worker` · `app-bot` · `backup`.
+Nada necesita Node en el host: la única dependencia para usar el sistema es
+Docker.
 
 El core sigue siendo **un módulo, no seis servicios**. Partirlo en microservicios
 para un sistema de un dueño multiplicaría la superficie operativa sin comprar
@@ -530,6 +531,7 @@ dm ls · dm search · dm ask · dm show · dm open · dm in <categoría>
 dm domains [create|edit|archive|merge|propose] · dm classify · dm index
 dm facts [--all] · dm facts types · dm facts extract [id]
 dm review · dm reprocess [--failed|--pending|--all|--lane|--wait]
+dm backup [status|set <repo>|run|verify|snapshots|restore|forget]
 dm pair · dm identities
 dm hide · dm unhide · dm purge <id> --yes
 ```
@@ -546,17 +548,20 @@ con auditoría — el chat solo oculta) y la mantención (`classify`, `index`, `
 Construido y en verde: captura, los tres carriles, canal de chat, bandeja de revisión,
 dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
-`tarjeta_credito` (período). **345 tests.**
+`tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
+riesgo irreversible abierto. **373 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.
 
 Lo que falta, con nombre:
 
-- **Backup cifrado off-site — el único riesgo irreversible.** Todo lo demás se regenera
-  desde el blob; el blob no se regenera de nada, y hoy vive en un solo host. `restic` o
-  `age` contra R2 o B2, y **restaurado al menos una vez**: un backup que no se restauró
-  no existe.
+- **El backup existe, pero solo cuenta si lo corres.** Es **on-demand y nada más**: no
+  hay cron ni aviso, porque §2 dice que el sistema nunca actúa por su cuenta y eso vale
+  también acá. Lo que cierra el hueco no es un temporizador sino que **`dm doctor`
+  reporte la edad del último respaldo**: un respaldo viejo se ve idéntico a uno sano
+  desde cualquier otro ángulo, así que la fecha tiene que estar donde uno ya mira.
+  Después de una semana deja de contar como verde.
 - **La semana de uso real.** Usarlo sin construir nada y ver qué falta de verdad.
 - **TIFF sigue sin carril**, y un bot de Telegram **no puede bajar más de 20 MB**.
 - **El modelo de 3B a veces se queda corto** al redactar. `DM_CLASSIFY_MODEL` lo cambia.
@@ -606,8 +611,20 @@ debía estar ahí. Es explícito, pide confirmación nombrando lo afectado, y qu
 de auditoría. Prometer "es imposible borrar" es una promesa que se rompe el día que la
 necesitas.
 
-**Blobs direccionables por contenido** (sha256): deduplicación gratis. **Prefijo por
-dueño**, que es permanente.
+**Blobs direccionables por contenido** (sha256): deduplicación gratis.
+
+**Y por eso `blobs` es la única tabla sin `owner_id`** — este documento decía lo
+contrario y estaba equivocado. La clave es `blobs/<aa>/<bb>/<sha256>`, sin dueño adelante,
+porque dedupear por contenido y particionar por dueño son objetivos que se excluyen: si
+el prefijo fuera del dueño, dos personas con el mismo PDF guardarían dos copias.
+
+Con un dueño la diferencia no se nota. Con varios importa en dos lugares y hay que
+tenerlos a la vista: **el respaldo por dueño no puede espejar el bucket** (§14.3), tiene
+que enumerar desde `memories`; y `purge` solo borra el blob cuando **nadie más** lo
+referencia, cuenta que hoy cruza dueños a propósito. Lo segundo es correcto para el
+almacenamiento y es, en rigor, un canal lateral mínimo: A puede inferir que alguien más
+tiene su mismo archivo porque el blob sobrevivió. Con un dueño no existe; se anota acá
+para que exista la decisión el día que haya dos.
 
 **Backend S3-compatible, siempre.** El código nunca habla con un proveedor concreto:
 habla S3. Garage self-hosted es una decisión de despliegue, no de arquitectura — el día
@@ -627,6 +644,123 @@ Lo que de verdad mueve la aguja, y va antes: cifrado de disco del host, Postgres
 **sin puerto expuesto a internet**, y un backup **restaurado al menos una vez**.
 
 **Esto asume self-hosted, un dueño, un host.** Si eso cambia, el cálculo se invierte.
+
+### 14.3 El backup: el blob no basta
+
+§12 decía que todo se regenera desde el blob. Es falso justo donde importa: **tu nota
+no está en ningún blob** (§4), y tampoco los dominios que creaste, las correcciones a
+un hecho, las identidades vinculadas ni el log de auditoría. El blob es lo
+irreemplazable *del archivo*; la base es lo irreemplazable *tuyo*. Se copian las dos, y
+en el mismo snapshot, para que restaurar no sea reconciliar dos fechas.
+
+**Un repositorio por dueño, y eso decide todo lo demás.** No se respalda "el sistema":
+se respalda a una persona. Meter dos dueños en un snapshot sería darle a cada uno los
+datos del otro en el momento de restaurar, que es precisamente lo que la regla dura 9
+existe para impedir — y una restauración no es un lugar donde uno quiera descubrir que la
+regla solo valía para las consultas.
+
+**Por eso no se espeja el bucket ni se vuelca la base entera.** Las dos cosas son
+operaciones "de todo", y acá no hay un todo que respaldar:
+
+- **La base** sale como export lógico filtrado por dueño, tabla por tabla, y **lo produce
+  el core, no un script**: si el `where owner_id` viviera en bash sería el único lugar del
+  sistema donde la regla dura 9 no la sostiene el código. Es una operación tipada más, con
+  su `Actor`, como cualquier otra.
+- **Los blobs** se enumeran desde `memories` —`join blobs`, `where m.owner_id = $1`— y se
+  bajan por el puerto `BlobStore` que ya existe. `blobs` no tiene dueño (§14.1), así que
+  la pertenencia solo se puede leer desde las memorias que lo referencian.
+
+Esto además abarata lo que antes era caro: se prepara **lo de ese dueño**, no una copia
+del corpus completo, y `rclone` deja de ser la fuente para quedarse solo donde sirve —de
+transporte de restic hacia el destino.
+
+**Y el volumen de Garage no se toca.** `garagemeta` es una LMDB viva y copiarla en
+caliente es una moneda al aire; todo sale por la API, que es la que sabe contestar.
+
+**El destino es `restic` sobre `rclone`.** restic cifra en origen —la passphrase la
+guardas tú, y si la pierdes el respaldo es un ladrillo—, deduplica y versiona. rclone es
+solo el transporte, y habla WebDAV con Nextcloud igual que S3 con B2 o R2: cambiar de
+destino es cambiar un remoto, no un diseño.
+
+**Dónde vive la configuración, y dónde no.** La línea no es entre "config" y "secreto":
+es entre **una dirección y una llave**.
+
+Una dirección es data —el repositorio, la URL del WebDAV, el usuario, cuándo corrió— y no
+le sirve a nadie que la lea. Va en la tabla, por dueño, y `dm backup status` la muestra.
+Que la URL y el usuario vivieran en variables de entorno era una inconsistencia:
+son exactamente lo mismo que el repositorio, que sí estaba en la tabla.
+
+Una llave sí sirve a quien la lea, y las dos que hay **no son la misma cosa**:
+
+- **La credencial del transporte** abre el destino. Si se filtra, alguien puede escribir en
+  tu carpeta — pero lo que hay ahí sigue cifrado.
+- **La passphrase descifra el archivo.** Es lo único que no puede estar en este host,
+  porque el argumento entero de §14.2 es que cifrar es ceremonia cuando la llave está al
+  lado de la cerradura. En la base, un host robado entrega un respaldo off-site legible:
+  justo lo que el off-site existe para sobrevivir.
+
+Las dos se resuelven **por dueño desde el entorno** —`DM_BACKUP_PASSPHRASE_<id>`, con
+fallback al nombre pelado— y el sistema no las escribe nunca. Lo único que se puede decir
+de ellas es si faltan, y `dm backup status` lo dice **nombrando la variable**, porque
+"falta un secreto" no es accionable.
+
+**Vacío cuenta como ausente, y eso fue un bug.** `??` cae con `null` y `undefined` pero no
+con `''`, y una variable declarada sin valor es el estado normal de un `.env.local` a
+medio llenar: `status` informaba la passphrase como presente y restic la habría aceptado.
+Un respaldo cifrado con nada, reportado como configurado.
+
+**El transporte es data, no columnas.** `transport` más un `transport_config` jsonb, por la
+misma razón que un dominio es una fila y no un enum (§3.7): una columna `webdav_url` sería
+peso muerto el día que el destino sea B2, y agregar los campos de B2 sería una migración.
+`none` cubre todo lo que restic alcanza solo —B2, S3, R2, una ruta— y ahí las credenciales
+son las variables estándar de restic y pasan sin tocarse; `webdav` arma un remoto de
+rclone. Por eso la variable se llama `DM_BACKUP_WEBDAV_PASS` y no algo genérico: solo los
+transportes de rclone necesitan una credencial *nuestra*.
+
+Y lo que el transporte necesita se valida **al guardar, no al correr**: un destino webdav
+sin usuario, o con la URL del navegador en vez de la de `/remote.php/dav/`, se rechaza
+ahí mismo. Ese error falla como un problema de autenticación opaco horas después.
+
+**El formato es JSONL por tabla más un manifiesto.** Una tabla es un flujo de filas, y
+una línea corrupta cuesta una fila en vez del archivo entero. El manifiesto se escribe
+al final, así que su presencia *es* la señal de que el export terminó: uno interrumpido
+no tiene manifiesto y no se puede leer como si estuviera completo.
+
+**Las columnas se leen del catálogo, no se escriben a mano.** `select *` parece lo obvio
+y está mal: `memories.search_tsv` es `generated always`, así que viajaría para nada y
+después el restore la rechazaría al insertar — un respaldo que solo falla el día que lo
+necesitas. Preguntarle a la base cuáles columnas son reales evita que una columna
+generada agregada mañana vuelva a meter ese fallo.
+
+**Dos tablas se quedan afuera a propósito:** `pairing_codes` (de un uso, 15 minutos) y
+`chat_sessions` (el cursor de la última lista). Restaurar cualquiera de las dos sería
+restaurar algo que ya no significa nada. Que la lista no se quede corta no depende de
+que alguien se acuerde: un test recorre el esquema y falla si aparece una tabla que no
+está ni respaldada ni excluida.
+
+**Un archivo que dos dueños comparten viaja en los dos respaldos.** Es la contracara de
+dedupear por contenido (§14.1): el blob es uno, pero cada respaldo tiene que poder
+restaurar solo, sin depender de que el vecino conserve el suyo.
+
+**Y `dm doctor` lo trata como un chequeo más**, no obligatorio —un respaldo sin
+configurar no es un sistema roto— pero con tres estados distintos, porque colapsarlos
+sería perder justo la información útil: sin configurar · configurado y nunca corrió ·
+corrió tal día, y si se verificó o no.
+
+**Se verifica restaurando, porque un backup que no se restauró no existe.** `verify` no
+mira metadatos: restaura el último snapshot, **re-hashea los blobs**, comprueba que
+ninguna memoria referencie un blob que no viajó, y **carga el export en una base
+desechable** creada desde las migraciones, contando las filas ahí. Lo del hash es gratis
+acá y no lo sería en otro sistema: el nombre del archivo *es* su sha256, así que el
+corpus trae su propia verificación puesta. Y lo de cargar de verdad es lo que atrapa lo
+que un chequeo de formato no ve — los vectores y los `jsonb`, que son justo lo que un
+import ingenuo rompe.
+
+**Lo que el backup no puede prometer.** `purge` borra del sistema, no del pasado: un
+blob purgado sigue en los snapshots viejos hasta que caducan. Es la contrapartida
+honesta del versionado —lo que te salva de un borrado accidental es lo mismo que
+retiene uno deliberado—, y se cierra a propósito con `forget`, que aplica la retención
+y poda de verdad. Decir otra cosa sería la promesa rota que §14.1 evita.
 
 ## 15. Métricas de éxito
 

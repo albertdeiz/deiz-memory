@@ -92,8 +92,15 @@ services:
   # any service can be swapped for a hosted one by setting the URL and nothing
   # else. That is what makes "the model is a service, not an architectural
   # decision" true rather than aspirational.
+  #
+  # All three name `target: runtime` explicitly. Without it Docker builds the LAST
+  # stage of the Dockerfile, which is `backup` — and the worker and the bot came
+  # out as the backup image, carrying restic and trying to join a tailnet on
+  # startup. A default that changes when someone appends a stage is not a default.
   app-migrate:
-    build: .
+    build:
+      context: .
+      target: runtime
     profiles: ["setup"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -130,7 +137,9 @@ services:
   # Runs the lanes over whatever arrives. Restarts on its own, because the queue
   # is what holds the sub-second acknowledgement up.
   app-worker:
-    build: .
+    build:
+      context: .
+      target: runtime
     restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
@@ -142,7 +151,9 @@ services:
   # channel is not a broken system, and the compose says so by leaving it out of
   # the default profile.
   app-bot:
-    build: .
+    build:
+      context: .
+      target: runtime
     restart: unless-stopped
     profiles: ["chat"]
     depends_on:
@@ -151,9 +162,44 @@ services:
     environment: *app-env
     command: ["serve"]
 
+  # ------------------------------------------------------------- the backup
+  #
+  # Off-site, encrypted at origin, and out of every default profile: it runs when
+  # you run it (§14.3). Not being on a timer is deliberate — §2 says the system
+  # never acts on its own — and it is also the honest limitation, because a
+  # backup from three months ago is nearly no backup.
+  backup:
+    # A stage of the same Dockerfile, so this is the same binary with restic,
+    # rclone and a VPN client added — not a second implementation of the backup.
+    build:
+      context: .
+      target: backup
+    profiles: ["backup"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    env_file: *app-secrets
+    # Database and object store come from the same place as the app, by network
+    # name: the backup reads exactly what the system writes.
+    #
+    # And NOT ONE secret of its own here — not DM_BACKUP_PASSPHRASE, not the
+    # WebDAV credentials, not TS_AUTHKEY. `environment` wins over `env_file`, and
+    # compose interpolates from .env and the shell but never from .env.local, so
+    # `TS_AUTHKEY: ${TS_AUTHKEY:-}` would resolve to the empty string and
+    # overwrite the key sitting right there in the file, failing as "not set".
+    # Same trap that made every container fail to reach the database in f689d8b.
+    # Everything secret arrives through env_file and nowhere else.
+    environment: *app-env
+    volumes: ["backupdata:/data"]
+
 volumes:
   pgdata:
   garagemeta:
   garagedata:
   whispermodels:
   ollamamodels:
+  # restic's local cache. Not the data — the export is staged in a temp
+  # directory and destroyed after every run, because a per-owner copy of the
+  # corpus is not something to leave lying on the host. This is only the index
+  # cache, and keeping it is the difference between a fast run and a full
+  # re-read of the repository.
+  backupdata:

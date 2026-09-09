@@ -7,7 +7,7 @@ El diseño está en [CLAUDE.md](./CLAUDE.md). Esto es lo que hace falta para cor
 **Estado.** Captura, normalización por tres carriles, búsqueda full-text y semántica,
 clasificación con IA local, preguntas en lenguaje natural con cita verificada, y **datos
 tipados** para los campos que no toleran un ranking. Todo por Telegram o por terminal.
-345 tests.
+373 tests.
 
 El sistema se vació el 3 de septiembre de 2026 para poblarlo desde cero; si vienes de
 antes, hay que **volver a vincular el chat** con `dm pair`.
@@ -438,6 +438,7 @@ app resuelven sus dependencias por nombre de red, y cada una tiene su
 | `DM_SPEECH_URL_INTERNAL` | Whisper por cualquier servidor compatible |
 | `DM_DOCUMENTS_URL_INTERNAL` · `DM_OCR_URL_INTERNAL` | los carriles por otros |
 | `DM_VISION_BACKEND` | `ocr` · `anthropic` · `openai` · `none` |
+| `DM_BACKUP_REPOSITORY` | Nextcloud por B2, R2 o S3 |
 
 **El modelo de Whisper importa más que el motor.** En español `base` da 18,4% de
 WER y `small` 9,7%. Con 18% se destrozan justo los nombres propios y los números
@@ -446,6 +447,155 @@ teléfono de ocho dígitos: `tiny` se comió uno, `small` los transcribió todos
 
 Los servicios publican en `127.0.0.1`, no en `0.0.0.0`: procesan documentos
 médicos y financieros y no tienen por qué ser alcanzables desde fuera del host.
+
+## El respaldo
+
+Cifrado en origen, off-site, y **por dueño**: no se respalda "el sistema", se respalda a
+una persona.
+
+```bash
+npm run backup -- run                          # exporta lo tuyo y lo manda
+npm run backup -- verify                       # lo restaura de verdad
+npm run backup -- status                       # el destino, cuándo corrió, qué falta
+npm run backup -- snapshots
+npm run backup -- restore latest ./out
+npm run backup -- forget                       # retención, y donde un purge se hace real
+```
+
+Con `dm` en el PATH es `dm backup run`, igual que todo lo demás.
+
+### La dirección va en la base; la llave, no
+
+El destino se configura una vez y queda **en la tabla `backup_config`, por dueño**:
+
+```bash
+# un Nextcloud por WebDAV
+npm run backup -- set rclone:nc:deiz-memory \
+  --webdav-url https://cloud.tu-dominio/remote.php/dav/files/<usuario>/ \
+  --webdav-user <usuario>
+
+# o cualquier cosa que restic alcance solo
+npm run backup -- set b2:bucket:ruta
+```
+
+La URL y el usuario **no son secretos** y viven ahí junto al repositorio: son lo mismo que
+el repositorio, y tenerlos en variables de entorno era una inconsistencia. Cada dueño
+puede tener su propio Nextcloud sin tocar configuración del host.
+
+Las **llaves** siguen fuera de la base, en `.env.local`, y son dos cosas distintas:
+
+```bash
+# .env.local
+DM_BACKUP_PASSPHRASE=...            # descifra el archivo. La guardas TÚ
+DM_BACKUP_WEBDAV_PASS=...           # abre el destino (contraseña de aplicación)
+```
+
+Con varios dueños, ambas aceptan sufijo: `DM_BACKUP_PASSPHRASE_<8 hex del id>`.
+
+**Por qué la passphrase no puede ir en la tabla.** Cifrar es ceremonia cuando la llave
+está al lado de la cerradura. Guardarla en la base significa que un host robado entrega
+un respaldo off-site legible — que es exactamente lo que el off-site existe para
+sobrevivir. La credencial del WebDAV es más benigna: si se filtra, alguien puede escribir
+en tu carpeta, pero lo que hay ahí sigue cifrado.
+
+`status` no puede mostrar una llave, así que dice si falta, **nombrando la variable**:
+
+```
+destino     rclone:nc:deiz-memory
+transporte  webdav  https://cloud.dahub.casa/remote.php/dav/files/deiz-memory/ (deiz-memory)
+último      2026-09-09 15:46 · ok
+verificado  2026-09-09 15:46
+secretos    FALTAN: DM_BACKUP_PASSPHRASE
+```
+
+La contraseña sale de **Ajustes → Seguridad → Crear nueva contraseña de aplicación**: es
+revocable sin tocar tu cuenta. Y la URL es el endpoint WebDAV completo — si le pasas la
+del navegador, `set` la rechaza ahí mismo en vez de fallar como un error de autenticación
+opaco tres horas después.
+
+### Qué se copia, y por qué el blob no basta
+
+El blob es lo irreemplazable del archivo; la base es lo irreemplazable **tuyo**. Tu nota
+no está en ningún blob, ni los dominios que creaste, ni las correcciones a un hecho, ni
+las identidades vinculadas, ni el log de auditoría. Van en el mismo snapshot.
+
+**Y lo produce el core, no un script.** La base sale como export lógico tabla por tabla
+con `where owner_id`, y los blobs se enumeran desde `memories` —no del bucket— porque
+`blobs` no tiene dueño: dedupear por contenido y particionar por dueño se excluyen, así
+que la pertenencia solo se lee por el join con las memorias que lo referencian. Si ese
+filtro viviera en bash sería el único lugar del sistema donde la regla dura 9 no la
+sostiene el código.
+
+Dos consecuencias que se ven en los tests: el respaldo de uno **no trae ni una fila** del
+otro, y un archivo que dos dueños comparten **viaja en los dos**, porque cada respaldo
+tiene que restaurar solo.
+
+### `verify` restaura, no revisa metadatos
+
+Un respaldo que no se restauró no existe:
+
+1. `restic check` sobre la estructura del repositorio.
+2. Restaura el último snapshot a un directorio temporal.
+3. **Re-hashea cada blob** y comprueba que ninguna memoria referencie uno que no viajó.
+   Lo primero sale gratis porque el nombre del archivo *es* su sha256; lo segundo es el
+   modo de falla propio de un export filtrado: la fila queda y el archivo no.
+4. **Carga el export** en una base desechable creada desde las migraciones y cuenta las
+   filas ahí. Eso atrapa lo que un chequeo de formato no ve: los vectores y los `jsonb`,
+   que son justo lo que un import ingenuo rompe.
+
+```
+✓ 15 blobs re-hasheados y con su referencia
+✓ owners 1 · domains 8 · fact_types 2 · blobs 15 · memories 16 · memory_chunks 458 · facts 3 · channel_identities 2 · audit_log 6
+
+✓ el respaldo restaura. Eso es lo único que lo hace existir.
+```
+
+### Llegar a un Nextcloud que no publica puertos
+
+Si el destino está en una red privada —un Nextcloud casero detrás de Tailscale, sin un
+solo puerto abierto a internet— el contenedor **se une al tailnet él mismo**:
+
+```bash
+# .env.local
+TS_AUTHKEY=tskey-auth-...           # reusable Y efímera. Las dos cosas
+TS_HOSTNAME=deiz-memory-backup
+```
+
+**Reusable y efímera, o falla en el segundo respaldo.** Una llave de un solo uso se
+consume en la primera corrida y la siguiente muere con `invalid key`, que no se parece en
+nada a lo que pasó. Efímera es lo que hace que el nodo desaparezca al terminar en vez de
+dejar una máquina muerta en el tailnet por cada respaldo que tomaste.
+
+Arranca `tailscaled` en modo userspace —sin `NET_ADMIN` ni `/dev/net/tun`— y apunta
+restic y rclone a su proxy de salida. No depende del ruteo del host, y eso es lo que
+importa: **en Docker Desktop sobre macOS un contenedor no alcanza la LAN del host ni al
+host**, así que sin esto no hay URL que funcione. En un VPS Linux da igual, y con esto
+las dos plataformas se comportan igual.
+
+Un detalle que no es de red: **un respaldo en la misma casa que la máquina respaldada no
+es off-site.** Protege contra un disco muerto, que es real, pero el riesgo que justifica
+todo esto es el incendio y el robo, y esos se llevan las dos cosas juntas. El Pi de tu
+casa es off-site de un VPS; no lo es de tu escritorio.
+
+### Dos cosas que no promete
+
+**No corre solo.** Es on-demand y nada más: no hay cron ni aviso, porque el sistema nunca
+actúa por su cuenta. Lo que evita que se te olvide es que **`dm doctor` reporta la edad
+del último respaldo**, y después de una semana deja de contar como verde:
+
+```
+· respaldo      configurado en rclone:nc:deiz-memory, nunca corrió
+✓ respaldo      2026-09-09 (hoy) · verificado 2026-09-09
+✗ respaldo      2026-08-02 (hace 38 días) · NUNCA verificado
+```
+
+Un respaldo viejo se ve idéntico a uno sano desde cualquier otro ángulo, así que la fecha
+tiene que estar donde ya miras.
+
+**`purge` borra del sistema, no del pasado.** Un blob purgado sigue en los snapshots
+viejos hasta que caducan — es la contrapartida del versionado, porque lo que te salva de
+un borrado accidental es lo mismo que retiene uno deliberado. `forget` es donde se
+cierra.
 
 ## Tests
 
@@ -478,8 +628,10 @@ src/core/         operaciones tipadas. No sabe que existe un CLI.
   router/         los verbos de §5. intent y actions son puros
   ports.ts        BlobStore · Clock · Db · Ingest · Converter · Classifier · Embedder
 src/adapters/     cli · db/postgres · storage/s3 · normalize · classify · queue · chat
+src/adapters/backup/  fs (el export como directorio) · restic (el transporte)
 services/         los carriles, como contenedores
 migrations/       SQL plano, aplicado en orden
+scripts/          up · garage-init. Bash, no orquestador
 ```
 
 El core devuelve datos y nunca texto formateado; toda operación recibe un actor; y las

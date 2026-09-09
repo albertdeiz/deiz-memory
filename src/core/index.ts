@@ -34,6 +34,13 @@ export { buildPrompt, validate, classifySchema, type Classification } from './cl
 export { normalizeMemory, type NormalizeOutcome, type Attempt } from './normalize/run';
 export { lanesFor, isPoor, clamp, POOR_TEXT_CHARS, MAX_NORMALIZED_CHARS, LANES } from './normalize/lanes';
 export { storageKey } from './ops/rows';
+export {
+  exportOwner, checkExport, importInto, readBackupConfig, setBackupDestination,
+  recordBackupRun, recordBackupVerified, secretsNeededBy,
+  BACKED_UP_TABLES, NOT_BACKED_UP, TRANSPORTS,
+  type BackupSink, type BackupSource, type BackupManifest, type BackupConfig,
+  type CheckReport, type Row, type Transport, type Destination, type WebdavConfig,
+} from './ops/backup';
 
 // Datos tipados (§4). El modo hecho de §6.
 export { extractFacts, type ExtractOutcome } from './facts/extract';

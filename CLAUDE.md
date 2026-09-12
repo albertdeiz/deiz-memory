@@ -201,6 +201,41 @@ misma identidad con vigencias que **no** se solapan: la posterior supera a la an
 **sí** se solapan, no es sucesión sino conflicto, y se muestran las dos (regla dura 3).
 En un tipo `periodo` no hay supersesión, y punto.
 
+#### Los tipos también emergen
+
+No tienes que anticipar tus propios esquemas, igual que no tienes que anticipar tus
+categorías (§9). `dm facts propose` mira lo que **ningún tipo sabe leer** y propone los
+tipos que lo leerían.
+
+**La señal es más nítida que para los dominios.** Ahí hay que adivinar qué no encaja; acá
+el registro ya lo dice: un documento en una categoría sin ningún tipo, o uno donde todos
+respondieron `aplica: false`. Ese conjunto es literalmente *"esto tiene estructura
+extraíble que nadie declaró"*.
+
+**Y cuesta más, así que se verifica más.** Proponer un dominio es una frase y se resuelve
+sin modelo; proponer un tipo es un `fields[]` con nombres, `kind` y aliases. Por eso el
+modelo devuelve **un valor de ejemplo por campo y se comprueba contra el documento** con
+el mismo grounding de la extracción: un campo cuyo ejemplo no está en el texto es una
+columna que siempre vendría en null. Un tipo inventado de la nada produciría hechos de la
+nada.
+
+Tres filtros más, todos de cosas medidas sobre documentos reales:
+
+- **Las meta-claves no son campos.** El modelo metió `identity_field` y
+  `valid_until_field` *dentro* de `campos`. Pasaban grounding —una fecha es una fecha— y
+  habrían quedado como columnas llamadas como la cosa que debía apuntar a una columna.
+- **Varios campos con el mismo ejemplo** es el modelo leyendo una tabla hacia abajo en vez
+  de a lo ancho: una licencia propuso `clase`, `actual` y `proximo`, los tres "A1". Un
+  dato con tres nombres es peor que uno, porque una pregunta se lleva el que calce.
+- **Un tipo `estado` sin identidad no se ofrece.** Nunca podría superseder, y superseder
+  es la razón entera de que `estado` exista.
+
+**El guardrail es el de §9 y no es opcional: propone, nunca crea solo.** Un tipo decide
+cómo se leen todos los documentos futuros de su categoría, y `kind` en particular no se
+adivina dos veces — marcar una cartola mensual como `estado` haría que agosto superara a
+julio. Por eso aceptar pide confirmación nombrando lo que se crearía (regla dura 7), y
+crear el tipo y releer el corpus con él son dos decisiones separadas.
+
 #### Lo que NO es un Fact
 
 Esa cartola trae **53 líneas de transacción**. Eso no es un `payload`: es una tabla, y
@@ -545,7 +580,7 @@ dm init · dm doctor · dm serve · dm worker · dm chat "<msg>"
 dm capture <archivo> | --text "..." | -        --title --occurred --wait
 dm ls · dm search · dm ask · dm show · dm open · dm in <categoría>
 dm domains [create|edit|archive|merge|propose] · dm classify · dm index
-dm facts [--all] · dm facts types · dm facts extract [id]
+dm facts [--all] · dm facts types · dm facts extract [id] · dm facts propose [--yes]
 dm review · dm reprocess [--failed|--pending|--all|--lane|--wait]
 dm backup [status|set <repo>|run|verify|snapshots|restore|forget]
 dm mirror [status|set <ruta>|plan|run]
@@ -566,7 +601,8 @@ Construido y en verde: captura, los tres carriles, canal de chat, bandeja de rev
 dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
 `tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
-riesgo irreversible abierto, y el **espejo legible** (§14.4). **386 tests.**
+riesgo irreversible abierto, el **espejo legible** (§14.4) y los **tipos emergentes**
+(§4). **396 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.
@@ -586,7 +622,9 @@ Lo que falta, con nombre:
   la recuperación trae la sección equivocada, puede darte un número real de otra cosa.
   Para los datos que importan, el modo hecho (§6) esquiva el problema entero; para el
   resto sigue vigente.
-- **Solo dos tipos de hecho.** Todo lo demás se responde buscando.
+- **Las semillas son dos tipos**, y el resto los propone `dm facts propose` mirando tus
+  documentos. Lo que no tenga tipo se sigue respondiendo buscando, con lo que eso implica
+  (§6): la búsqueda ordena por parecido y el dato correcto puede no quedar primero.
 
 ## 13. Reglas duras
 

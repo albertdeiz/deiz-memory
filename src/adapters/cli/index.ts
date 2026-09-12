@@ -29,6 +29,7 @@ import {
   mergeDomains, mintPairingCode, purge, reprocess, resolveActor, search, setHidden,
   answer, indexMemory, pendingIndex, proposeDomains, resolveMemoryId, show, unindexed, LANES,
   seedDomains, seedFactTypes, extractFacts, listFacts, listFactTypes, contextOf, renderValue, warningFor,
+  proposeFactTypes, acceptFactType, type TypeProposal,
   exportOwner, checkExport, importInto, readBackupConfig, setBackupDestination,
   recordBackupRun, recordBackupVerified, secretsNeededBy, setMirrorPath,
   mirrorOwner, planMirror,
@@ -963,6 +964,50 @@ facts
       }
       return ok(lineas);
     }, (v) => (v.length === 0 ? 'Nada que extraer.' : v.join('\n')));
+  });
+
+facts
+  .command('propose')
+  .description('mira lo que ningún tipo sabe leer y propone los tipos que lo leerían')
+  .option('--yes', 'crea los tipos propuestos sin volver a preguntar')
+  .action(async (opts: Record<string, boolean>) => {
+    await run(
+      async ({ deps, actor }): Promise<Result<{ proposals: TypeProposal[]; created: string[] }>> => {
+        const p = await proposeFactTypes(deps, actor);
+        if (!p.ok) return p;
+        if (!opts.yes) return ok({ proposals: p.value, created: [] });
+
+        // The bot proposes, it never creates on its own (§9). `--yes` is you
+        // saying it, and it still goes one by one through the same door.
+        const created: string[] = [];
+        for (const proposal of p.value) {
+          const r = await acceptFactType(deps, actor, proposal, { confirm: true });
+          if (r.ok) created.push(r.value.slug);
+        }
+        return ok({ proposals: p.value, created });
+      },
+      ({ proposals, created }) => {
+        if (proposals.length === 0) return 'Nada que proponer: todo documento con estructura ya tiene un tipo.';
+        const bloques = proposals.map((p) => {
+          const campos = p.fields.map((f) =>
+            `    ${f.name}: ${f.label} [${f.kind}]` +
+            `${f.name === p.identityField ? '  ← identidad' : ''}` +
+            `\n        ej. ${f.example}`);
+          const sinRespaldo = p.discarded.length
+            ? `\n    (descartados por no estar en el documento: ${p.discarded.join(', ')})` : '';
+          return [
+            `${p.slug}  (${p.kind === 'state' ? 'estado' : 'período'})  ← ${p.domainSlug}`,
+            `    ${p.description}`,
+            `    visto en: ${p.fromShortId} ${p.fromTitle ?? ''}`,
+            ...campos,
+          ].join('\n') + sinRespaldo;
+        });
+        const cola = created.length
+          ? `\ncreados: ${created.join(', ')}\ncorre dm facts extract para leer el corpus con ellos.`
+          : '\nNinguno se creó todavía. Revísalos y acepta con: dm facts propose --yes';
+        return bloques.join('\n\n') + '\n' + cola;
+      },
+    );
   });
 
 program

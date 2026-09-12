@@ -7,7 +7,7 @@ El diseño está en [CLAUDE.md](./CLAUDE.md). Esto es lo que hace falta para cor
 **Estado.** Captura, normalización por tres carriles, búsqueda full-text y semántica,
 clasificación con IA local, preguntas en lenguaje natural con cita verificada, y **datos
 tipados** para los campos que no toleran un ranking. Todo por Telegram o por terminal.
-386 tests.
+396 tests.
 
 El sistema se vació el 3 de septiembre de 2026 para poblarlo desde cero; si vienes de
 antes, hay que **volver a vincular el chat** con `dm pair`.
@@ -344,6 +344,37 @@ Esa cartola trae **53 líneas de transacción**. Eso no es un campo, es una tabl
 *"¿cuánto gasté en delivery?"* necesita sumar filas. Queda fuera por diseño: agregar
 gastos por comercio es una app de finanzas. La línea es responder *"tienes que pagar
 $886.568 antes del 7 de septiembre"* y parar ahí.
+
+### Los tipos que te faltan los encuentra solo
+
+No tienes que anticipar tus propios esquemas:
+
+```bash
+dm facts propose          # mira lo que ningún tipo sabe leer y propone
+dm facts propose --yes    # los crea, tras haberlos revisado
+dm facts extract          # relee el corpus con los tipos nuevos
+```
+
+```
+cedula_identidad  (estado)  ← documentos
+    Documento de identidad que incluye datos personales.
+    visto en: f25a4b56 Cédula de Identidad
+    run: RUN [text]  ← identidad
+        ej. 26.574.025-1
+    nombres: Nombres [text]
+        ej. ALBERTO ALEJANDRO
+    (descartados por no estar en el documento: fecha_emision, fecha_vencimiento)
+```
+
+La señal es mejor que la de los dominios: no hay que adivinar qué no encaja, porque el
+registro ya dice qué documento nadie sabe leer. Y como proponer un tipo cuesta un modelo
+—no una frase—, **cada campo viene con un valor de ejemplo que se comprueba contra el
+documento**, con el mismo grounding de la extracción. Un campo cuyo ejemplo no está es una
+columna que siempre vendría vacía.
+
+**Propone, nunca crea solo.** Un tipo decide cómo se leen todos los documentos futuros de
+su categoría, así que aceptar pide confirmación. Y `kind` no se adivina dos veces: marcar
+una cartola mensual como `estado` haría que agosto superara a julio.
 
 ## Los tres carriles
 

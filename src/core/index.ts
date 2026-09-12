@@ -44,6 +44,10 @@ export {
 export {
   planMirror, mirrorOwner, type MirrorSink, type MirrorEntry,
 } from './ops/mirror';
+export {
+  proposeFactTypes, acceptFactType,
+  type TypeProposal, type FieldProposal, type AcceptedType,
+} from './facts/propose';
 
 // Datos tipados (§4). El modo hecho de §6.
 export { extractFacts, type ExtractOutcome } from './facts/extract';

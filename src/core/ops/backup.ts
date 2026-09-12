@@ -331,6 +331,8 @@ export interface BackupConfig {
   repository: string;
   transport: Transport;
   transportConfig: Record<string, unknown>;
+  /** Where the readable copy goes. Null means there is not one. */
+  mirrorPath: string | null;
   lastRunAt: Date | null;
   lastSnapshotId: string | null;
   lastOk: boolean | null;
@@ -343,6 +345,7 @@ interface ConfigRow {
   repository: string;
   transport: string;
   transport_config: Record<string, unknown>;
+  mirror_path: string | null;
   last_run_at: Date | null;
   last_snapshot_id: string | null;
   last_ok: boolean | null;
@@ -357,6 +360,7 @@ const toConfig = (r: ConfigRow): BackupConfig => ({
     ? (r.transport as Transport)
     : 'none',
   transportConfig: r.transport_config ?? {},
+  mirrorPath: r.mirror_path,
   lastRunAt: r.last_run_at,
   lastSnapshotId: r.last_snapshot_id,
   lastOk: r.last_ok,
@@ -449,6 +453,39 @@ export async function recordBackupVerified(deps: Deps, actor: Actor): Promise<Re
     `update backup_config set last_verified_at = now(), updated_at = now()
       where owner_id = $1 returning *`,
     [actor.ownerId],
+  );
+  if (rows.length === 0) return err('not_found', 'No hay un respaldo configurado para este dueño.');
+  return ok(toConfig(rows[0]!));
+}
+
+/**
+ * Where the readable copy goes, or null to stop making one.
+ *
+ * Refused when it is the repository itself: a restic repo and a tree of
+ * documents in one folder is the kind of mistake that looks fine until a sync
+ * deletes pack files.
+ */
+export async function setMirrorPath(
+  deps: Deps,
+  actor: Actor,
+  path: string | null,
+): Promise<Result<BackupConfig>> {
+  const trimmed = path?.trim() || null;
+
+  if (trimmed) {
+    const current = await readBackupConfig(deps, actor);
+    if (!current.ok) return current;
+    if (!current.value) return err('not_found', 'Configura primero el destino: dm backup set <repositorio>');
+    const repo = current.value.repository.replace(/\/+$/, '');
+    if (trimmed.replace(/\/+$/, '') === repo) {
+      return err('invalid', 'El espejo no puede ir en la misma carpeta que el repositorio: uno es un repo de restic y el otro un árbol de documentos.');
+    }
+  }
+
+  const { rows } = await deps.db.query<ConfigRow>(
+    `update backup_config set mirror_path = $2, updated_at = now()
+      where owner_id = $1 returning *`,
+    [actor.ownerId, trimmed],
   );
   if (rows.length === 0) return err('not_found', 'No hay un respaldo configurado para este dueño.');
   return ok(toConfig(rows[0]!));

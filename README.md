@@ -7,7 +7,7 @@ El diseño está en [CLAUDE.md](./CLAUDE.md). Esto es lo que hace falta para cor
 **Estado.** Captura, normalización por tres carriles, búsqueda full-text y semántica,
 clasificación con IA local, preguntas en lenguaje natural con cita verificada, y **datos
 tipados** para los campos que no toleran un ranking. Todo por Telegram o por terminal.
-373 tests.
+381 tests.
 
 El sistema se vació el 3 de septiembre de 2026 para poblarlo desde cero; si vienes de
 antes, hay que **volver a vincular el chat** con `dm pair`.
@@ -32,6 +32,8 @@ Ollama los suyos.
 npm run logs                    # qué está haciendo el worker y el bot
 npm run dm -- doctor            # cualquier comando, dentro de un contenedor
 npm run dm -- ask "..."
+npm run backup -- run           # el respaldo off-site
+npm run mirror -- run           # la copia legible
 npm run down                    # bajar todo
 ```
 
@@ -438,7 +440,9 @@ app resuelven sus dependencias por nombre de red, y cada una tiene su
 | `DM_SPEECH_URL_INTERNAL` | Whisper por cualquier servidor compatible |
 | `DM_DOCUMENTS_URL_INTERNAL` · `DM_OCR_URL_INTERNAL` | los carriles por otros |
 | `DM_VISION_BACKEND` | `ocr` · `anthropic` · `openai` · `none` |
-| `DM_BACKUP_REPOSITORY` | Nextcloud por B2, R2 o S3 |
+
+El destino del respaldo **no está acá**: es una fila por dueño, no una variable global
+(`dm backup set`). Lo único suyo que vive en el entorno son las dos llaves.
 
 **El modelo de Whisper importa más que el motor.** En español `base` da 18,4% de
 WER y `small` 9,7%. Con 18% se destrozan justo los nombres propios y los números
@@ -597,6 +601,57 @@ viejos hasta que caducan — es la contrapartida del versionado, porque lo que t
 un borrado accidental es lo mismo que retiene uno deliberado. `forget` es donde se
 cierra.
 
+## El espejo: verlos, no solo respaldarlos
+
+Un respaldo bueno es ilegible — packs de restic, cifrados y deduplicados. Perfecto para
+sobrevivir un desastre e inútil para mirar tus documentos. El espejo escribe los mismos
+originales con nombres que puedes leer:
+
+```bash
+dm mirror plan                  # qué nombres tendría, sin subir nada
+dm mirror set nc:deiz-memory-archivos
+npm run mirror -- run           # regenera y sube
+dm mirror set none              # dejar de hacerlo
+```
+
+```
+deiz-memory-archivos/
+  Documentos/  1994-11-29 · Cédula de Identidad.pdf
+               2025-10-27 · Licencia de Conducir.pdf
+  Finanzas/    2026-08-07 · Estado de cuenta tarjeta de crédito Visa Infinite.pdf
+  Seguros/     2026-07-29 · Póliza de Seguro de Vehículo.pdf
+```
+
+Dominio primero, después la fecha **del hecho** y no la de captura: una carpeta ordenada
+por cuándo alcanzaste a escanear algo no la puede leer nadie.
+
+**Son dos carpetas distintas y no se mezclan:**
+
+| | `deiz-memory/` | `deiz-memory-archivos/` |
+|---|---|---|
+| Qué es | repo restic: cifrado, versionado, opaco | tus originales, legibles |
+| Para qué | sobrevivir un desastre | mirarlos |
+| Contiene | blobs **y** base — tu nota, dominios, hechos | solo los archivos |
+
+`dm mirror set` rechaza apuntar el espejo a la carpeta del repositorio: un `sync` sobre
+packs de restic los borra.
+
+### Tres reglas que lo mantienen sano
+
+1. **Es derivado.** Se regenera entero en cada corrida desde la base y los blobs.
+2. **Es de una sola vía.** Lo que edites o borres allá vuelve en la próxima corrida. El
+   sistema nunca lee de ahí — por eso no hay dos fuentes de verdad.
+3. **Respeta `hidden`.** Una memoria oculta no aparece: una carpeta es lo más visible que
+   hay.
+
+Usa `sync` y no `copy` justamente porque es derivado: si purgas algo tiene que
+desaparecer. Y como todo sale de la base, borrar de más cuesta una corrida, nunca un
+documento.
+
+**No está cifrado**, y esa es la gracia: si lo estuviera no lo verías. Pero son datos
+médicos y financieros en claro en el disco del destino, al lado de un repositorio que sí
+está cifrado. Si ese disco no tiene cifrado de disco, esta carpeta es el punto débil.
+
 ## Tests
 
 ```bash
@@ -620,6 +675,7 @@ verdad y veinte en paralelo contra un modelo que atiende de a uno reventaba el t
 ```
 src/core/         operaciones tipadas. No sabe que existe un CLI.
   ops/            capture · search · list · show · lifecycle · reprocess · domains
+                  backup (el respaldo por dueño) · mirror (la copia legible)
   normalize/      lanes.ts (el router, lógica pura) · run.ts
   classify/       prompt armado en runtime · validación de lo que devuelve
   recall/         chunk · index-chunks · retrieve · answer · grounding
@@ -628,9 +684,9 @@ src/core/         operaciones tipadas. No sabe que existe un CLI.
   router/         los verbos de §5. intent y actions son puros
   ports.ts        BlobStore · Clock · Db · Ingest · Converter · Classifier · Embedder
 src/adapters/     cli · db/postgres · storage/s3 · normalize · classify · queue · chat
-src/adapters/backup/  fs (el export como directorio) · restic (el transporte)
-services/         los carriles, como contenedores
-migrations/       SQL plano, aplicado en orden
+  backup/         fs (el export y el espejo como directorios) · restic (el transporte)
+services/         los carriles y el entrypoint del respaldo, como contenedores
+migrations/       SQL plano, aplicado en orden por `dm init`
 scripts/          up · garage-init. Bash, no orquestador
 ```
 

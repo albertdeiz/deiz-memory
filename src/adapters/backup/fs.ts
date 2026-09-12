@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { BackupManifest, BackupSink, BackupSource, Row } from '../../core/ops/backup';
+import type { MirrorSink } from '../../core/ops/mirror';
 
 /**
  * The export as a directory. This is the half the core refuses to know about:
@@ -65,6 +66,16 @@ export function fsSource(root: string): BackupSource {
     },
     async blob(key): Promise<Buffer> {
       return readFileSync(join(root, key));
+    },
+  };
+}
+
+/** The readable copy as a directory. Same trade as `fsSink`: the core hands over
+ *  a path and bytes, and only this knows what a filesystem is. */
+export function mirrorFsSink(root: string): MirrorSink {
+  return {
+    async file(path, bytes) {
+      write(join(root, path), bytes);
     },
   };
 }

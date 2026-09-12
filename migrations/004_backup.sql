@@ -37,6 +37,11 @@ create table backup_config (
   -- different problems and only one of them is urgent.
   last_ok      boolean,
   last_error   text,
+  -- Where the readable copy goes, and null means "do not make one". A separate
+  -- destination from `repository` on purpose and never the same folder: one is
+  -- an opaque restic repo and the other a tree of documents, and putting them
+  -- together is a mess that only looks like it works.
+  mirror_path  text,
   -- The last verified restore, which is the only thing that makes a backup real
   -- (§14.3). Separate from last_run_at because copying and proving you can come
   -- back are different claims, and the second one is the one that matters.

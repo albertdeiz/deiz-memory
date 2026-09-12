@@ -119,6 +119,40 @@ function proxyVars(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   return out;
 }
 
+/**
+ * Uploads the readable copy with `rclone sync`.
+ *
+ * `sync` and not `copy`, unlike the blobs: the mirror is a projection of the
+ * current state, so a memory you hid or purged has to disappear from it. That
+ * is only safe BECAUSE it is derived — there is nothing here that does not come
+ * from the database, so deleting the wrong thing costs one more run and never a
+ * document. `--max-delete` still guards the case where the plan comes back empty
+ * because something upstream broke.
+ */
+export async function rcloneSync(
+  from: string,
+  to: string,
+  transport: Transport,
+  config: Record<string, unknown>,
+  secret: string | null,
+  log: (s: string) => void,
+  maxDelete = 100,
+): Promise<void> {
+  const env: NodeJS.ProcessEnv = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME ?? '/tmp',
+    ...proxyVars(),
+    ...(await rcloneEnv(transport, config, secret)),
+  };
+  const r = await exec('rclone', [
+    'sync', from, to,
+    '--max-delete', String(maxDelete),
+    '--transfers', '4',
+    '--stats-one-line', '--stats', '10s',
+  ], env, log);
+  if (r.code !== 0) throw new Error(`no se pudo sincronizar: ${r.stderr.trim()}`);
+}
+
 export class Restic {
   private constructor(
     private readonly env: NodeJS.ProcessEnv,

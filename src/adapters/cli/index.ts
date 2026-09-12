@@ -30,11 +30,12 @@ import {
   answer, indexMemory, pendingIndex, proposeDomains, resolveMemoryId, show, unindexed, LANES,
   seedDomains, seedFactTypes, extractFacts, listFacts, listFactTypes, contextOf, renderValue, warningFor,
   exportOwner, checkExport, importInto, readBackupConfig, setBackupDestination,
-  recordBackupRun, recordBackupVerified, secretsNeededBy,
-  type BackupConfig, type BackupManifest, type CheckReport,
+  recordBackupRun, recordBackupVerified, secretsNeededBy, setMirrorPath,
+  mirrorOwner, planMirror,
+  type BackupConfig, type BackupManifest, type CheckReport, type MirrorEntry,
 } from '../../core/index';
-import { fsSink, fsSource, dirSize, passphraseFor, transportSecretFor, envNamesFor } from '../backup/fs';
-import { Restic, missingTools } from '../backup/restic';
+import { fsSink, fsSource, mirrorFsSink, dirSize, passphraseFor, transportSecretFor, envNamesFor } from '../backup/fs';
+import { Restic, missingTools, rcloneSync } from '../backup/restic';
 import { runMigrations } from '../db/postgres/migrate';
 import { EXIT, exitCodeFor } from './exit';
 import { renderAnswer, renderDetail, renderFailure, renderList, renderReview } from './format';
@@ -160,7 +161,7 @@ const parseDate = (s?: string): Date | null | 'invalid' => {
 
 program
   .command('init')
-  .description('crea el dueño y verifica que el stack responde')
+  .description('aplica el esquema, crea el dueño y siembra dominios y tipos')
   .argument('[label]', 'nombre del dueño', 'yo')
   .action(async (label: string) => {
     let pool: pg.Pool | null = null;
@@ -168,6 +169,16 @@ program
       const cfg = loadConfig();
       pool = createPool(cfg.databaseUrl);
       const db = pgDb(pool);
+
+      // The schema first, because there is nowhere to put an owner without it.
+      // This used to live only in `migrate:local`, run with tsx ON THE HOST —
+      // which contradicted "the only dependency is Docker" and left a fresh
+      // `npm run up` failing on a database with no tables, even though the
+      // service is called app-migrate and the script announces "schema and
+      // seeds". The docs were right and the code was not.
+      const { applied } = await runMigrations(db);
+      for (const f of applied) console.error(`✓ ${f}`);
+
       const existing = await listOwners(db);
       if (existing.length > 0) {
         // Idempotent: seeds are filled in for an owner that already exists too. Without
@@ -189,7 +200,7 @@ program
 
 program
   .command('doctor')
-  .description('revisa config, base de datos, migraciones, bucket, dueño y carriles')
+  .description('revisa config, base, migraciones, bucket, dueño, carriles y respaldo')
   .action(async () => {
     let pool: pg.Pool | null = null;
     // `required` separates broken from merely unconfigured. Without that distinction,
@@ -1334,5 +1345,98 @@ function findExport(root: string): string | null {
   }
   return null;
 }
+
+// ---------------------------------------------------------------- mirror
+//
+// The readable copy, and a separate verb because it is a separate thing. Calling
+// it `backup mirror` would invite the belief that having one is having the
+// other, and they fail in opposite ways: the backup is unreadable and complete,
+// the mirror is readable and derived.
+
+const mirror = program
+  .command('mirror')
+  .description('la copia legible de tus originales, para verlos en el destino');
+
+mirror
+  .command('status', { isDefault: true })
+  .description('si hay espejo y a dónde va')
+  .action(async () => {
+    await run(
+      async ({ deps, actor }): Promise<Result<{ cfg: BackupConfig | null; files: number }>> => {
+        const c = await readBackupConfig(deps, actor);
+        if (!c.ok) return c;
+        if (!c.value?.mirrorPath) return ok({ cfg: c.value, files: 0 });
+        const plan = await planMirror(deps, actor);
+        return ok({ cfg: c.value, files: plan.ok ? plan.value.length : 0 });
+      },
+      ({ cfg, files }) => {
+        if (!cfg) return 'Sin respaldo configurado. dm backup set <repositorio>';
+        if (!cfg.mirrorPath) return 'Sin espejo. dm mirror set <ruta>';
+        return `espejo   ${cfg.mirrorPath}\n         ${files} archivo(s) legibles`;
+      },
+    );
+  });
+
+mirror
+  .command('set')
+  .description('dónde dejar la copia legible — "none" para dejar de hacerla')
+  .argument('<path>', 'ruta en el mismo destino, p.ej. nc:deiz-memory-archivos')
+  .action(async (path: string) => {
+    await run(
+      ({ deps, actor }) => setMirrorPath(deps, actor, path === 'none' ? null : path),
+      (c) => (c.mirrorPath ? `espejo   ${c.mirrorPath}` : 'espejo desactivado'),
+    );
+  });
+
+mirror
+  .command('run')
+  .description('regenera la copia y la sube')
+  .action(async () => {
+    await run(
+      async ({ deps, actor }): Promise<Result<{ files: number; bytes: number; to: string }>> => {
+        const stored = await readBackupConfig(deps, actor);
+        if (!stored.ok) return stored;
+        const cfg = stored.value;
+        if (!cfg) return { ok: false, kind: 'invalid', message: 'No hay destino configurado. dm backup set <repositorio>' };
+        if (!cfg.mirrorPath) return { ok: false, kind: 'invalid', message: 'No hay espejo configurado. dm mirror set <ruta>' };
+
+        const missing = missingTools(cfg.transport);
+        if (missing.length > 0) {
+          return { ok: false, kind: 'invalid', message: `Falta ${missing.join(' y ')} en este equipo. El espejo corre en su contenedor: npm run mirror -- run` };
+        }
+        const secret = transportSecretFor(cfg.transport, actor.ownerId);
+        if (secretsNeededBy(cfg).includes('transport') && !secret) {
+          return { ok: false, kind: 'invalid', message: `Falta la credencial del destino. Ponla en ${envNamesFor(cfg.transport, actor.ownerId)[1]}.` };
+        }
+
+        const dir = mkdtempSync(join(tmpdir(), 'dm-mirror-'));
+        try {
+          // Rebuilt from scratch every run, because it is derived: what the
+          // database says now IS the mirror, and anything else in there is stale.
+          const written = await mirrorOwner(deps, actor, mirrorFsSink(dir));
+          if (!written.ok) return written;
+          await rcloneSync(dir, cfg.mirrorPath, cfg.transport, cfg.transportConfig, secret,
+            (l) => console.error(l));
+          return ok({ ...written.value, to: cfg.mirrorPath });
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+      ({ files, bytes, to }) =>
+        `${files} archivo(s) · ${(bytes / 1e6).toFixed(1)} MB → ${to}\n\n` +
+        'Es una copia derivada y de una sola vía: lo que edites o borres allá\n' +
+        'vuelve en la próxima corrida. El original manda siempre.',
+    );
+  });
+
+mirror
+  .command('plan')
+  .description('qué nombres tendría, sin subir nada')
+  .action(async () => {
+    await run(
+      ({ deps, actor }): Promise<Result<MirrorEntry[]>> => planMirror(deps, actor),
+      (es) => (es.length === 0 ? 'No hay archivos que reflejar.' : es.map((e) => e.path).join('\n')),
+    );
+  });
 
 program.parseAsync(process.argv);

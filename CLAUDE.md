@@ -408,6 +408,8 @@ apuntando a un blob que no existe es peor que no tener la fila.
 | Documentos → texto | **markitdown** en su contenedor | PDF/docx/xlsx/html/csv → Markdown con estructura |
 | Fotos y escaneos | **RapidOCR** (PP-OCR sobre ONNXRuntime) | §8.1 |
 | Audio | **Whisper** en contenedor | notas de voz |
+| Respaldo | **restic** sobre **rclone** | cifra en origen, versiona y deduplica; rclone es solo transporte (§14.3) |
+| Red al destino | **Tailscale** en modo userspace | alcanza un destino que no publica puertos, sin depender del ruteo del host |
 
 Los tres carriles son **servicios en contenedores**, detrás del mismo puerto `Converter`.
 El motor de cada uno se cambia con una variable de entorno.
@@ -532,6 +534,7 @@ dm domains [create|edit|archive|merge|propose] · dm classify · dm index
 dm facts [--all] · dm facts types · dm facts extract [id]
 dm review · dm reprocess [--failed|--pending|--all|--lane|--wait]
 dm backup [status|set <repo>|run|verify|snapshots|restore|forget]
+dm mirror [status|set <ruta>|plan|run]
 dm pair · dm identities
 dm hide · dm unhide · dm purge <id> --yes
 ```
@@ -549,7 +552,7 @@ Construido y en verde: captura, los tres carriles, canal de chat, bandeja de rev
 dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
 `tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
-riesgo irreversible abierto. **373 tests.**
+riesgo irreversible abierto, y el **espejo legible** (§14.4). **381 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.
@@ -762,6 +765,48 @@ honesta del versionado —lo que te salva de un borrado accidental es lo mismo q
 retiene uno deliberado—, y se cierra a propósito con `forget`, que aplica la retención
 y poda de verdad. Decir otra cosa sería la promesa rota que §14.1 evita.
 
+### 14.4 El espejo: los originales, legibles
+
+Un respaldo bueno es ilegible. Los packs de restic están cifrados y deduplicados, y eso
+es exactamente lo correcto para sobrevivir un desastre — y completamente inútil para lo
+único que §6.1 admite que el chat no puede: **mirar cuatrocientos documentos**.
+
+Por eso el espejo escribe los mismos originales con nombres que una persona lee:
+
+```
+Documentos/1994-11-29 · Cédula de Identidad.pdf
+Finanzas/2026-08-07 · Estado de cuenta tarjeta de crédito Visa Infinite.pdf
+Seguros/2026-07-29 · Póliza de Seguro de Vehículo.pdf
+```
+
+Dominio primero y después la fecha **del hecho**, no la de captura: una carpeta ordenada
+por cuándo uno alcanzó a escanear algo es una carpeta que nadie puede leer (§3.3).
+
+**No es que el producto se vuelva un Drive** (§2). El chat sigue siendo la única entrada;
+esto es una exportación, y una exportación no es una interfaz. Lo que lo sostiene son
+tres reglas, y la tercera es la que evita el único daño que un espejo puede hacer:
+
+1. **Es derivado.** Se regenera entero desde la base y los blobs (§3.6).
+2. **Es de una sola vía.** Lo que edites o borres allá vuelve en la próxima corrida. El
+   sistema **nunca** lee de ahí, así que no hay dos fuentes de verdad — que es
+   precisamente el problema que hundiría esto.
+3. **Vive separado del repositorio.** Dos carpetas, nunca una. `dm mirror set` rechaza
+   apuntarlo al mismo lugar que el repo: un `sync` sobre packs de restic los borra.
+
+**Y usa `sync`, no `copy`, al revés que los blobs.** Los blobs son inmutables y solo se
+agregan; el espejo es una proyección del estado actual, así que lo que purgaste tiene que
+desaparecer. Es seguro *porque* es derivado: borrar de más cuesta una corrida más y nunca
+un documento. `--max-delete` cubre el caso de un plan que vuelve vacío por un fallo aguas
+arriba.
+
+**Respeta `hidden`.** Una memoria oculta no aparece: una carpeta es el lugar más visible
+que hay, y §4 dice que oculta significa fuera de los resultados.
+
+**Lo que hay que decidir con los ojos abiertos:** el espejo **no está cifrado** — esa es
+la gracia, si no no se vería. Son fichas médicas y financieras en claro en el disco del
+destino, mientras que el repositorio de al lado sí está cifrado. Si ese disco no tiene
+cifrado de disco, esa carpeta es el punto débil de todo el diseño de §14.2.
+
 ## 15. Métricas de éxito
 
 De uso, no de sistema:
@@ -788,3 +833,5 @@ De uso, no de sistema:
 - **Grounding** — que toda cifra de la respuesta esté en los pasajes leídos.
 - **Purgar** — la única forma de borrar de verdad: explícita, confirmada y auditada.
 - **Bandeja de revisión** — lo que quedó dudoso, esperando que decidas.
+- **Espejo** — la copia legible de los originales (§14.4). Derivada, de una sola vía y
+  sin cifrar; no es el respaldo y no puede reemplazarlo.

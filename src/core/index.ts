@@ -36,11 +36,14 @@ export { lanesFor, isPoor, clamp, POOR_TEXT_CHARS, MAX_NORMALIZED_CHARS, LANES }
 export { storageKey } from './ops/rows';
 export {
   exportOwner, checkExport, importInto, readBackupConfig, setBackupDestination,
-  recordBackupRun, recordBackupVerified, secretsNeededBy,
+  recordBackupRun, recordBackupVerified, secretsNeededBy, setMirrorPath,
   BACKED_UP_TABLES, NOT_BACKED_UP, TRANSPORTS,
   type BackupSink, type BackupSource, type BackupManifest, type BackupConfig,
   type CheckReport, type Row, type Transport, type Destination, type WebdavConfig,
 } from './ops/backup';
+export {
+  planMirror, mirrorOwner, type MirrorSink, type MirrorEntry,
+} from './ops/mirror';
 
 // Datos tipados (§4). El modo hecho de §6.
 export { extractFacts, type ExtractOutcome } from './facts/extract';

@@ -21,8 +21,8 @@
     "test:cli": "npm run build && vitest run tests/cli",
     "typecheck": "tsc -p tsconfig.json",
     "backup": "docker compose --profile backup run --rm backup backup",
-    "logs": "docker compose logs -f app-worker app-bot",
-    "migrate:local": "tsx scripts/migrate.ts"
+    "mirror": "docker compose --profile backup run --rm backup mirror",
+    "logs": "docker compose logs -f app-worker app-bot"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

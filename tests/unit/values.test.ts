@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coerce, grounded, normalizeDate } from '../../src/core/facts/values';
+import { coerce, grounded, normalizeDate, withoutLabel } from '../../src/core/facts/values';
 import { relevantContext } from '../../src/core/facts/prompt';
 
 describe('normalizar una fecha', () => {
@@ -135,5 +135,47 @@ describe('el contexto del extractor', () => {
 
   it('un documento corto se manda entero', () => {
     expect(relevantContext(tipo, 'dos lineas\ny ya')).toBe('dos lineas\ny ya');
+  });
+});
+
+/**
+ * Medido sobre una póliza real: el modelo devolvió `numero` como
+ * "póliza N°BP9344586" — el número con su rótulo pegado. Pasaba todos los
+ * chequeos, porque es literalmente lo que dice el documento y eso es justo lo
+ * que grounding exige. Pero el dato es BP9344586, y la diferencia aparece el
+ * día en que dos documentos escriben la misma póliza distinto.
+ */
+describe('un valor no se lleva su propio rótulo', () => {
+  const numero = {
+    name: 'numero', label: 'número de póliza', kind: 'text' as const,
+    aliases: ['poliza', 'numero'],
+  };
+
+  it('el caso real: despega el rótulo y el N°', () => {
+    expect(withoutLabel('póliza N°BP9344586', numero)).toBe('BP9344586');
+  });
+
+  it('da igual el acento, la caja y el marcador de número', () => {
+    for (const v of ['Poliza No. BP9344586', 'PÓLIZA Nº BP9344586', 'poliza #BP9344586',
+                     'Número de póliza: BP9344586']) {
+      expect(withoutLabel(v, numero)).toBe('BP9344586');
+    }
+  });
+
+  it('un valor que ya viene limpio no se toca', () => {
+    expect(withoutLabel('BP-9344586', numero)).toBe('BP-9344586');
+    expect(withoutLabel('VHWD58', { ...numero, name: 'patente', label: 'patente del vehículo', aliases: ['patente', 'placa'] })).toBe('VHWD58');
+  });
+
+  it('nunca convierte un valor en nada', () => {
+    // Si despojar se come todo, es que no había rótulo: era el valor.
+    expect(withoutLabel('póliza', numero)).toBe('póliza');
+    expect(withoutLabel('numero', numero)).toBe('numero');
+  });
+
+  it('las palabras cortas del rótulo no se comen el valor', () => {
+    // "de" y "la" están en el label y morderían cualquier valor que empiece así.
+    const f = { name: 'x', label: 'numero de la cosa', kind: 'text' as const, aliases: [] };
+    expect(withoutLabel('DE-4471', f)).toBe('DE-4471');
   });
 });

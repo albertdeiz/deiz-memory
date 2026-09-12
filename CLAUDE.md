@@ -131,6 +131,20 @@ respuesta era la del mes pasado. Por eso un campo puede declarar `near` y `notNe
 que lo que los separa no es lo que tienen sino lo que sobra. El contexto se corta en el
 salto de línea, porque el rótulo de un valor es lo que está a su izquierda en su fila.
 
+**Y un valor no se lleva su propio rótulo.** Sobre la póliza real el modelo devolvió
+`numero` como `"póliza N°BP9344586"`: el número con su etiqueta pegada. Pasaba **todos**
+los chequeos, porque es literalmente lo que dice el documento y eso es justo lo que
+grounding exige — el dato correcto y el dato sucio son indistinguibles para una
+verificación que solo pregunta "¿aparece?". El daño aparece después: otro documento
+escribió la misma póliza como `BP-9344586` y dejaron de parecer la misma.
+
+Pedirle al prompt "el valor, no el rótulo" es de las instrucciones que un modelo chico
+cumple *casi* siempre. Así que se despoja en código, con el vocabulario que el campo ya
+declara —su `label`, sus `aliases`, sus anclas— probando **la frase completa antes que
+las palabras sueltas**: `número de póliza` se atasca en `de`, que es demasiado corto para
+quitarlo sin riesgo, y bajar ese límite haría que un rótulo se comiera valores como
+`DE-4471`. Si despojar se lleva todo, es que no había rótulo: se devuelve el original.
+
 **Y el extractor no ve "los primeros N caracteres", ve las líneas que importan.** Ese
 recorte decidía la respuesta por accidente: el monto correcto estaba en el carácter 6157 y
 el corte era 6000. Ciento cincuenta y siete caracteres separaban una respuesta buena de
@@ -552,7 +566,7 @@ Construido y en verde: captura, los tres carriles, canal de chat, bandeja de rev
 dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
 `tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
-riesgo irreversible abierto, y el **espejo legible** (§14.4). **381 tests.**
+riesgo irreversible abierto, y el **espejo legible** (§14.4). **386 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.

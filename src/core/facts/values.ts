@@ -78,6 +78,63 @@ export function coerce(raw: unknown, kind: FieldKind): FactValue | null {
   }
 }
 
+/**
+ * Strips a value's own label off the front of it.
+ *
+ * Measured on a real policy: the model returned `numero` as
+ * `"póliza N°BP9344586"` — the number with its label glued to it. It passed
+ * every check, because it IS what the document says and grounding asks exactly
+ * that. But the datum is `BP9344586`, and the difference shows up the day two
+ * documents state the same policy differently: one said `BP-9344586` and they
+ * stopped looking like the same policy.
+ *
+ * Asking the prompt for "the value, not the label" is the kind of instruction a
+ * small model follows most of the time. This is the `if` version, and it uses
+ * the vocabulary already declared for the field — its label, its aliases, its
+ * anchors — so it needs nothing new in the registry.
+ */
+const NUMBER_MARKER = String.raw`n[°ºo]?\.?|nro\.?|num\.?|numero|#`;
+const SEPARATORS = String.raw`[\s:.\-–—]*`;
+
+export function withoutLabel(value: string, field: FactField): string {
+  // Whole phrases first and longest first, then single words. Tokens alone are
+  // not enough: "número de póliza: BP9344586" stalls on "de", which is too short
+  // to strip safely — and dropping the length guard would let a label word eat
+  // into values like "DE-4471".
+  const candidates = [
+    field.label,
+    ...(field.aliases ?? []),
+    ...(field.near ?? []),
+    ...field.label.split(/\s+/).filter((w) => w.length >= 3),
+  ]
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 3)
+    .sort((a, b) => b.length - a.length);
+
+  let out = value.trim();
+  for (let pass = 0; pass < 6; pass += 1) {
+    const before = out;
+    const flat = withoutAccents(out).toLowerCase();
+
+    for (const w of candidates) {
+      if (flat.startsWith(withoutAccents(w).toLowerCase())) {
+        out = out.slice(w.length);
+        break;
+      }
+    }
+    out = out.replace(new RegExp(`^${SEPARATORS}`), '');
+    out = out.replace(new RegExp(`^(?:${NUMBER_MARKER})`, 'i'), '');
+    out = out.replace(new RegExp(`^${SEPARATORS}`), '');
+
+    if (out === before) break;
+  }
+
+  // Never turn a value into nothing: if stripping ate everything, or left
+  // something too short to be a datum, the original was not a label plus a value.
+  const kept = out.trim();
+  return kept.length >= 2 ? kept : value.trim();
+}
+
 /** Cap on how far back to look, for absurdly long rows. */
 const WINDOW = 200;
 

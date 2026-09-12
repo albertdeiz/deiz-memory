@@ -1,4 +1,4 @@
-import { coerce, grounded } from './values';
+import { coerce, grounded, withoutLabel } from './values';
 import type { FactField, FactType, FactValue } from './types';
 
 /**
@@ -155,8 +155,12 @@ export function validateExtraction(
   const discarded: string[] = [];
 
   for (const f of type.fields) {
-    const value = coerce(given[f.name], f.kind);
+    let value = coerce(given[f.name], f.kind);
     if (value === null) continue;
+    // A text value often arrives with its own label glued to the front. Stripped
+    // BEFORE grounding, so what gets verified against the document is the datum
+    // that will be stored, not a longer string that happens to also be there.
+    if (f.kind === 'text' && typeof value === 'string') value = withoutLabel(value, f);
     if (!grounded(value, f, source)) {
       discarded.push(f.name);
       continue;

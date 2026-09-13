@@ -642,9 +642,10 @@ Lo que falta, con nombre:
   reporte la edad del último respaldo**: un respaldo viejo se ve idéntico a uno sano
   desde cualquier otro ángulo, así que la fecha tiene que estar donde uno ya mira.
   Después de una semana deja de contar como verde.
-- **La web de §15 tiene su API y le falta el cliente.** `dm api` sirve el core por HTTP
-  con sesión, y toda ruta que devuelve datos exige un `Actor` que sale de la cookie.
-  Falta el front.
+- **La web de §15 está construida y sin usar de verdad.** Navegar, curar, categorías,
+  tipos y estado del respaldo funcionan de punta a punta; lo que falta es la semana de
+  uso que diga qué sobra y qué falta. No corre en el compose todavía: son dos procesos a
+  mano (`dm api` y `npm --prefix web run dev`).
 - **La semana de uso real.** Usarlo sin construir nada y ver qué falta de verdad.
 - **TIFF sigue sin carril**, y un bot de Telegram **no puede bajar más de 20 MB**.
 - **El modelo de 3B a veces se queda corto** al redactar. `DM_CLASSIFY_MODEL` lo cambia.

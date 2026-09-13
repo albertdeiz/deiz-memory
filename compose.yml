@@ -162,6 +162,48 @@ services:
     environment: *app-env
     command: ["serve"]
 
+  # ---------------------------------------------------------------- the web
+  #
+  # Two processes with HTTP between them (§15): the API exposes the core and the
+  # web is a pure client. Out of the default profile because the system works
+  # without them — the chat is the product, this is for administering it.
+
+  # The core over HTTP. Inside the container it binds 0.0.0.0, because a process
+  # listening on the container's own loopback is reachable by nobody; what keeps
+  # it off the network is the PUBLISH below, pinned to 127.0.0.1 on the host.
+  # Same reasoning as postgres: the port simply does not exist from outside.
+  api:
+    build:
+      context: .
+      target: runtime
+    profiles: ["web"]
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    env_file: *app-secrets
+    environment:
+      <<: *app-env
+      DM_API_HOST: 0.0.0.0
+      DM_API_PORT: "4317"
+    ports: ["127.0.0.1:4317:4317"]
+    command: ["api"]
+
+  # The client. It holds no connection to Postgres, S3 or the model: everything
+  # it knows it learned from the API, which is what keeps the owner filter in one
+  # codebase instead of two.
+  web:
+    build: ./web
+    profiles: ["web"]
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      # By network name, so the same image works here and against a localhost in
+      # development. The browser never talks to `api` directly — the rewrite in
+      # next.config keeps both on one origin, which is what lets the session
+      # cookie be SameSite=Strict with no CORS anywhere.
+      DM_API_URL: ${DM_API_URL_INTERNAL:-http://api:4317}
+    ports: ["127.0.0.1:4318:4318"]
+
   # ------------------------------------------------------------- the backup
   #
   # Off-site, encrypted at origin, and out of every default profile: it runs when

@@ -385,9 +385,9 @@ Telegram ──> Channel Adapter ──> Ingest Queue (ack inmediato)
 ```
 
 **Todo corre en contenedores, la app incluida.** `postgres` · `garage` ·
-`documents` · `ocr` · `whisper` · `ollama` · `app-worker` · `app-bot` · `backup`.
-Nada necesita Node en el host: la única dependencia para usar el sistema es
-Docker.
+`documents` · `ocr` · `whisper` · `ollama` · `app-worker` · `app-bot` · `backup` ·
+`api` · `web`. Nada necesita Node en el host: la única dependencia para usar el
+sistema es Docker.
 
 El core sigue siendo **un módulo, no seis servicios**. Partirlo en microservicios
 para un sistema de un dueño multiplicaría la superficie operativa sin comprar
@@ -643,9 +643,8 @@ Lo que falta, con nombre:
   desde cualquier otro ángulo, así que la fecha tiene que estar donde uno ya mira.
   Después de una semana deja de contar como verde.
 - **La web de §15 está construida y sin usar de verdad.** Navegar, curar, categorías,
-  tipos y estado del respaldo funcionan de punta a punta; lo que falta es la semana de
-  uso que diga qué sobra y qué falta. No corre en el compose todavía: son dos procesos a
-  mano (`dm api` y `npm --prefix web run dev`).
+  tipos y estado del respaldo funcionan de punta a punta, en contenedores; lo que falta
+  es la semana de uso que diga qué sobra y qué falta.
 - **La semana de uso real.** Usarlo sin construir nada y ver qué falta de verdad.
 - **TIFF sigue sin carril**, y un bot de Telegram **no puede bajar más de 20 MB**.
 - **El modelo de 3B a veces se queda corto** al redactar. `DM_CLASSIFY_MODEL` lo cambia.
@@ -915,6 +914,17 @@ memorias a la vez.
 | Respaldo | estado, destino y espejo, y dispararlos (§14.3, §14.4) |
 
 ### Dos procesos, y el límite entre ellos es HTTP
+
+**Y dos contenedores.** `api` escucha en `0.0.0.0` *dentro* del suyo —un proceso atado al
+loopback del contenedor no lo alcanza nadie— y lo que lo mantiene fuera de la red es la
+publicación: `127.0.0.1:4317`. El mismo razonamiento que Postgres, y por eso el aviso del
+arranque no dice "esto está mal" sino dónde mirar.
+
+**El proxy de la web lee su destino en cada request, no al construir.** Empezó como un
+`rewrites()` de Next y eso estaba mal de una forma que el contenedor demostró: los
+rewrites se resuelven en *build time* y hornean el destino. La imagen salió apuntándose a
+sí misma. Con un route handler, la misma imagen sirve contra la red del compose y contra
+un localhost en desarrollo — que es lo que §7 le pide a toda dependencia.
 
 La app expone el core por HTTP (`dm api`) y la web es un cliente puro. No es ceremonia:
 mantiene en pie lo que §7 ya prometía —**el core devuelve datos y nunca texto

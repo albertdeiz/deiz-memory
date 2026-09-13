@@ -1045,15 +1045,21 @@ program
       const deps = buildDeps(pool, cfg, null);
       const server = createServer(createRouter(routes, deps));
 
-      // 127.0.0.1 by default and said out loud when it is not: binding this to
-      // 0.0.0.0 puts medical and financial records on the network behind one
-      // cookie, and that should never happen because a flag was left on.
+      // 127.0.0.1 by default, and said out loud when it is not. In a container
+      // 0.0.0.0 is the only thing that works — a process on the container's own
+      // loopback is reachable by nobody — so this cannot assert that binding
+      // wide is wrong. What it can do is name the thing that then matters: where
+      // the port is published. Getting that wrong puts medical and financial
+      // records on the network behind one cookie.
       const host = opts.host!;
       const port = Number(opts.port);
       await new Promise<void>((resolve) => server.listen(port, host, resolve));
       console.error(`api en http://${host}:${port}`);
       if (host !== '127.0.0.1' && host !== 'localhost') {
-        console.error('⚠ No estás en 127.0.0.1: esto queda alcanzable desde la red (§15).');
+        console.error(
+          `⚠ Escuchando en ${host}. Dentro de un contenedor es lo correcto, pero ` +
+          'entonces el puerto tiene que publicarse en 127.0.0.1 y no en 0.0.0.0 (§15).',
+        );
       }
       console.error('vincula un navegador con: dm pair --web');
 

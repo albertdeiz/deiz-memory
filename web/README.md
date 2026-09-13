@@ -3,9 +3,16 @@
 Administrar lo guardado (§15). **No captura**: para guardar algo, el chat.
 
 ```bash
-dm api                 # el core por HTTP, en 127.0.0.1:4317
-npm --prefix web run dev   # la web, en 127.0.0.1:4318
+npm run up             # levanta todo, la web incluida
+open http://127.0.0.1:4318
 dm pair --web          # el código para entrar
+```
+
+En desarrollo, con recarga en caliente:
+
+```bash
+dm api                      # o el contenedor `api`, da igual
+npm --prefix web run dev
 ```
 
 ## Cómo está armada

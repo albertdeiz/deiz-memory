@@ -34,6 +34,7 @@ npm run dm -- doctor            # cualquier comando, dentro de un contenedor
 npm run dm -- ask "..."
 npm run backup -- run           # el respaldo off-site
 npm run mirror -- run           # la copia legible
+open http://127.0.0.1:4318      # la web para administrar (§15)
 npm run down                    # bajar todo
 ```
 

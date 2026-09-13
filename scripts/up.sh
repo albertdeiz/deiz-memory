@@ -20,5 +20,8 @@ docker compose --profile setup run --rm app-migrate
 echo "· app"
 docker compose --profile chat up -d app-worker app-bot
 
+echo "· la web para administrar (§15)"
+docker compose --profile web up -d api web
+
 echo
 docker compose run --rm app-worker doctor

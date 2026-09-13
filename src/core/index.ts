@@ -12,6 +12,12 @@ export {
   PAIRING_TTL_MS, type PairingCode, type Identity, type LinkedIdentity,
 } from './ops/identity';
 export { resolveMemoryId } from './ops/resolve';
+export { curateMemory, type CurateInput, type CurateResult } from './ops/curate';
+export {
+  openSession, actorForToken, listSessions, revokeSession, revokeAllSessions,
+  tokenHash, SESSION_TTL_MS,
+  type WebSession, type SessionSummary,
+} from './ops/session';
 export { reprocess, type ReprocessInput, type ReprocessResult } from './ops/reprocess';
 export {
   listDomains, activeDomains, findDomain, createDomain, editDomain,

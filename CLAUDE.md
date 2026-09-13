@@ -629,7 +629,7 @@ dominios dinámicos con clasificación local, preguntas en lenguaje natural con 
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
 `tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
 riesgo irreversible abierto, el **espejo legible** (§14.4) y los **tipos emergentes**
-(§4). **400 tests.**
+(§4). **417 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.
@@ -642,9 +642,9 @@ Lo que falta, con nombre:
   reporte la edad del último respaldo**: un respaldo viejo se ve idéntico a uno sano
   desde cualquier otro ángulo, así que la fecha tiene que estar donde uno ya mira.
   Después de una semana deja de contar como verde.
-- **La web de §15 está diseñada y no construida.** Es la única parte de este documento
-  que describe algo que todavía no existe, y está acá porque acá se decide antes de
-  escribir código. Falta la API HTTP sobre el core, la sesión web y el cliente.
+- **La web de §15 tiene su API y le falta el cliente.** `dm api` sirve el core por HTTP
+  con sesión, y toda ruta que devuelve datos exige un `Actor` que sale de la cookie.
+  Falta el front.
 - **La semana de uso real.** Usarlo sin construir nada y ver qué falta de verdad.
 - **TIFF sigue sin carril**, y un bot de Telegram **no puede bajar más de 20 MB**.
 - **El modelo de 3B a veces se queda corto** al redactar. `DM_CLASSIFY_MODEL` lo cambia.

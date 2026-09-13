@@ -38,6 +38,9 @@ import {
 import { fsSink, fsSource, mirrorFsSink, dirSize, passphraseFor, transportSecretFor, envNamesFor } from '../backup/fs';
 import { Restic, missingTools, rcloneSync } from '../backup/restic';
 import { runMigrations } from '../db/postgres/migrate';
+import { createServer } from 'node:http';
+import { createRouter } from '../api/http';
+import { routes } from '../api/routes';
 import { EXIT, exitCodeFor } from './exit';
 import { renderAnswer, renderDetail, renderFailure, renderList, renderReview } from './format';
 
@@ -547,11 +550,24 @@ program
   .command('pair')
   .description('acuña un código de un solo uso para vincular un chat a tu cuenta')
   .option('--bot <usuario>', 'usuario del bot, para imprimir el link directo')
+  .option('--web', 'imprime el link para abrir la web local (§15)')
   .action(async (opts: Record<string, string>) => {
     await run(
       async ({ deps, actor }) => mintPairingCode(deps.db, actor.ownerId, deps.clock.now()),
       (c) => {
         const minutos = Math.round((c.expiresAt.getTime() - Date.now()) / 60000);
+        // The web link is the same code by another door: §10 is reused whole and
+        // nothing new is minted for it.
+        if (opts.web) {
+          const port = process.env.DM_API_PORT ?? '4317';
+          return [
+            `código: ${c.code}   (${minutos} min)`,
+            '',
+            `abre:  http://127.0.0.1:${port}/entrar?code=${c.code}`,
+            '',
+            'Si no responde, levanta la API con: dm api',
+          ].join('\n');
+        }
         const bot = opts.bot?.replace(/^@/, '');
         // A code with nobody listening is a link that cannot work, and staying quiet
         // sends the person to inspect the code — which is fine — instead of the process
@@ -1008,6 +1024,50 @@ facts
         return bloques.join('\n\n') + '\n' + cola;
       },
     );
+  });
+
+// ---------------------------------------------------------------- api
+//
+// The HTTP face of the core (§15). A third adapter beside the CLI and the chat,
+// and deliberately the smallest of the three: it translates and routes, and the
+// moment a rule lives here instead of in `core/`, the channels stop agreeing.
+
+program
+  .command('api')
+  .description('sirve el core por HTTP para la web local (§15)')
+  .option('--port <n>', 'puerto', process.env.DM_API_PORT ?? '4317')
+  .option('--host <h>', 'interfaz', process.env.DM_API_HOST ?? '127.0.0.1')
+  .action(async (opts: Record<string, string>) => {
+    let pool: pg.Pool | null = null;
+    try {
+      const cfg = loadConfig();
+      pool = createPool(cfg.databaseUrl);
+      const deps = buildDeps(pool, cfg, null);
+      const server = createServer(createRouter(routes, deps));
+
+      // 127.0.0.1 by default and said out loud when it is not: binding this to
+      // 0.0.0.0 puts medical and financial records on the network behind one
+      // cookie, and that should never happen because a flag was left on.
+      const host = opts.host!;
+      const port = Number(opts.port);
+      await new Promise<void>((resolve) => server.listen(port, host, resolve));
+      console.error(`api en http://${host}:${port}`);
+      if (host !== '127.0.0.1' && host !== 'localhost') {
+        console.error('⚠ No estás en 127.0.0.1: esto queda alcanzable desde la red (§15).');
+      }
+      console.error('vincula un navegador con: dm pair --web');
+
+      await new Promise<void>((resolve) => {
+        const bye = () => { console.error('\ncerrando…'); server.close(() => resolve()); };
+        process.once('SIGINT', bye);
+        process.once('SIGTERM', bye);
+      });
+    } catch (e) {
+      console.error(e instanceof Error ? e.message : String(e));
+      process.exitCode = EXIT.error;
+    } finally {
+      await pool?.end().catch(() => {});
+    }
   });
 
 program

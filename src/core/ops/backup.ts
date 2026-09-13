@@ -91,8 +91,15 @@ const TABLES: readonly TableSpec[] = [
  * restore something already meaningless. `backup_config` names the destination,
  * which belongs to the host doing the restoring and not to the snapshot, and
  * `schema_migrations` is rebuilt by running the migrations.
+ *
+ * `web_sessions` is the one that would be actively wrong. Restoring a backup
+ * must not restore logins: a snapshot from three months ago would hand back
+ * sessions that were revoked, on a machine that may not be yours any more. A
+ * restore should leave you logged out and reaching for `dm pair --web`.
  */
-export const NOT_BACKED_UP: readonly string[] = ['pairing_codes', 'chat_sessions', 'schema_migrations', 'backup_config'];
+export const NOT_BACKED_UP: readonly string[] = [
+  'pairing_codes', 'chat_sessions', 'schema_migrations', 'backup_config', 'web_sessions',
+];
 
 /**
  * The columns, read from the catalogue instead of written down here.

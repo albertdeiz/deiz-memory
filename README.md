@@ -35,6 +35,7 @@ npm run dm -- ask "..."
 npm run backup -- run           # el respaldo off-site
 npm run mirror -- run           # la copia legible
 open http://127.0.0.1:4318      # la web para administrar (§15)
+npm run dm -- pair --web        # el link para entrar; lo canjea /entrar
 npm run down                    # bajar todo
 ```
 
@@ -472,6 +473,19 @@ app resuelven sus dependencias por nombre de red, y cada una tiene su
 | `DM_SPEECH_URL_INTERNAL` | Whisper por cualquier servidor compatible |
 | `DM_DOCUMENTS_URL_INTERNAL` · `DM_OCR_URL_INTERNAL` | los carriles por otros |
 | `DM_VISION_BACKEND` | `ocr` · `anthropic` · `openai` · `none` |
+| `DM_API_URL_INTERNAL` | la API que consume la web |
+
+**En macOS, saca Ollama de Docker.** Docker Desktop no pasa la GPU de Apple, así que el
+modelo corre en CPU: medido, 27 s contra 1,7 s con Metal. `brew install ollama`, baja el
+contenedor `ollama`, y apunta las dos variables al host:
+
+```bash
+DM_CLASSIFY_URL_INTERNAL=http://host.docker.internal:11434/v1
+DM_EMBED_URL_INTERNAL=http://host.docker.internal:11434
+DM_CLASSIFY_MODEL=qwen2.5:14b     # con Metal, el 14B es cómodo y propone mucho mejor
+```
+
+En Linux no hace falta: el contenedor usa la GPU.
 
 El destino del respaldo **no está acá**: es una fila por dueño, no una variable global
 (`dm backup set`). Lo único suyo que vive en el entorno son las dos llaves.

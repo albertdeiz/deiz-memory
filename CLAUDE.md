@@ -494,6 +494,14 @@ así que un PDF escaneado devuelve vacío. Por eso el Normalizer es un router:
 y se cae a B si el resultado viene pobre. El carril usado queda en la fila, para poder
 reprocesar sin adivinar qué pasó.
 
+**El modelo corre en un contenedor, y en macOS eso cuesta 16×.** Docker Desktop no pasa
+la GPU de Apple, así que Ollama queda en CPU: medido, `qwen2.5:3b` tarda **27 s** en lo
+que nativo con Metal tarda **1,7 s**. La salida es la de §7 —cada servicio es una URL—:
+Ollama nativo en el host y `DM_CLASSIFY_URL_INTERNAL=http://host.docker.internal:11434/v1`.
+Con eso caben modelos más grandes, y ahí el modelo deja de ser el techo: `qwen2.5:14b`
+diseñó bien el tipo de una licencia que el 3B leía como una tabla hacia abajo. En Linux
+no aplica — el contenedor usa la GPU y el default está bien.
+
 **El carril B es OCR clásico, no un LLM multimodal.** En documentos impresos el OCR gana
 justo donde importa —números de póliza, RUT, montos: cadenas que no se adivinan por
 contexto y donde los modelos chicos fallan—, y es gratis y reproducible. El carril

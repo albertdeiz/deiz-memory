@@ -49,14 +49,35 @@ que ya funciona.
 —un tercer lugar donde una frase puede contradecir a las otras dos, y eso es el costo
 honesto de tener interfaz— pero no compone respuestas sobre tus datos.
 
-**No enruta.** Una herramienta que una persona abre para arreglar algo no necesita deep
-links. El detalle es un panel al lado de la lista, porque curar es comparar.
+**No enruta**, salvo `/entrar`. Una herramienta que una persona abre para arreglar algo no
+necesita deep links; el detalle es un panel al lado de la lista, porque curar es comparar.
+
+## Una trampa que costó dos intentos
+
+Al entrar, la caché tiene que quedar coherente, y el reflejo —`clear()` y después
+`refetchQueries`— **no puede funcionar**: `refetchQueries` busca queries recorriendo la
+caché, y `clear()` acaba de vaciarla, así que encuentra cero y no hace nada. El login
+funcionaba, la cookie quedaba puesta, y la pantalla seguía en el formulario hasta recargar
+a mano.
+
+Al entrar se **invalida**, que marca como stale lo que existe y vuelve a pedir lo que se
+observa. Y no hay nada que limpiar, porque deslogueado no había nada cacheado: toda ruta
+de datos responde 401. Al salir sí se limpia —la caché tiene fichas de alguien— y la
+sesión se **escribe** en vez de pedirse: `{authenticated: false}` ya es cierto.
 
 ## La sesión
 
-`dm pair --web` acuña un código de un solo uso y 15 minutos (§10). La web lo canjea por
-una cookie `httpOnly` que la página no puede leer. No hay registro, ni contraseña, ni
-recuperación.
+`dm pair --web` acuña un código de un solo uso y 15 minutos (§10) e imprime un link a
+`/entrar?code=…`. Esa página lo canjea al llegar y se quita del medio — el sentido de un
+link sobre un código que copiar es que cueste un clic. Escribirlo a mano sigue estando,
+en la pantalla de inicio, pero es el respaldo.
+
+El canje se dispara **una sola vez**: un código es de un solo uso, así que dispararlo dos
+veces lo quema y verías un error por un login que sí funcionó. React corre los efectos
+dos veces en desarrollo, que es justo como aparecería.
+
+La web lo cambia por una cookie `httpOnly` que la página no puede leer. No hay registro,
+ni contraseña, ni recuperación.
 
 **"Salir" cierra todas las sesiones**, que es lo que "perdí el computador" necesita.
 

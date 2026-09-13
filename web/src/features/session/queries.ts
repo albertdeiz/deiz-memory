@@ -15,33 +15,46 @@ export function useSession() {
   });
 }
 
+/**
+ * Entering, and the one thing that must not be done while doing it.
+ *
+ * The obvious move is `clear()`, and it is wrong here in a way that is easy to
+ * miss: `clear()` REMOVES every query from the cache, and `refetchQueries` works
+ * by finding queries IN the cache. Clear then refetch therefore refetches
+ * nothing — `findAll` returns an empty list — and the gate above the form went on
+ * showing the snapshot it already had. The login worked, the cookie was set, and
+ * the screen stayed on the form until a manual reload.
+ *
+ * Invalidating is the right verb: it marks what exists as stale and refetches
+ * whatever is being observed, the session included. And nothing needs clearing
+ * on the way IN, because while logged out there was nothing to cache — every
+ * data route answers 401.
+ */
 export function useEnter() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (code: string) => api.post<{ ownerId: string }>('/api/session', { code }),
     onSuccess: async () => {
-      // Everything cached belonged to nobody a moment ago, so clearing beats
-      // invalidating: there is no shared data between "logged out" and "logged in".
-      qc.clear();
-      // But clearing is not enough, and the missing half is what made a
-      // successful login look like a failed one: `clear()` REMOVES the session
-      // query instead of refetching it, so the mounted observer was left with no
-      // data and `isLoading` false — which reads as "not authenticated", and the
-      // login form stayed up until the page was reloaded by hand.
-      await qc.refetchQueries({ queryKey: keys.session });
+      await qc.invalidateQueries();
     },
   });
 }
 
+/**
+ * Leaving, where clearing IS right — the cache is full of someone's records —
+ * so the session is written by hand rather than refetched.
+ *
+ * Same trap avoided from the other side: removing the session query and then
+ * asking for it back would ask for nothing. Setting it says what is already
+ * true, with no round trip, and the observer is notified by the write itself.
+ */
 export function useLeave() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.del('/api/session'),
-    // Same on the way out: without the refetch the shell keeps rendering over a
-    // session that no longer exists, and every panel fills with 401s.
-    onSuccess: async () => {
-      qc.clear();
-      await qc.refetchQueries({ queryKey: keys.session });
+    onSuccess: () => {
+      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'session' });
+      qc.setQueryData(keys.session, { authenticated: false } satisfies SessionInfo);
     },
   });
 }

@@ -30,8 +30,16 @@ Todo lo que se diseñe acá se justifica contra uno de esos tres.
 - No es un gestor de archivos ni un Drive con chat encima.
 - No es Notion, ni un note-taking app, ni un CRM.
 - No reemplaza el documento original (siempre se guarda el original y se cita).
-- **Solo chat.** No hay web, no hay app que instalar. La accesibilidad inmediata es el
-  producto; cualquier paso extra mata la captura (§6.1).
+- **Capturar es solo chat.** No hay web ni app para guardar algo: la accesibilidad
+  inmediata es el producto, y cualquier paso extra mata la captura (§6.1). Esa regla
+  siempre habló de *capturar*, y ahí no se mueve.
+- **Administrar tiene una web local** (§15), y es un cambio deliberado de este documento,
+  no una excepción a lo de arriba. Curar 400 memorias, corregir un hecho mal extraído o
+  revisar qué se respalda son trabajos de tabla y de teclado, y §6.1 ya admitía que el
+  chat es pésimo para eso. La web **no captura**: no tiene por dónde subir un archivo, a
+  propósito.
+- **La web no sale del host.** Escucha en `127.0.0.1`, no se expone a internet, y sin una
+  sesión vinculada no responde ninguna ruta (§10).
 - No se borra nada salvo `purge`, que es explícito y auditado (§14.1).
 - No da consejo médico, legal ni tributario. Devuelve **lo que tú guardaste**.
 - **Sin recordatorios, notificaciones proactivas ni agenda.** El bot responde cuando le
@@ -542,6 +550,18 @@ dm pair --bot <usuario>   →   link de un solo uso, 15 minutos
 La otra persona lo abre, Telegram manda `/start <code>`, y queda vinculada. Sin instalar
 nada. Es probablemente el mayor beneficio práctico de ser solo chat.
 
+**La web usa el mismo mecanismo, y no uno nuevo.** `dm pair --web` acuña un código del
+tipo que ya existe; abrirlo lo canjea por una sesión firmada y escribe una fila en
+`channel_identities` con `channel = 'web'`. La tabla ya estaba llaveada por
+`(channel, external_user_id)`, así que un canal más es una fila más.
+
+**Pero la propiedad que sostenía §10 no viaja con él, y hay que decirlo.** La identidad de
+Telegram no es falsificable porque la afirma Telegram; una cookie la afirma este sistema.
+Eso significa contraseñas no, pero **sí** un secreto de sesión, expiración y revocación —
+tres cosas que el canal de chat nunca necesitó, y una tabla nueva para sostenerlas. Por
+eso la web escucha solo en `127.0.0.1`: la primera defensa es que el puerto no exista
+desde afuera, y la sesión es la segunda, no la única.
+
 **Y es una propiedad estructural, no una promesa:** `route()` exige un `Actor`. Sin
 identidad vinculada no hay Actor, y sin Actor no existe el camino para llamar a nada. La
 regla dura 9 deja de depender de que alguien se acuerde de un `WHERE`.
@@ -591,7 +611,7 @@ dm facts [--all] · dm facts types · dm facts extract [id] · dm facts propose 
 dm review · dm reprocess [--failed|--pending|--all|--lane|--wait]
 dm backup [status|set <repo>|run|verify|snapshots|restore|forget]
 dm mirror [status|set <ruta>|plan|run]
-dm pair · dm identities
+dm pair [--bot <usuario>|--web] · dm identities · dm api
 dm hide · dm unhide · dm purge <id> --yes
 ```
 
@@ -622,6 +642,9 @@ Lo que falta, con nombre:
   reporte la edad del último respaldo**: un respaldo viejo se ve idéntico a uno sano
   desde cualquier otro ángulo, así que la fecha tiene que estar donde uno ya mira.
   Después de una semana deja de contar como verde.
+- **La web de §15 está diseñada y no construida.** Es la única parte de este documento
+  que describe algo que todavía no existe, y está acá porque acá se decide antes de
+  escribir código. Falta la API HTTP sobre el core, la sesión web y el cliente.
 - **La semana de uso real.** Usarlo sin construir nada y ver qué falta de verdad.
 - **TIFF sigue sin carril**, y un bot de Telegram **no puede bajar más de 20 MB**.
 - **El modelo de 3B a veces se queda corto** al redactar. `DM_CLASSIFY_MODEL` lo cambia.
@@ -646,7 +669,9 @@ Invariantes del producto:
 6. Tributario: mostrar el comprobante guardado, nunca calcular ni interpretar normativa.
 7. Nunca crear, renombrar, archivar ni fusionar una categoría sin confirmación explícita.
 8. Confirmar antes de cualquier acción irreversible (fusionar, purgar).
-9. Toda consulta va filtrada por dueño. Sin excepción, sin "modo admin".
+9. Toda consulta va filtrada por dueño. Sin excepción, sin "modo admin". La web de §15
+   administra **lo tuyo**, no a los demás: no existe una vista que cruce dueños, y el
+   `Actor` sale de la sesión y **nunca** de un parámetro que el cliente pueda mandar.
 10. Si el dato está **vencido o superado, decirlo antes del dato**. Nunca después, y
     nunca callado. Es la razón de ser de `valid_until` (§1.3): el riesgo no es olvidar un
     dato, es consultarlo y recibir el viejo sin darte cuenta.
@@ -866,7 +891,59 @@ la gracia, si no no se vería. Son fichas médicas y financieras en claro en el 
 destino, mientras que el repositorio de al lado sí está cifrado. Si ese disco no tiene
 cifrado de disco, esa carpeta es el punto débil de todo el diseño de §14.2.
 
-## 15. Métricas de éxito
+## 15. La web
+
+Una web **local** para administrar lo guardado, servida por un proceso aparte y hablando
+con el core por HTTP. Su alcance lo define lo que el chat hace mal, no lo que una web
+podría hacer.
+
+**No captura.** No tiene formulario de subida ni por dónde arrastrar un archivo, y no es
+una fase pendiente: capturar por chat cuesta un gesto y §3.1 lo protege. Una web que
+también capturara competiría con el único camino que ya funciona.
+
+**Lo que sí hace** es lo que §6.1 admite que el chat no puede: mirar cuatrocientas
+memorias a la vez.
+
+| | |
+|---|---|
+| Navegar | listar, filtrar por dominio y fecha, buscar, abrir el original |
+| Curar | dominio, fecha del hecho, título, tags · ocultar · bandeja de revisión |
+| Hechos | corregir el `payload` y la vigencia · aceptar tipos propuestos (§4) |
+| Dominios | crear, describir, renombrar, archivar, fusionar |
+| Purgar | con confirmación nombrando lo afectado, y auditado (§11) |
+| Respaldo | estado, destino y espejo, y dispararlos (§14.3, §14.4) |
+
+### Dos procesos, y el límite entre ellos es HTTP
+
+La app expone el core por HTTP (`dm api`) y la web es un cliente puro. No es ceremonia:
+mantiene en pie lo que §7 ya prometía —**el core devuelve datos y nunca texto
+formateado**, y toda operación recibe un `Actor`— y deja el filtro por dueño donde
+siempre estuvo, en TypeScript y no repartido por dos bases de código.
+
+La API es un adapter más al lado del CLI y del chat. Traduce `Outcome` a JSON y no sabe
+nada que los otros dos no sepan; las confirmaciones viajan como `409 requires_confirmation`
+con lo afectado, que es la misma forma que el CLI convierte en `--yes` y el chat en un
+botón.
+
+**Lo que sí cuesta, dicho sin adornos:** la regla de que **la prosa vive en dos archivos y
+solo dos** deja de ser cierta. La web tiene sus propias palabras, y son un tercer lugar
+donde una frase puede contradecir a las otras dos. No hay forma de tener una interfaz y no
+pagar eso; lo que sí se puede es que la web **no redacte respuestas** — las que trae un
+`ask` vienen del core, como en los otros dos canales.
+
+### La identidad, que es donde está el costo
+
+`dm pair --web` acuña un código de los que ya existen y abrirlo lo canjea por una sesión
+firmada (§10). Sin sesión no hay `Actor`, y sin `Actor` no hay ruta que responda: la regla
+dura 9 se sostiene igual que en el chat, porque el filtro sale de la sesión y nunca de un
+parámetro del cliente.
+
+Lo que se pierde: el user id de Telegram lo afirma Telegram, una cookie la afirma este
+sistema. Aparecen un secreto de sesión, expiración y revocación, y un puerto abierto donde
+no había ninguno. Por eso escucha en `127.0.0.1`. Llegar desde fuera es un túnel SSH o el
+tailnet, que es una decisión de quien administra y no una casilla de configuración.
+
+## 16. Métricas de éxito
 
 De uso, no de sistema:
 
@@ -878,7 +955,7 @@ De uso, no de sistema:
   está sirviendo.
 - **Tasa de "no lo tengo"** — sana si es honesta, alarmante si el dato sí estaba.
 
-## 16. Glosario
+## 17. Glosario
 
 - **Memory** — captura inmutable. La unidad del sistema.
 - **Domain** — categoría editable en runtime; su `description` alimenta el clasificador.
@@ -892,5 +969,8 @@ De uso, no de sistema:
 - **Grounding** — que toda cifra de la respuesta esté en los pasajes leídos.
 - **Purgar** — la única forma de borrar de verdad: explícita, confirmada y auditada.
 - **Bandeja de revisión** — lo que quedó dudoso, esperando que decidas.
+- **La web** — la interfaz local de §15. Administra lo guardado; no captura.
+- **Sesión web** — lo que canjea un código de emparejamiento por un `Actor` en la web.
+  Expira y se revoca, dos cosas que la identidad de chat nunca necesitó.
 - **Espejo** — la copia legible de los originales (§14.4). Derivada, de una sola vía y
   sin cifrar; no es el respaldo y no puede reemplazarlo.

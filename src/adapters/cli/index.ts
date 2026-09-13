@@ -559,13 +559,17 @@ program
         // The web link is the same code by another door: §10 is reused whole and
         // nothing new is minted for it.
         if (opts.web) {
-          const port = process.env.DM_API_PORT ?? '4317';
+          // The WEB's port and not the API's: /entrar is a page, and the API
+          // only ever serves /api/*. Getting this wrong prints a link that
+          // answers "no existe esa ruta", which reads like a broken system
+          // rather than a wrong URL.
+          const base = process.env.DM_WEB_URL ?? `http://127.0.0.1:${process.env.DM_WEB_PORT ?? '4318'}`;
           return [
             `código: ${c.code}   (${minutos} min)`,
             '',
-            `abre:  http://127.0.0.1:${port}/entrar?code=${c.code}`,
+            `abre:  ${base}/entrar?code=${c.code}`,
             '',
-            'Si no responde, levanta la API con: dm api',
+            'Si no responde, levanta la web con: npm run up',
           ].join('\n');
         }
         const bot = opts.bot?.replace(/^@/, '');

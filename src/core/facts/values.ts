@@ -25,6 +25,27 @@ const digits = (s: string): string => s.replace(/\D/g, '');
  * normalizing both to the same thing, the check that the datum is in the text
  * would discard precisely the correct values.
  */
+/**
+ * Month names, because that is how Chilean officialdom writes a date.
+ *
+ * Measured on a real certificate: the Registro Civil prints "9 Enero 2026", and
+ * neither half of the pipeline could see it — the value would not parse, and
+ * even parsed it would not be found in the document, so grounding discarded it.
+ * The consequence is not cosmetic: a `valid_until` written this way never got
+ * captured, so hard rule 10 — say it is expired BEFORE the datum — could never
+ * fire for exactly the documents that expire.
+ */
+const MONTHS: Record<string, number> = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+  noviembre: 11, diciembre: 12,
+  ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6,
+  jul: 7, ago: 8, sep: 9, sept: 9, oct: 10, nov: 11, dic: 12,
+};
+
+/** The names a month can be written with, longest first so "sept" beats "sep". */
+const MONTH_NAMES = Object.keys(MONTHS).sort((a, b) => b.length - a.length);
+
 export function normalizeDate(raw: string): string | null {
   const s = raw.trim();
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
@@ -34,6 +55,14 @@ export function normalizeDate(raw: string): string | null {
   if (local) {
     const [, d, m, y] = local;
     return `${y}-${m!.padStart(2, '0')}-${d!.padStart(2, '0')}`;
+  }
+
+  // "9 Enero 2026", "29 de noviembre de 1994", "09-ENE-2026".
+  const worded = /^(\d{1,2})\s*(?:de\s+)?[\s/-]*([a-zA-ZáéíóúÁÉÍÓÚ]+)\s*(?:de\s+)?[\s/-]*(\d{4})/.exec(s);
+  if (worded) {
+    const [, d, name, y] = worded;
+    const month = MONTHS[withoutAccents(name!).toLowerCase()];
+    if (month) return `${y}-${String(month).padStart(2, '0')}-${d!.padStart(2, '0')}`;
   }
   return null;
 }
@@ -161,10 +190,24 @@ function occurrences(value: FactValue, kind: FieldKind, text: string): string[] 
       const [y, m, d] = String(value).split('-');
       const dd = String(Number(d));
       const mm = String(Number(m));
-      for (const f of [`${y}-${m}-${d}`, `${d}/${m}/${y}`, `${dd}/${mm}/${y}`,
-                       `${d}-${m}-${y}`, `${dd}-${mm}-${y}`, `${d}.${m}.${y}`]) {
-        let i = text.indexOf(f);
-        while (i >= 0) { push(i, f.length); i = text.indexOf(f, i + 1); }
+      const forms = [`${y}-${m}-${d}`, `${d}/${m}/${y}`, `${dd}/${mm}/${y}`,
+                     `${d}-${m}-${y}`, `${dd}-${mm}-${y}`, `${d}.${m}.${y}`];
+
+      // The same date spelled out. `text` arrives already unaccented, so the
+      // month names are compared that way too.
+      for (const name of MONTH_NAMES) {
+        if (MONTHS[name] !== Number(m)) continue;
+        for (const day of [d, dd]) {
+          forms.push(`${day} ${name} ${y}`, `${day} de ${name} de ${y}`,
+                     `${day}-${name}-${y}`, `${day} ${name}, ${y}`);
+        }
+      }
+
+      for (const f of forms) {
+        const needle = f.toLowerCase();
+        const hay = text.toLowerCase();
+        let i = hay.indexOf(needle);
+        while (i >= 0) { push(i, f.length); i = hay.indexOf(needle, i + 1); }
       }
       return windows;
     }

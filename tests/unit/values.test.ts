@@ -179,3 +179,40 @@ describe('un valor no se lleva su propio rótulo', () => {
     expect(withoutLabel('DE-4471', f)).toBe('DE-4471');
   });
 });
+
+/**
+ * Medido sobre un certificado real: el Registro Civil imprime "9 Enero 2026", y
+ * ninguna de las dos mitades del pipeline lo veía — el valor no parseaba, y aun
+ * parseado no se encontraba en el documento, así que grounding lo descartaba.
+ * La consecuencia no es cosmética: un `valid_until` escrito así nunca se
+ * capturaba, así que la regla dura 10 no podía dispararse justo en los
+ * documentos que caducan.
+ */
+describe('las fechas escritas en palabras', () => {
+  it('el caso real del certificado', () => {
+    expect(normalizeDate('9 Enero 2026')).toBe('2026-01-09');
+    expect(normalizeDate('29 Noviembre 1994')).toBe('1994-11-29');
+  });
+
+  it('con "de", abreviadas, con guiones y sin acentos', () => {
+    expect(normalizeDate('29 de noviembre de 1994')).toBe('1994-11-29');
+    expect(normalizeDate('09-ENE-2026')).toBe('2026-01-09');
+    expect(normalizeDate('1 setiembre 2026')).toBe('2026-09-01');
+    expect(normalizeDate('3 de Diciembre de 2026')).toBe('2026-12-03');
+  });
+
+  it('un mes que no existe no es una fecha', () => {
+    expect(normalizeDate('9 Enerillo 2026')).toBeNull();
+    expect(normalizeDate('9 2026')).toBeNull();
+  });
+
+  it('y se encuentran en el documento, que es la otra mitad', () => {
+    // Sin esto el valor parsea y grounding lo descarta igual, porque busca
+    // 2026-01-09 en un texto que dice "9 Enero 2026".
+    const campo = { name: 'emision', label: 'emisión', kind: 'date' as const, aliases: [] };
+    expect(grounded('2026-01-09', campo, 'Fecha de emisión: 9 Enero 2026')).toBe(true);
+    expect(grounded('1994-11-29', campo, 'Nacido el 29 de noviembre de 1994')).toBe(true);
+    // Y una fecha que el documento no dice sigue sin respaldo.
+    expect(grounded('2026-01-09', campo, 'Fecha de emisión: 9 Marzo 2026')).toBe(false);
+  });
+});

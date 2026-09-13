@@ -131,6 +131,13 @@ respuesta era la del mes pasado. Por eso un campo puede declarar `near` y `notNe
 que lo que los separa no es lo que tienen sino lo que sobra. El contexto se corta en el
 salto de línea, porque el rótulo de un valor es lo que está a su izquierda en su fila.
 
+**Y las fechas se escriben en palabras.** El Registro Civil imprime `9 Enero 2026`, y el
+pipeline era ciego a eso por partida doble: el valor no parseaba, y aun parseado se
+buscaba `2026-01-09` en un texto que dice "9 Enero 2026", así que grounding lo descartaba
+igual. No era cosmético — **un `valid_until` escrito así nunca se capturaba**, o sea la
+regla dura 10 no podía dispararse justo en los documentos que caducan. Se arreglaron las
+dos mitades: parsear el mes en palabras, y buscar la fecha también en esa forma.
+
 **Y un valor no se lleva su propio rótulo.** Sobre la póliza real el modelo devolvió
 `numero` como `"póliza N°BP9344586"`: el número con su etiqueta pegada. Pasaba **todos**
 los chequeos, porque es literalmente lo que dice el documento y eso es justo lo que
@@ -602,7 +609,7 @@ dominios dinámicos con clasificación local, preguntas en lenguaje natural con 
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
 `tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
 riesgo irreversible abierto, el **espejo legible** (§14.4) y los **tipos emergentes**
-(§4). **396 tests.**
+(§4). **400 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.

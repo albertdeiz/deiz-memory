@@ -174,6 +174,7 @@ puede requerir un deploy.
 ```
 slug            poliza_auto
 kind            estado | periodo        ← ver abajo, no es un detalle
+cardinality     one | many              ← cuántos trae un documento. Otro eje
 description     para qué documentos aplica; el modelo la lee
 domain_slug     de qué categoría intentar extraer
 fields          [{ name, kind, label, aliases[] }]
@@ -215,6 +216,49 @@ infiere.
 misma identidad con vigencias que **no** se solapan: la posterior supera a la anterior. Si
 **sí** se solapan, no es sucesión sino conflicto, y se muestran las dos (regla dura 3).
 En un tipo `periodo` no hay supersesión, y punto.
+
+#### Cuántos por documento es otra pregunta, y es perpendicular
+
+`kind` responde *"¿el nuevo sucede al viejo?"*. `cardinality` responde *"¿cuántos trae un
+documento?"*. Son ejes independientes y confundirlos es el mismo error que confundir
+estado con período:
+
+| | `one` — uno por documento | `many` — varios por documento |
+|---|---|---|
+| **estado** | póliza: la nueva sucede a la vieja | licencia de cada miembro de la casa |
+| **periodo** | cartola: julio y agosto coexisten | **pasajes**: Alberto y Emily coexisten |
+
+Un PDF de Buses Jans trae **dos pasajes** —dos pasajeros, dos asientos, dos RUT— y hasta
+que existió `many` el segundo pisaba al primero en silencio, porque `facts` era único por
+`(memory_id, type_id)`.
+
+**Y encaja sin una columna nueva, porque `identity` ya era esta pieza.** Está definido
+como *"el campo que distingue dos instancias"*; lo único que lo ataba a documentos
+distintos era esa constraint, que ahora incluye la identidad. La supersesión tampoco se
+tocó: ya llaveaba por identidad, así que dos pasajeros del mismo PDF no se superan entre
+sí, y el pasaje que Emily compre mañana sucede al suyo y no al de Alberto.
+
+**`identity_field` deja de ser opcional cuando el tipo es `many`.** Sin él dos filas del
+mismo documento son indistinguibles y el upsert las colapsa — el segundo dato desaparece
+sin que nada falle, que es la peor forma de perderlo.
+
+**Y el modo hecho devuelve N, no 1.** *"¿en qué asiento voy?"* tiene dos respuestas. **No
+es la regla dura 3**: eso es un *conflicto* —misma identidad, vigencias solapadas— y esto
+son dos datos distintos que se listan.
+
+#### Instancia no es tabla, y la diferencia es si se lee o se suma
+
+Es la línea que separa esto de lo que §4 descarta más abajo, y hay que tenerla escrita
+antes de que alguien meta una cartola entera por esta puerta:
+
+- **Instancia**: cada fila se consulta sola y tiene identidad propia. *"¿en qué asiento va
+  Emily?"* lee **una** fila. Eso es `many`.
+- **Tabla**: las filas solo sirven agregadas. *"¿cuánto gasté en delivery?"* necesita
+  **sumar** 53 líneas que no tienen identidad ni se consultan una por una. Eso sigue
+  fuera, por diseño.
+
+Si la pregunta natural empieza con "cuánto en total" o "cuántas veces", no es un
+`FactType`: es una app de finanzas, y §2 dice que esto no es eso.
 
 #### Los tipos también emergen
 

@@ -117,7 +117,7 @@ export function MemoryDetail({ id, onClose }: { id: string; onClose: () => void 
       {m.normalizedText && (
         <details>
           <summary>Lo que leyó ({m.normalizationLane})</summary>
-          <pre className="raw">{m.normalizedText.slice(0, 4000)}</pre>
+          <pre className="raw">{m.normalizedText}</pre>
         </details>
       )}
 

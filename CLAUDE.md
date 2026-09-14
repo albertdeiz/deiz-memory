@@ -653,6 +653,12 @@ Lo que falta, con nombre:
 - **La web de §15 está construida y sin usar de verdad.** Navegar, curar, categorías,
   tipos y estado del respaldo funcionan de punta a punta, en contenedores; lo que falta
   es la semana de uso que diga qué sobra y qué falta.
+- **Y le faltan tres cosas que la tabla de §15 acota:** corregir un `Fact` a mano —que
+  además exige marcarlo como corregido, porque un valor escrito no pasó el grounding que
+  §4 exige—, disparar el respaldo desde la web (restic vive en otro contenedor), y filtrar
+  por fecha.
+- **La web no tiene tests.** Los 417 son del core y los adapters; el typecheck no ve que
+  una pantalla no se actualice, y dos bugs de sesión llegaron a producción por eso.
 - **La semana de uso real.** Usarlo sin construir nada y ver qué falta de verdad.
 - **TIFF sigue sin carril**, y un bot de Telegram **no puede bajar más de 20 MB**.
 - **El modelo de 3B a veces se queda corto** al redactar. `DM_CLASSIFY_MODEL` lo cambia.
@@ -914,12 +920,18 @@ memorias a la vez.
 
 | | |
 |---|---|
-| Navegar | listar, filtrar por dominio y fecha, buscar, abrir el original |
+| Navegar | listar, filtrar por dominio, buscar, abrir el original |
 | Curar | dominio, fecha del hecho, título, tags · ocultar · bandeja de revisión |
-| Hechos | corregir el `payload` y la vigencia · aceptar tipos propuestos (§4) |
+| Hechos | verlos, releer una memoria, aceptar tipos propuestos (§4) |
 | Dominios | crear, describir, renombrar, archivar, fusionar |
 | Purgar | con confirmación nombrando lo afectado, y auditado (§11) |
-| Respaldo | estado, destino y espejo, y dispararlos (§14.3, §14.4) |
+| Respaldo | **solo el estado**, y por qué está más abajo |
+
+**Lo que la tabla NO dice es tan importante como lo que dice**, porque una tabla de
+capacidades es justo donde es fácil escribir lo que uno pensaba hacer. Hoy la web **no
+corrige un hecho a mano** —`facts` solo se re-extraen— y **no dispara el respaldo**: restic
+vive en su propio contenedor y la API no lo alcanza, así que lo único que muestra es la
+fecha y si se verificó. Tampoco filtra por fecha: filtra por categoría y busca por texto.
 
 ### Dos procesos, y el límite entre ellos es HTTP
 

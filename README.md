@@ -474,6 +474,10 @@ app resuelven sus dependencias por nombre de red, y cada una tiene su
 | `DM_DOCUMENTS_URL_INTERNAL` · `DM_OCR_URL_INTERNAL` | los carriles por otros |
 | `DM_VISION_BACKEND` | `ocr` · `anthropic` · `openai` · `none` |
 | `DM_API_URL_INTERNAL` | la API que consume la web |
+| `DM_WEB_URL` · `DM_WEB_PORT` | a dónde apunta el link de `dm pair --web` |
+
+Las perillas de afinado —timeouts por servicio, `DM_VISION_*`, `DM_EMBED_DIMS`— no están
+acá a propósito: viven en `src/config.ts` con su default al lado, que es donde se leen.
 
 **En macOS, saca Ollama de Docker.** Docker Desktop no pasa la GPU de Apple, así que el
 modelo corre en CPU: medido, 27 s contra 1,7 s con Metal. `brew install ollama`, baja el
@@ -725,12 +729,15 @@ src/core/         operaciones tipadas. No sabe que existe un CLI.
   normalize/      lanes.ts (el router, lógica pura) · run.ts
   classify/       prompt armado en runtime · validación de lo que devuelve
   recall/         chunk · index-chunks · retrieve · answer · grounding
-  facts/          registry (los tipos son data) · extract · values · query
+  facts/          registry (los tipos son data) · extract · values · query · propose
   channel/        el puerto del canal: capacidades declaradas (§7.1)
   router/         los verbos de §5. intent y actions son puros
   ports.ts        BlobStore · Clock · Db · Ingest · Converter · Classifier · Embedder
+                  session (la web) · curate (corregir al clasificador)
 src/adapters/     cli · db/postgres · storage/s3 · normalize · classify · queue · chat
+  api/            http (el ruteo y los códigos) · routes (sobre el core)
   backup/         fs (el export y el espejo como directorios) · restic (el transporte)
+web/              el cliente de la API (§15). Ver web/README.md
 services/         los carriles y el entrypoint del respaldo, como contenedores
 migrations/       SQL plano, aplicado en orden por `dm init`
 scripts/          up · garage-init. Bash, no orquestador

@@ -24,6 +24,8 @@ src/features/       session · memories · domains · facts · review
   <feature>/queries.ts   los hooks de React Query de esa feature
   <feature>/*.tsx        sus componentes
 src/app/            el shell: layout, página, estilos
+  entrar/           canjea el link de `dm pair --web`
+  api/[...path]/    el proxy a `dm api`, resuelto en cada request
 ```
 
 **Una sola capa habla HTTP.** Por encima de `shared/api/client` todo trata con datos y con

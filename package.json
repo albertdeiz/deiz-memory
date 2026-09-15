@@ -20,8 +20,8 @@
     "test:integration": "vitest run tests/integration",
     "test:cli": "npm run build && vitest run tests/cli",
     "typecheck": "tsc -p tsconfig.json",
-    "backup": "docker compose --profile backup run --rm backup backup",
-    "mirror": "docker compose --profile backup run --rm backup mirror",
+    "backup": "docker compose --profile backup run --rm --build backup backup",
+    "mirror": "docker compose --profile backup run --rm --build backup mirror",
     "logs": "docker compose logs -f app-worker app-bot"
   },
   "dependencies": {

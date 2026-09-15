@@ -904,6 +904,13 @@ configurar no es un sistema roto— pero con tres estados distintos, porque cola
 sería perder justo la información útil: sin configurar · configurado y nunca corrió ·
 corrió tal día, y si se verificó o no.
 
+**La imagen se reconstruye en cada corrida, y eso no es prolijidad.** `verify` levanta su
+base desechable **desde las migraciones que trae la imagen**, así que una imagen anterior a
+la última migración falla con `column ... does not exist` — un error que habla de una
+columna y no de lo que pasa. Pasó de verdad. Reconstruir cuando nada cambió cuesta dos
+segundos de caché; que el respaldo dependa de que alguien se acuerde no cuesta nada hasta
+el día que sí.
+
 **Se verifica restaurando, porque un backup que no se restauró no existe.** `verify` no
 mira metadatos: restaura el último snapshot, **re-hashea los blobs**, comprueba que
 ninguna memoria referencie un blob que no viajó, y **carga el export en una base

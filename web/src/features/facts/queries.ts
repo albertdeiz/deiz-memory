@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
 import { keys } from '@/shared/api/keys';
-import type { Fact, FactType, TypeProposal } from '@/shared/api/types';
+import type { Fact, FactType, Gaps, TypeProposal } from '@/shared/api/types';
 
 export function useFacts(all = false) {
   return useQuery({ queryKey: keys.facts(all), queryFn: () => api.get<Fact[]>(`/api/facts?all=${all}`) });
@@ -10,6 +10,41 @@ export function useFacts(all = false) {
 
 export function useFactTypes() {
   return useQuery({ queryKey: keys.factTypes, queryFn: () => api.get<FactType[]>('/api/facts/types') });
+}
+
+export function useGaps() {
+  return useQuery({ queryKey: keys.gaps, queryFn: () => api.get<Gaps>('/api/facts/gaps') });
+}
+
+const afterTypeChange = (qc: ReturnType<typeof useQueryClient>) => () => {
+  void qc.invalidateQueries({ queryKey: keys.factTypes });
+  // A type decides what can be read, so changing one changes the gaps and what
+  // is worth proposing. Invalidating only the list is how a screen keeps showing
+  // a gap that the edit just closed.
+  void qc.invalidateQueries({ queryKey: keys.gaps });
+  void qc.invalidateQueries({ queryKey: keys.overview });
+  void qc.invalidateQueries({ queryKey: keys.proposals });
+};
+
+/**
+ * Editing asks first when the change decides how a whole category is read.
+ * The server answers 409 and the client asks; nothing is decided here (§13.8).
+ */
+export function useEditFactType(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { patch: Partial<FactType>; confirm: boolean }) =>
+      api.patch<FactType>(`/api/facts/types/${slug}${v.confirm ? '?confirm=true' : ''}`, v.patch),
+    onSuccess: afterTypeChange(qc),
+  });
+}
+
+export function useArchiveFactType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slug: string) => api.post<FactType>(`/api/facts/types/${slug}/archive`),
+    onSuccess: afterTypeChange(qc),
+  });
 }
 
 /**

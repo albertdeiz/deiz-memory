@@ -57,16 +57,35 @@ export interface Domain {
   count?: number;
 }
 
+export interface FactField {
+  name: string;
+  kind: string;
+  label: string;
+  aliases: string[];
+  near?: string[];
+  notNear?: string[];
+}
+
 export interface FactType {
   id: string;
   slug: string;
   label: string;
   description: string;
   kind: 'state' | 'period';
+  cardinality: 'one' | 'many';
   domainSlug: string | null;
-  fields: { name: string; kind: string; label: string; aliases: string[] }[];
+  fields: FactField[];
   identityField: string | null;
+  validFromField: string | null;
+  validUntilField: string | null;
   active: boolean;
+}
+
+/** Lo que ningún tipo sabe leer, separado por causa porque se arreglan distinto. */
+export interface Gaps {
+  withoutDomain: number;
+  domainsWithoutType: { slug: string; label: string; memories: number }[];
+  total: number;
 }
 
 export interface FieldProposal {
@@ -120,6 +139,7 @@ export interface Overview {
   pendingReview: { pending: number; needsReview: number } | number;
   facts: number;
   backup: BackupConfig | null;
+  gaps: Gaps;
 }
 
 export interface ReviewItem extends MemorySummary {

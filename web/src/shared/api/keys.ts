@@ -14,6 +14,7 @@ export const keys = {
   domains: ['domains'] as const,
   facts: (all = false) => ['facts', { all }] as const,
   factTypes: ['factTypes'] as const,
+  gaps: ['gaps'] as const,
   proposals: ['factProposals'] as const,
   review: ['review'] as const,
 };

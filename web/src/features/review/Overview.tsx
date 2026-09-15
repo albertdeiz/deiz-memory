@@ -21,6 +21,10 @@ export function Overview({ onOpen }: { onOpen: (id: string) => void }) {
           <div className="stats">
             <div><strong>{overview.data.domains.length}</strong><span>categorías</span></div>
             <div><strong>{overview.data.facts}</strong><span>datos duros</span></div>
+            <div>
+              <strong>{overview.data.gaps.total}</strong>
+              <span>{overview.data.gaps.total === 0 ? 'sin leer' : 'nadie los lee'}</span>
+            </div>
             <div><strong>{pending}</strong><span>por revisar</span></div>
             <div>
               {/* Un respaldo viejo se ve idéntico a uno sano desde cualquier otro
@@ -29,6 +33,23 @@ export function Overview({ onOpen }: { onOpen: (id: string) => void }) {
               <span>{b ? (b.lastOk === false ? 'respaldo FALLÓ' : 'último respaldo') : 'sin respaldo'}</span>
             </div>
           </div>
+        )}
+        {/* Un documento legible que cayó en la categoría equivocada no produce
+            ningún hecho, y eso no falla: simplemente no hay nada (§4). */}
+        {overview.data && overview.data.gaps.total > 0 && (
+          <p className="warn">
+            <strong>{overview.data.gaps.total} documento(s) que ningún tipo sabe leer.</strong>
+            <br />
+            {overview.data.gaps.withoutDomain > 0 && (
+              <>{overview.data.gaps.withoutDomain} sin categoría — ningún tipo puede aplicar.<br /></>
+            )}
+            {overview.data.gaps.domainsWithoutType.map((d) => (
+              <span key={d.slug}>
+                {d.memories} en {d.label} — ninguno apunta ahí.<br />
+              </span>
+            ))}
+            Míralos en Datos duros → proponer tipos.
+          </p>
         )}
         {b && !b.lastVerifiedAt && (
           <p className="warn">

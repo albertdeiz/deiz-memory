@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { basename, join } from 'node:path';
-import { mkdtempSync, readdirSync, rmSync, type Dirent } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, type Dirent } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -30,7 +30,7 @@ import {
   answer, indexMemory, pendingIndex, proposeDomains, resolveMemoryId, show, unindexed, LANES,
   seedDomains, seedFactTypes, extractFacts, listFacts, listFactTypes, contextOf, renderValue, warningFor,
   proposeFactTypes, acceptFactType, type TypeProposal,
-  unreadable,
+  unreadable, createFactType, editFactType, archiveFactType,
   exportOwner, checkExport, importInto, readBackupConfig, setBackupDestination,
   recordBackupRun, recordBackupVerified, secretsNeededBy, setMirrorPath,
   mirrorOwner, planMirror,
@@ -1010,6 +1010,91 @@ facts
       }
       return ok(lineas);
     }, (v) => (v.length === 0 ? 'Nada que extraer.' : v.join('\n')));
+  });
+
+/** The registry as JSON, because a fields[] is not a flag. */
+const readSpec = async (path: string): Promise<unknown> =>
+  JSON.parse(path === '-'
+    ? readFileSync(0, 'utf8')
+    : await readFile(path, 'utf8'));
+
+const renderType = (t: FactType): string => [
+  `${t.slug}  (${t.kind === 'state' ? 'estado' : 'período'}${t.cardinality === 'many' ? ' · varios por documento' : ''})`
+    + `  ← ${t.domainSlug ?? 'cualquier categoría'}${t.active ? '' : '  [archivado]'}`,
+  `    ${t.description}`,
+  ...t.fields.map((f) =>
+    `    ${f.name}: ${f.label} [${f.kind}]`
+    + `${f.name === t.identityField ? '  ← identidad' : ''}`
+    + `${f.aliases.length ? `  ~ ${f.aliases.join(', ')}` : ''}`
+    + `${f.near?.length ? `  junto a "${f.near[0]}"` : ''}`),
+].join('\n');
+
+facts
+  .command('types:create')
+  .description('crea un tipo desde un JSON — el fields[] no cabe en banderas')
+  .argument('<archivo>', 'ruta al JSON, o - para stdin')
+  .action(async (path: string) => {
+    await run(
+      async ({ deps, actor }) => createFactType(deps, actor, (await readSpec(path)) as never),
+      (t) => `creado:\n${renderType(t)}\n\ncorre dm facts extract para releer el corpus con él.`,
+    );
+  });
+
+facts
+  .command('types:edit')
+  .description('cambia un tipo: la descripción es el prompt, y el dominio decide dónde se prueba')
+  .argument('<tipo>', 'slug del tipo')
+  .option('--desc <texto>', 'la descripción, que es lo que lee el modelo')
+  .option('--domain <slug>', 'la categoría donde se prueba; "none" para todas')
+  .option('--kind <k>', 'state | period')
+  .option('--cardinality <c>', 'one | many')
+  .option('--spec <archivo>', 'un JSON con el tipo entero, para cambiar los campos')
+  .option('--yes', 'confirmar un cambio que altera cómo se lee la categoría')
+  .action(async (ref: string, opts: Record<string, string | boolean>) => {
+    await run(
+      async ({ deps, actor }) => {
+        const patch: Record<string, unknown> = opts.spec
+          ? ((await readSpec(String(opts.spec))) as Record<string, unknown>)
+          : {};
+        if (opts.desc) patch.description = String(opts.desc);
+        if (opts.domain) patch.domainSlug = opts.domain === 'none' ? null : String(opts.domain);
+        if (opts.kind) patch.kind = String(opts.kind);
+        if (opts.cardinality) patch.cardinality = String(opts.cardinality);
+        return editFactType(deps, actor, ref, patch as never, { confirm: opts.yes === true });
+      },
+      (t) => renderType(t),
+    );
+  });
+
+facts
+  .command('types:archive')
+  .description('deja de extraer con ese tipo; los hechos ya extraídos se quedan')
+  .argument('<tipo>')
+  .action(async (ref: string) => {
+    await run(
+      ({ deps, actor }) => archiveFactType(deps, actor, ref),
+      (t) => `${t.slug} archivado. Sus hechos siguen ahí y se siguen citando.`,
+    );
+  });
+
+facts
+  .command('gaps')
+  .description('qué documentos no puede leer ningún tipo, y por qué')
+  .action(async () => {
+    await run(
+      async ({ deps, actor }) => ok(await unreadable(deps.db, actor)),
+      (u) => {
+        if (u.total === 0) return 'Todo documento con texto cae bajo algún tipo.';
+        return [
+          ...(u.withoutDomain > 0
+            // The two causes are separated because they are fixed differently.
+            ? [`${u.withoutDomain} sin categoría — ningún tipo puede aplicar. dm classify`]
+            : []),
+          ...u.domainsWithoutType.map((d) =>
+            `${d.memories} en ${d.label} — ninguna tipo apunta ahí. dm facts propose`),
+        ].join('\n');
+      },
+    );
   });
 
 facts

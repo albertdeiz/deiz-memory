@@ -15,6 +15,10 @@ export { resolveMemoryId } from './ops/resolve';
 export { curateMemory, type CurateInput, type CurateResult } from './ops/curate';
 export { unreadable, type Unreadable } from './facts/query';
 export {
+  createFactType, editFactType, archiveFactType,
+  type FactTypeInput, type FactTypePatch,
+} from './facts/manage';
+export {
   openSession, actorForToken, listSessions, revokeSession, revokeAllSessions,
   tokenHash, SESSION_TTL_MS,
   type WebSession, type SessionSummary,

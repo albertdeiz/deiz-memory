@@ -3,6 +3,7 @@ import {
   extractFacts, factsForMemory, fetchBlob, list, listDomains, listFacts, listFactTypes,
   listReview, listSessions, mergeDomains, openSession, proposeFactTypes, purge,
   readBackupConfig, revokeAllSessions, revokeSession, search, setHidden, show,
+  createFactType, editFactType, archiveFactType, unreadable,
   type TypeProposal,
 } from '../../core/index';
 import { findDomain } from '../../core/ops/domains';
@@ -180,7 +181,33 @@ const factRoutes: Route[] = [
     handler: async ({ deps, actor, url }) =>
       ok(await listFacts(deps.db, actor, { includeSuperseded: url.searchParams.get('all') === 'true' })),
   },
-  { method: 'GET', path: '/api/facts/types', handler: async ({ deps, actor }) => ok(await listFactTypes(deps.db, actor)) },
+  {
+    method: 'GET', path: '/api/facts/types',
+    handler: async ({ deps, actor, url }) =>
+      ok(await listFactTypes(deps.db, actor, { includeInactive: url.searchParams.get('all') === 'true' })),
+  },
+  {
+    method: 'POST', path: '/api/facts/types',
+    handler: async ({ deps, actor, body }) => createFactType(deps, actor, await body()),
+  },
+  {
+    method: 'PATCH', path: '/api/facts/types/:slug',
+    handler: async ({ deps, actor, params, url, body }) =>
+      // Confirmation travels the same way as a purge: without it the server
+      // answers 409 saying what the change would decide.
+      editFactType(deps, actor, params.slug!, await body(), {
+        confirm: url.searchParams.get('confirm') === 'true',
+      }),
+  },
+  {
+    method: 'POST', path: '/api/facts/types/:slug/archive',
+    handler: ({ deps, actor, params }) => archiveFactType(deps, actor, params.slug!),
+  },
+  {
+    // What no type can read, which is the failure that used to be silent.
+    method: 'GET', path: '/api/facts/gaps',
+    handler: async ({ deps, actor }) => ok(await unreadable(deps.db, actor)),
+  },
   {
     method: 'POST', path: '/api/facts/extract',
     handler: async ({ deps, actor, body }) => {
@@ -213,17 +240,19 @@ const otherRoutes: Route[] = [
     handler: async ({ deps, actor }) => {
       // One call for the dashboard. Four round trips to paint one screen is how
       // a client ends up with four loading states for one idea.
-      const [domains, review, facts, backup] = await Promise.all([
+      const [domains, review, facts, backup, gaps] = await Promise.all([
         listDomains(deps.db, actor),
         countReview(deps.db, actor),
         listFacts(deps.db, actor, {}),
         readBackupConfig(deps, actor),
+        unreadable(deps.db, actor),
       ]);
       return ok({
         domains,
         pendingReview: review,
         facts: facts.length,
         backup: backup.ok ? backup.value : null,
+        gaps,
       });
     },
   },

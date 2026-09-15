@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { capture, extractFacts, listFacts, unreadable } from '../../src/core/index';
+import {
+  archiveFactType, capture, createFactType, editFactType, extractFacts, listFacts, unreadable,
+} from '../../src/core/index';
 import { validateCardinality } from '../../src/core/facts/registry';
 import type { Classifier } from '../../src/core/ports';
 import { startStack, type TestStack } from '../helpers/stack';
@@ -219,5 +221,79 @@ describe('lo que ningún tipo sabe leer se puede contar', () => {
     await enDominio('salud');
     await s.deps.db.query('update memories set hidden = true where owner_id = $1', [s.ownerId]);
     expect((await unreadable(s.deps.db, mine())).total).toBe(0);
+  });
+});
+
+/**
+ * Los tipos se administran por canal, no por `psql`.
+ *
+ * Hasta acá un tipo nacía de una semilla o de una propuesta y después era
+ * inalcanzable: mover su categoría o ajustar su descripción exigía abrir una
+ * shell — y una regla que solo se cumple así no es una regla (§11).
+ */
+describe('un tipo se crea y se edita por canal', () => {
+  const base = {
+    label: 'Boleta de luz',
+    description: 'La boleta mensual de electricidad, con el consumo y el total a pagar.',
+    kind: 'period' as const,
+    fields: [
+      { name: 'total', kind: 'money' as const, label: 'total a pagar', aliases: ['total'] },
+      { name: 'consumo', kind: 'number' as const, label: 'consumo kWh', aliases: ['consumo'] },
+    ],
+  };
+
+  it('lo crea y se puede leer de vuelta', async () => {
+    const r: any = await createFactType(s.deps, mine(), base);
+    expect(r.ok).toBe(true);
+    expect(r.value.slug).toBe('boleta_de_luz');
+    // Se leía por id y findFactType resuelve slug o label: devolvía "se creó
+    // pero no se pudo leer de vuelta" sobre una fila perfectamente sana.
+    expect(r.value.fields).toHaveLength(2);
+  });
+
+  it('cambiar la redacción no pregunta; cambiar la categoría sí', async () => {
+    await createFactType(s.deps, mine(), base);
+
+    const suave: any = await editFactType(s.deps, mine(), 'boleta_de_luz',
+      { description: 'La boleta mensual de electricidad. NO es un comprobante de pago.' });
+    expect(suave.ok).toBe(true);
+
+    // Mover el dominio decide dónde se prueba el tipo, o sea qué documentos
+    // dejan de producir hechos. Eso se confirma (§13.7).
+    const duro: any = await editFactType(s.deps, mine(), 'boleta_de_luz', { domainSlug: 'hogar' });
+    expect(duro.ok).toBe(false);
+    expect(duro.kind).toBe('requires_confirmation');
+
+    const hecho: any = await editFactType(s.deps, mine(), 'boleta_de_luz',
+      { domainSlug: 'hogar' }, { confirm: true });
+    expect(hecho.value.domainSlug).toBe('hogar');
+  });
+
+  it('las validaciones son las mismas por donde entres', async () => {
+    for (const [input, esperado] of [
+      [{ ...base, fields: [{ name: 'x', kind: 'rut' as never, label: 'X', aliases: [] }] }, /no es un tipo de campo/],
+      [{ ...base, identityField: 'noexiste' }, /no es uno de los campos/],
+      [{ ...base, cardinality: 'many' as const }, /identity_field/],
+      [{ ...base, kind: 'state' as const }, /superseder/],
+      [{ ...base, description: 'corta' }, /descripción es el prompt/],
+      [{ ...base, domainSlug: 'no-existe' }, /No existe la categoría/],
+    ] as const) {
+      const r: any = await createFactType(s.deps, mine(), input as never);
+      expect(r.ok).toBe(false);
+      expect(r.message).toMatch(esperado);
+    }
+  });
+
+  it('archivar deja los hechos, solo deja de extraer', async () => {
+    await defineType('many');
+    const id = await ticket();
+    s.deps.classifier = saying(TWO);
+    await extractFacts(s.deps, mine(), id);
+
+    const r: any = await archiveFactType(s.deps, mine(), 'pasaje_bus');
+    expect(r.value.active).toBe(false);
+    // Los hechos vinieron de un documento y ese documento sigue diciendo lo que
+    // dice: se quedan y se siguen citando (§9).
+    expect(await listFacts(s.deps.db, mine(), {})).toHaveLength(2);
   });
 });

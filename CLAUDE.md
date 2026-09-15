@@ -325,10 +325,17 @@ Y hay un filo más: si una memoria **pierde** su categoría y se re-extrae, sus 
 **borran**. Es deliberado —el registro define qué aplica, y dejar un hecho de un tipo que
 ya no aplica contradiría al registro— pero conviene saberlo antes que después.
 
-**El acoplamiento se queda; lo que se arregla es el silencio.** `dm doctor` cuenta lo que
-ningún tipo sabe leer, separando las dos causas porque se arreglan distinto: sin categoría
-se corrige clasificando, y una categoría sin tipo se corrige creando uno
-(`dm facts propose`).
+**El acoplamiento se queda; lo que se arregla es el silencio.** `dm doctor`, `dm facts
+gaps` y la pantalla de Estado cuentan lo que ningún tipo sabe leer, separando las dos
+causas porque se arreglan distinto: sin categoría se corrige clasificando, y una categoría
+sin tipo se corrige creando uno.
+
+**Y el registro se administra por canal, no por `psql`.** Un tipo nacía de una semilla o de
+una propuesta y después era inalcanzable: mover su categoría, ajustar un `near` o corregir
+un `kind` exigía abrir una shell contra la base. Una regla que solo se cumple así no es una
+regla — es justo lo que §11 existe para evitar. Ahora `dm facts types:create|edit|archive`
+y la web llaman **la misma** función del core, con las mismas validaciones, y **archivar no
+borra**: los hechos ya extraídos vinieron de un documento que sigue diciendo lo que dice.
 
 #### Lo que NO es un Fact
 
@@ -695,6 +702,7 @@ dm capture <archivo> | --text "..." | -        --title --occurred --wait
 dm ls · dm search · dm ask · dm show · dm open · dm in <categoría>
 dm domains [create|edit|archive|merge|propose] · dm classify · dm index
 dm facts [--all] · dm facts types · dm facts extract [id] · dm facts propose [--yes]
+dm facts gaps · dm facts types:create <json> · types:edit <t> · types:archive <t>
 dm review · dm reprocess [--failed|--pending|--all|--lane|--wait]
 dm backup [status|set <repo>|run|verify|snapshots|restore|forget]
 dm mirror [status|set <ruta>|plan|run]
@@ -716,7 +724,7 @@ dominios dinámicos con clasificación local, preguntas en lenguaje natural con 
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
 `tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
 riesgo irreversible abierto, el **espejo legible** (§14.4), los **tipos emergentes** y
-los tipos **`many`**, que leen los dos pasajes de un mismo PDF (§4). **433 tests.**
+los tipos **`many`**, que leen los dos pasajes de un mismo PDF (§4). **437 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.
@@ -1008,7 +1016,7 @@ memorias a la vez.
 |---|---|
 | Navegar | listar, filtrar por dominio, buscar, abrir el original |
 | Curar | dominio, fecha del hecho, título, tags · ocultar · bandeja de revisión |
-| Hechos | verlos, releer una memoria, aceptar tipos propuestos (§4) |
+| Hechos | verlos, releer una memoria, editar y archivar tipos, aceptar propuestas (§4) |
 | Dominios | crear, describir, renombrar, archivar, fusionar |
 | Purgar | con confirmación nombrando lo afectado, y auditado (§11) |
 | Respaldo | **solo el estado**, y por qué está más abajo |
@@ -1018,6 +1026,10 @@ capacidades es justo donde es fácil escribir lo que uno pensaba hacer. Hoy la w
 corrige un hecho a mano** —`facts` solo se re-extraen— y **no dispara el respaldo**: restic
 vive en su propio contenedor y la API no lo alcanza, así que lo único que muestra es la
 fecha y si se verificó. Tampoco filtra por fecha: filtra por categoría y busca por texto.
+
+**Y la mantención sigue siendo de la terminal**, como dice §11: `classify`, `index`,
+`reprocess`, `worker` y `serve` no tienen ruta. No es un pendiente — son operaciones sobre
+el corpus entero, que cuestan tiempo de modelo y no se disparan desde un botón.
 
 ### Dos procesos, y el límite entre ellos es HTTP
 

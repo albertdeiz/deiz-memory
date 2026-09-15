@@ -2,12 +2,102 @@
 import { useState } from 'react';
 import { ApiError, type Affected } from '@/shared/api/client';
 import { Confirm, Empty, Failed, Panel, Spinner, Tag, day } from '@/shared/ui/primitives';
-import type { TypeProposal } from '@/shared/api/types';
-import { useAcceptProposal, useFactTypes, useFacts, useProposals } from './queries';
+import type { Domain, FactType, TypeProposal } from '@/shared/api/types';
+import { useDomains } from '@/features/domains/queries';
+import {
+  useAcceptProposal, useArchiveFactType, useEditFactType, useFactTypes, useFacts, useProposals,
+} from './queries';
+
+/**
+ * Un tipo, editable.
+ *
+ * Hasta ahora un tipo nacía de una semilla o de una propuesta y después era
+ * inalcanzable: mover su categoría o ajustar su descripción exigía `psql`, y una
+ * regla que solo se cumple abriendo una shell no es una regla.
+ *
+ * La descripción va en un `textarea` y no en un input porque **es el prompt**
+ * (§4): es lo que el modelo lee para decidir si un documento es de este tipo.
+ */
+function TypeRow({ type, domains }: { type: FactType; domains: Domain[] }) {
+  const edit = useEditFactType(type.slug);
+  const archive = useArchiveFactType();
+  const [pending, setPending] = useState<{ patch: Partial<FactType>; message: string; affects: Affected[] } | null>(null);
+
+  // Cambiar dominio, kind o cardinality decide cómo se lee la categoría entera,
+  // así que el servidor contesta 409 y acá se pregunta.
+  const apply = (patch: Partial<FactType>) => {
+    edit.mutate({ patch, confirm: false }, {
+      onError: (e) => {
+        if (e instanceof ApiError && e.needsConfirmation) {
+          setPending({ patch, message: e.message, affects: e.affects });
+        }
+      },
+    });
+  };
+
+  return (
+    <li className="domain">
+      <div className="row between">
+        <span>
+          <strong>{type.slug}</strong>{' '}
+          <Tag>{type.kind === 'state' ? 'estado' : 'período'}</Tag>{' '}
+          {type.cardinality === 'many' && <Tag>varios por documento</Tag>}
+        </span>
+        <span className="row">
+          <select
+            value={type.domainSlug ?? ''}
+            onChange={(e) => apply({ domainSlug: e.target.value || null })}
+            aria-label={`categoría de ${type.slug}`}
+          >
+            <option value="">cualquier categoría</option>
+            {domains.map((d) => <option key={d.slug} value={d.slug}>{d.label}</option>)}
+          </select>
+          <button onClick={() => archive.mutate(type.slug)}>archivar</button>
+        </span>
+      </div>
+
+      <textarea
+        defaultValue={type.description}
+        onBlur={(e) => { if (e.target.value !== type.description) apply({ description: e.target.value }); }}
+        rows={2}
+        aria-label={`descripción de ${type.slug}`}
+      />
+
+      <div className="muted">
+        {type.fields.map((f) => (
+          <span key={f.name}>
+            {f.name}
+            {f.name === type.identityField ? ' ←' : ''}
+            {' '}
+          </span>
+        ))}
+      </div>
+
+      {/* Un 409 de confirmación no es un error que mostrar: es el diálogo. */}
+      {edit.isError && !(edit.error instanceof ApiError && edit.error.needsConfirmation) && (
+        <Failed error={edit.error} />
+      )}
+
+      {pending && (
+        <Confirm
+          message={pending.message}
+          affects={pending.affects}
+          busy={edit.isPending}
+          onCancel={() => setPending(null)}
+          onConfirm={() => edit.mutate(
+            { patch: pending.patch, confirm: true },
+            { onSuccess: () => setPending(null) },
+          )}
+        />
+      )}
+    </li>
+  );
+}
 
 export function FactAdmin() {
   const facts = useFacts(true);
   const types = useFactTypes();
+  const domains = useDomains();
   const [asking, setAsking] = useState(false);
   const proposals = useProposals(asking);
   const accept = useAcceptProposal();
@@ -34,14 +124,7 @@ export function FactAdmin() {
         {types.isLoading && <Spinner />}
         <ul className="rows">
           {(types.data ?? []).map((t) => (
-            <li key={t.slug} className="row between">
-              <span>
-                <strong>{t.slug}</strong>{' '}
-                <Tag>{t.kind === 'state' ? 'estado' : 'período'}</Tag>{' '}
-                <span className="muted">← {t.domainSlug}</span>
-              </span>
-              <span className="muted">{t.fields.length} campos</span>
-            </li>
+            <TypeRow key={t.slug} type={t} domains={domains.data ?? []} />
           ))}
         </ul>
 

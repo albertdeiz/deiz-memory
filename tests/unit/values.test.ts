@@ -121,6 +121,7 @@ describe('grounded · bajo qué rótulo', () => {
 describe('el contexto del extractor', () => {
   const tipo = {
     id: 't', slug: 'x', label: 'X', description: '', kind: 'period' as const,
+    cardinality: 'one' as const,
     domainSlug: null, identityField: null, validFromField: null, validUntilField: null,
     active: true,
     fields: [campo('money', { near: ['total facturado a pagar'] })],
@@ -214,5 +215,41 @@ describe('las fechas escritas en palabras', () => {
     expect(grounded('1994-11-29', campo, 'Nacido el 29 de noviembre de 1994')).toBe(true);
     // Y una fecha que el documento no dice sigue sin respaldo.
     expect(grounded('2026-01-09', campo, 'Fecha de emisión: 9 Marzo 2026')).toBe(false);
+  });
+});
+
+/**
+ * Medido sobre un pasaje real: los asientos eran `4` y `5`, un solo carácter, y
+ * grounding los descartaba. El guard tiene razón —un `4` aparece en cualquier
+ * fecha, monto o teléfono del documento, y aceptarlo sería un sello de goma—
+ * pero dejaba fuera datos legítimamente cortos.
+ */
+describe('un valor de un carácter solo se respalda bajo su rótulo', () => {
+  const doc = [
+    'PASAJERO: ALBERTO DIAZ',
+    'No ASIENTO: 5 (Salón Cama)',
+    'Bajada: Terminal Sur - Nicasio Retamales 044',
+  ].join('\n');
+
+  const conRotulo = { name: 'asiento', label: 'asiento', kind: 'text' as const, aliases: [], near: ['asiento'] };
+  const sinRotulo = { name: 'asiento', label: 'asiento', kind: 'text' as const, aliases: [] };
+
+  it('con `near`, el asiento corto se respalda', () => {
+    expect(grounded('5', conRotulo, doc)).toBe(true);
+  });
+
+  it('sin `near` sigue sin respaldarse, que es lo correcto', () => {
+    // Sin rótulo la pregunta es "¿aparece un 5?" y eso no verifica nada.
+    expect(grounded('5', sinRotulo, doc)).toBe(false);
+  });
+
+  it('no lo encuentra dentro de otro número de la misma línea', () => {
+    // El `044` de la dirección vive en una línea que no dice asiento; y aunque
+    // la dijera, el valor tiene que ser su propio token.
+    expect(grounded('4', { ...conRotulo, near: ['bajada'] }, doc)).toBe(false);
+  });
+
+  it('un valor corto que el documento no dice sigue sin respaldo', () => {
+    expect(grounded('9', conRotulo, doc)).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import type { Actor, Uuid } from '../domain/types';
 import { shortId } from '../domain/types';
 import type { Deps } from '../ports';
 import { err, ok, type Result } from '../result';
-import { buildExtractPrompt, extractSchema, validateExtraction } from './prompt';
+import { buildExtractPrompt, extractSchema, validateExtractions } from './prompt';
 import { typesForDomain } from './registry';
 import type { FactType, FactValue } from './types';
 
@@ -80,12 +80,16 @@ export async function extractFacts(
     } catch {
       continue; // One type failing does not take the others with it.
     }
-    const parsed = validateExtraction(raw, type, source);
-    if (!parsed) continue;
+    // A `many` type gives back one row per instance — two passengers on one
+    // ticket — and each is its own fact, told apart by its identity.
+    const rows = validateExtractions(raw, type, source);
+    if (rows.length === 0) continue;
 
-    await save(deps, actor, m.id, type, parsed.payload);
-    extracted.push(type.slug);
-    discarded.push(...parsed.discarded.map((f: string) => `${type.slug}.${f}`));
+    for (const parsed of rows) {
+      await save(deps, actor, m.id, type, parsed.payload);
+      discarded.push(...parsed.discarded.map((f: string) => `${type.slug}.${f}`));
+    }
+    extracted.push(rows.length > 1 ? `${type.slug} ×${rows.length}` : type.slug);
   }
 
   return ok({ memoryId: m.id, shortId: shortId(m.id), extracted, discarded });
@@ -108,7 +112,10 @@ async function save(
   const { rows } = await deps.db.query<{ id: string }>(
     `insert into facts (owner_id, memory_id, type_id, payload, identity, valid_from, valid_until)
      values ($1,$2,$3,$4::jsonb,$5,$6::date,$7::date)
-     on conflict (memory_id, type_id) do update
+     -- By identity too, so two passengers from one PDF coexist instead of the
+     -- second overwriting the first (§4). coalesce, because NULLs are distinct in
+     -- a unique index and "no identity" has to keep meaning exactly one row.
+     on conflict (memory_id, type_id, coalesce(identity, '')) do update
        set payload = excluded.payload, identity = excluded.identity,
            valid_from = excluded.valid_from, valid_until = excluded.valid_until,
            extracted_at = now()

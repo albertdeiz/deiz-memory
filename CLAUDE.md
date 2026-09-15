@@ -146,6 +146,18 @@ igual. No era cosmético — **un `valid_until` escrito así nunca se capturaba*
 regla dura 10 no podía dispararse justo en los documentos que caducan. Se arreglaron las
 dos mitades: parsear el mes en palabras, y buscar la fecha también en esa forma.
 
+**Y un valor de un solo carácter solo se respalda bajo su rótulo.** Los asientos de un
+pasaje real eran `4` y `5`, y grounding los descartaba: un valor de un carácter no es
+buscable solo —un `4` aparece en cualquier fecha, monto o dirección del documento— y
+aceptarlo convertiría la verificación en un sello de goma. El guard tenía razón y además
+tiraba datos legítimos.
+
+Lo que lo resuelve ya estaba en el diseño: **`near`**. La pregunta deja de ser *"¿aparece
+un 4?"* y pasa a ser *"¿aparece un 4 en una línea que dice asiento?"*, que sí es
+verificable. Así que un valor corto se busca **solo dentro de las líneas rotuladas**, y
+solo si el campo declaró un rótulo bajo el cual mirar — y como su propio token, porque sin
+el límite de palabra el `4` calzaría dentro del `044` de una dirección.
+
 **Y un valor no se lleva su propio rótulo.** Sobre la póliza real el modelo devolvió
 `numero` como `"póliza N°BP9344586"`: el número con su etiqueta pegada. Pasaba **todos**
 los chequeos, porque es literalmente lo que dice el documento y eso es justo lo que
@@ -680,8 +692,8 @@ Construido y en verde: captura, los tres carriles, canal de chat, bandeja de rev
 dominios dinámicos con clasificación local, preguntas en lenguaje natural con cita
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
 `tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
-riesgo irreversible abierto, el **espejo legible** (§14.4) y los **tipos emergentes**
-(§4). **417 tests.**
+riesgo irreversible abierto, el **espejo legible** (§14.4), los **tipos emergentes** y
+los tipos **`many`**, que leen los dos pasajes de un mismo PDF (§4). **428 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.

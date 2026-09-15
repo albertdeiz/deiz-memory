@@ -4,7 +4,7 @@ import type { FactField, FactType } from './types';
 
 interface Row {
   id: string; slug: string; label: string; description: string; kind: string;
-  domain_slug: string | null; fields: FactField[]; identity_field: string | null;
+  cardinality: string; domain_slug: string | null; fields: FactField[]; identity_field: string | null;
   valid_from_field: string | null; valid_until_field: string | null; active: boolean;
 }
 
@@ -14,6 +14,7 @@ const toType = (r: Row): FactType => ({
   label: r.label,
   description: r.description,
   kind: r.kind as FactType['kind'],
+  cardinality: r.cardinality === 'many' ? 'many' : 'one',
   domainSlug: r.domain_slug,
   fields: r.fields ?? [],
   identityField: r.identity_field,
@@ -22,7 +23,7 @@ const toType = (r: Row): FactType => ({
   active: r.active,
 });
 
-const COLUMNS = `id, slug, label, description, kind, domain_slug, fields,
+const COLUMNS = `id, slug, label, description, kind, cardinality, domain_slug, fields,
                  identity_field, valid_from_field, valid_until_field, active`;
 
 export async function listFactTypes(
@@ -83,6 +84,7 @@ export const SEED_FACT_TYPES: Omit<FactType, 'id' | 'active'>[] = [
     slug: 'poliza_auto',
     label: 'Póliza de auto',
     kind: 'state',
+    cardinality: 'one',
     description:
       'El CONTRATO de seguro de un vehículo: el documento que la aseguradora emite al ' +
       'contratar, con las coberturas, los deducibles y la vigencia. Tiene que nombrar la ' +
@@ -106,6 +108,7 @@ export const SEED_FACT_TYPES: Omit<FactType, 'id' | 'active'>[] = [
     slug: 'tarjeta_credito',
     label: 'Estado de cuenta de tarjeta',
     kind: 'period',
+    cardinality: 'one',
     description:
       'Estado de cuenta o cartola mensual de una tarjeta de crédito: cupo, monto facturado, ' +
       'fecha de pago y tasas. Un documento por mes.',
@@ -136,15 +139,29 @@ export const SEED_FACT_TYPES: Omit<FactType, 'id' | 'active'>[] = [
   },
 ];
 
+/**
+ * A `many` type without an identity field cannot work, and fails silently.
+ *
+ * Two rows from one document would be indistinguishable, so the upsert collapses
+ * them and the second datum disappears with nothing reporting it. Checked here
+ * rather than trusted: the registry is data, and data can be written by hand.
+ */
+export function validateCardinality(t: Pick<FactType, 'cardinality' | 'identityField'>): string | null {
+  if (t.cardinality === 'many' && !t.identityField) {
+    return 'Un tipo "many" necesita identity_field: sin él, dos filas del mismo documento se pisan.';
+  }
+  return null;
+}
+
 export async function seedFactTypes(db: Db, ownerId: Uuid): Promise<void> {
   for (const t of SEED_FACT_TYPES) {
     await db.query(
       `insert into fact_types
-         (owner_id, slug, label, description, kind, domain_slug, fields,
+         (owner_id, slug, label, description, kind, cardinality, domain_slug, fields,
           identity_field, valid_from_field, valid_until_field)
-       values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10)
+       values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)
        on conflict (owner_id, slug) do nothing`,
-      [ownerId, t.slug, t.label, t.description, t.kind, t.domainSlug,
+      [ownerId, t.slug, t.label, t.description, t.kind, t.cardinality, t.domainSlug,
        JSON.stringify(t.fields), t.identityField, t.validFromField, t.validUntilField],
     );
   }

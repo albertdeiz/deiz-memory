@@ -240,6 +240,27 @@ function occurrences(value: FactValue, kind: FieldKind, text: string): string[] 
 }
 
 /**
+ * The lines carrying a label, when they also carry the value as its own token.
+ *
+ * As its own token is the whole point: without the word boundary, `4` would
+ * match inside the `044` of a street address that happens to sit on a line
+ * mentioning the seat. The label narrows WHERE to look; the boundary decides
+ * WHAT counts as the value.
+ */
+function labelledLines(value: FactValue, near: string[], text: string): string[] {
+  const v = withoutAccents(String(value)).trim();
+  if (!v) return [];
+  const token = new RegExp(`(^|[^0-9a-z])${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^0-9a-z]|$)`, 'i');
+
+  return text
+    .split('\n')
+    .filter((line) => {
+      const flat = line.toLowerCase();
+      return near.some((n) => flat.includes(n)) && token.test(line);
+    });
+}
+
+/**
  * Is this value in the document, and **under the right label**?
  *
  * Not compared character by character: an amount the PDF writes as `$886.568`
@@ -259,11 +280,24 @@ function occurrences(value: FactValue, kind: FieldKind, text: string): string[] 
  */
 export function grounded(value: FactValue, field: FactField, source: string): boolean {
   const text = withoutAccents(source);
-  const windows = occurrences(value, field.kind, text);
-  if (windows.length === 0) return false;
-
   const near = (field.near ?? []).map(withoutAccents);
   const notNear = (field.notNear ?? []).map(withoutAccents);
+
+  let windows = occurrences(value, field.kind, text);
+
+  // A value one character long is not searchable on its own — `4` appears in
+  // every date, amount and phone number in the document, so accepting it would
+  // make grounding a rubber stamp. That guard is right, and it also threw away
+  // real data: a bus ticket whose seat is `4`.
+  //
+  // `near` is what makes a short value checkable again, and it is the mechanism
+  // this file already has. The question stops being "is there a 4 anywhere?" and
+  // becomes "is there a 4 on a line that says seat?", which is verifiable. So a
+  // short value is looked for ONLY inside the labelled lines, and only when the
+  // field declared a label to look under.
+  if (windows.length === 0 && near.length > 0) windows = labelledLines(value, near, text);
+
+  if (windows.length === 0) return false;
   if (near.length === 0 && notNear.length === 0) return true;
 
   // ONE well-labelled occurrence is enough: the same number can appear ten times

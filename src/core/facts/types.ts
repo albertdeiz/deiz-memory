@@ -58,12 +58,28 @@ export interface FactField {
  */
 export type FactKind = 'state' | 'period';
 
+/**
+ * How many facts of this type one document carries.
+ *
+ * A second axis, not a flavour of `kind`, and confusing them is the same mistake
+ * as confusing state with period. `kind` answers "does a new one supersede the
+ * old?"; this answers "how many does one document hold?". A bus ticket is
+ * `period` AND `many`: one PDF carries two passengers, and September's does not
+ * replace August's.
+ *
+ * `many` requires an `identityField`. Without one, two rows from the same
+ * document are indistinguishable and the upsert collapses them — the second
+ * datum disappears without anything failing, which is the worst way to lose it.
+ */
+export type Cardinality = 'one' | 'many';
+
 export interface FactType {
   id: Uuid;
   slug: string;
   label: string;
   description: string;
   kind: FactKind;
+  cardinality: Cardinality;
   /** Which category to try extracting from. Null means any. */
   domainSlug: string | null;
   fields: FactField[];

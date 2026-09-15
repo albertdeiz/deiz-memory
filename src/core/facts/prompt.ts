@@ -68,13 +68,18 @@ const SHAPE: Record<FactField['kind'], string> = {
 export function extractSchema(type: FactType): object {
   const properties: Record<string, object> = {};
   for (const f of type.fields) properties[f.name] = { type: ['string', 'number', 'null'] };
+  const row = { type: 'object', additionalProperties: false, properties };
+
+  // A `many` type asks for a list, and the server enforces it. Asking in prose
+  // for "one entry per passenger" and hoping is how a document with two tickets
+  // comes back with one.
   return {
     type: 'object',
     additionalProperties: false,
     required: ['aplica', 'campos'],
     properties: {
       aplica: { type: 'boolean' },
-      campos: { type: 'object', additionalProperties: false, properties },
+      campos: type.cardinality === 'many' ? { type: 'array', items: row } : row,
     },
   };
 }
@@ -107,7 +112,14 @@ export function buildExtractPrompt(
     // The first rule is what stops the policy extractor from inventing a policy
     // out of a supermarket receipt.
     '- Si el documento NO es del tipo esperado, responde exactamente {"aplica": false}.',
-    '- Si aplica, responde {"aplica": true, "campos": { ... }}.',
+    ...(type.cardinality === 'many'
+      // The identity field is named, because it is what tells two rows apart and
+      // a list of rows that share one is a list with one row in it.
+      ? [
+          '- Este documento puede traer VARIOS. Responde {"aplica": true, "campos": [ {...}, {...} ]},',
+          `  uno por cada ${type.identityField ?? 'instancia'} distinto que aparezca. No repitas ninguno.`,
+        ]
+      : ['- Si aplica, responde {"aplica": true, "campos": { ... }}.']),
     '- Copia los valores EXACTOS del documento. No calcules, no conviertas, no redondees.',
     '- Un campo que el documento no dice va en null. Dejarlo en null es correcto;',
     '  inventarlo no. Cada valor se comprueba después contra el texto original.',
@@ -143,13 +155,50 @@ export function validateExtraction(
   type: FactType,
   source: string,
 ): Extraction | null {
-  if (typeof raw !== 'object' || raw === null) return null;
-  const o = raw as Record<string, unknown>;
-  if (o.aplica === false) return null;
+  const all = validateExtractions(raw, type, source);
+  return all[0] ?? null;
+}
 
-  const given = (typeof o.campos === 'object' && o.campos !== null
-    ? o.campos
-    : o) as Record<string, unknown>;
+/**
+ * Every row the document backs, which for a `one` type is at most one.
+ *
+ * Rows are validated independently: a passenger whose seat is missing does not
+ * take the other passenger with them.
+ */
+export function validateExtractions(
+  raw: unknown,
+  type: FactType,
+  source: string,
+): Extraction[] {
+  if (typeof raw !== 'object' || raw === null) return [];
+  const o = raw as Record<string, unknown>;
+  if (o.aplica === false) return [];
+
+  const campos = o.campos;
+  const rows: unknown[] = Array.isArray(campos)
+    ? campos
+    : [typeof campos === 'object' && campos !== null ? campos : o];
+
+  const out: Extraction[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const one = validateRow(r, type, source);
+    if (!one) continue;
+    // Two rows with the same identity are one row said twice: the upsert would
+    // collapse them anyway, and counting them would report work that did not
+    // happen.
+    const id = type.identityField ? String(one.payload[type.identityField] ?? '') : '';
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(one);
+    if (type.cardinality !== 'many') break;
+  }
+  return out;
+}
+
+function validateRow(raw: unknown, type: FactType, source: string): Extraction | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const given = raw as Record<string, unknown>;
 
   const payload: Record<string, FactValue> = {};
   const discarded: string[] = [];

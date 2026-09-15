@@ -2,10 +2,10 @@ import type { Actor, Uuid } from '../domain/types';
 import { shortId } from '../domain/types';
 import type { Deps } from '../ports';
 import { err, needsConfirmation, ok, type Result } from '../result';
-import { listFactTypes, typesForDomain } from './registry';
+import { listFactTypes, typesForDomain, validateCardinality } from './registry';
 import { relevantContext } from './prompt';
 import { coerce, grounded } from './values';
-import type { FactField, FactKind, FactType, FieldKind } from './types';
+import type { Cardinality, FactField, FactKind, FactType, FieldKind } from './types';
 
 /**
  * Emergent fact types (§4, §9).
@@ -66,6 +66,7 @@ export interface TypeProposal {
   label: string;
   description: string;
   kind: FactKind;
+  cardinality: Cardinality;
   domainSlug: string;
   fields: FieldProposal[];
   identityField: string | null;
@@ -118,6 +119,7 @@ const proposalSchema = {
     label: { type: 'string' },
     description: { type: 'string' },
     kind: { type: 'string', enum: ['state', 'period'] },
+    cardinality: { type: 'string', enum: ['one', 'many'] },
     identity_field: { type: ['string', 'null'] },
     valid_from_field: { type: ['string', 'null'] },
     valid_until_field: { type: ['string', 'null'] },
@@ -158,6 +160,13 @@ function buildPrompt(c: Candidate, existing: FactType[]): { system: string; user
     '- kind "state": tiene UNO vigente y el nuevo sucede al viejo (una licencia, una',
     '  póliza). kind "period": coexisten, cada uno es la verdad sobre su período',
     '  (una cartola mensual). Confundirlos corrompe datos.',
+    // Two axes, and the prompt has to say they are two or the model collapses
+    // them: it reads "varios" and reaches for "period".
+    '- cardinality "one": el documento trae UN dato de este tipo. "many": trae VARIOS,',
+    '  uno por instancia (un PDF con dos pasajes, uno por pasajero). Es una pregunta',
+    '  DISTINTA de kind: un pasaje es "period" y "many" a la vez.',
+    '- Si propones "many", identity_field es obligatorio: sin él las filas no se',
+    '  distinguen. Y no es "many" una tabla que solo sirve sumada — eso queda fuera.',
     '- Cada campo: name en snake_case sin acentos, kind de la lista, aliases con las',
     '  palabras con que una persona preguntaría por ese dato.',
     '- "ejemplo" es el valor REAL que trae este documento, copiado exacto. Se',
@@ -168,7 +177,7 @@ function buildPrompt(c: Candidate, existing: FactType[]): { system: string; user
   ].join('\n');
 
   const fake: FactType = {
-    id: '', slug: '', label: '', description: '', kind: 'state',
+    id: '', slug: '', label: '', description: '', kind: 'state', cardinality: 'one',
     domainSlug: null, fields: [], identityField: null,
     validFromField: null, validUntilField: null, active: true,
   };
@@ -205,6 +214,7 @@ function validate(raw: unknown, c: Candidate, existing: FactType[]): TypeProposa
   const label = String(o.label ?? '').trim();
   const description = String(o.description ?? '').trim();
   const kind: FactKind = o.kind === 'period' ? 'period' : 'state';
+  const cardinality: Cardinality = o.cardinality === 'many' ? 'many' : 'one';
   if (!slug || !label || description.length < 20) return null;
   if (existing.some((t) => t.slug === slug)) return null;
 
@@ -265,8 +275,12 @@ function validate(raw: unknown, c: Candidate, existing: FactType[]): TypeProposa
   // offering a type that silently fails at its job, so it is not offered.
   if (kind === 'state' && !identityField) return null;
 
+  // And a `many` one fails worse: two rows from the same document collapse into
+  // one on insert, so the second datum disappears with nothing reporting it.
+  if (validateCardinality({ cardinality, identityField })) return null;
+
   return {
-    slug, label, description, kind,
+    slug, label, description, kind, cardinality,
     domainSlug: c.domain_slug,
     fields: unique,
     identityField,
@@ -354,7 +368,10 @@ export async function acceptFactType(
 
   if (!opts.confirm) {
     return needsConfirmation(
-      `Crear el tipo "${p.label}" (${p.kind === 'state' ? 'estado' : 'período'}) sobre ${p.domainSlug}, ` +
+      `Crear el tipo "${p.label}" (${p.kind === 'state' ? 'estado' : 'período'}` +
+        // Said out loud, because it is the half that is easy to get wrong and
+        // expensive to fix: `many` decides whether a document's second row lives.
+        `${p.cardinality === 'many' ? ', varios por documento' : ''}) sobre ${p.domainSlug}, ` +
         `con ${p.fields.length} campos. Un tipo decide cómo se leen todos los documentos ` +
         `futuros de esa categoría.`,
       [{ kind: 'fact_type', id: p.slug, label: p.label }],
@@ -363,11 +380,11 @@ export async function acceptFactType(
 
   await deps.db.query(
     `insert into fact_types
-       (owner_id, slug, label, description, kind, domain_slug, fields,
+       (owner_id, slug, label, description, kind, cardinality, domain_slug, fields,
         identity_field, valid_from_field, valid_until_field)
-     values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10)`,
+     values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)`,
     [
-      actor.ownerId, p.slug, p.label, p.description, p.kind, p.domainSlug,
+      actor.ownerId, p.slug, p.label, p.description, p.kind, p.cardinality, p.domainSlug,
       // The example is what made the proposal judgeable; it is not part of the
       // type, so it does not travel into the registry.
       JSON.stringify(p.fields.map(({ example: _e, ...f }) => f)),

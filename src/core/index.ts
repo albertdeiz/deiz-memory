@@ -13,6 +13,7 @@ export {
 } from './ops/identity';
 export { resolveMemoryId } from './ops/resolve';
 export { curateMemory, type CurateInput, type CurateResult } from './ops/curate';
+export { unreadable, type Unreadable } from './facts/query';
 export {
   openSession, actorForToken, listSessions, revokeSession, revokeAllSessions,
   tokenHash, SESSION_TTL_MS,

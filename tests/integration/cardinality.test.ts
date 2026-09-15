@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { capture, extractFacts, listFacts } from '../../src/core/index';
+import { capture, extractFacts, listFacts, unreadable } from '../../src/core/index';
 import { validateCardinality } from '../../src/core/facts/registry';
 import type { Classifier } from '../../src/core/ports';
 import { startStack, type TestStack } from '../helpers/stack';
@@ -154,5 +154,70 @@ describe('un tipo many sin identidad no puede funcionar', () => {
     expect(validateCardinality({ cardinality: 'many', identityField: null })).toMatch(/identity_field/);
     expect(validateCardinality({ cardinality: 'many', identityField: 'rut' })).toBeNull();
     expect(validateCardinality({ cardinality: 'one', identityField: null })).toBeNull();
+  });
+});
+
+/**
+ * El acoplamiento es de diseño —`typesForDomain` filtra por categoría— y su
+ * consecuencia es la que hay que ver: un documento legible no produce ningún
+ * hecho si cayó en la categoría equivocada, y eso falla en silencio.
+ *
+ * Pasó de verdad: dos pasajes que el clasificador mandó a `finanzas` —con razón,
+ * un pasaje es un comprobante— dejaron de producir hechos porque su tipo decía
+ * `vehiculo`. Nada falló; simplemente no había nada.
+ */
+describe('lo que ningún tipo sabe leer se puede contar', () => {
+  const texto = 'Un documento con estructura de sobra para que valga la pena leerlo. '.repeat(5);
+
+  async function enDominio(slug: string | null): Promise<void> {
+    const r: any = await capture(s.deps, mine(), { text: texto, title: 'Algo' });
+    const d = slug
+      ? await s.deps.db.query<{ id: string }>(
+          'select id from domains where owner_id = $1 and slug = $2', [s.ownerId, slug])
+      : { rows: [] };
+    await s.deps.db.query(
+      'update memories set domain_id = $2, normalized_text = $3 where id = $1',
+      [r.value.id, d.rows[0]?.id ?? null, texto],
+    );
+  }
+
+  it('cuenta las que quedaron sin categoría', async () => {
+    await enDominio(null);
+    const u = await unreadable(s.deps.db, mine());
+    expect(u.withoutDomain).toBe(1);
+    expect(u.total).toBe(1);
+  });
+
+  it('cuenta las que están en una categoría sin ningún tipo', async () => {
+    // `salud` existe como semilla y ningún tipo semilla apunta ahí.
+    await enDominio('salud');
+    const u = await unreadable(s.deps.db, mine());
+    expect(u.domainsWithoutType.map((d) => d.slug)).toContain('salud');
+  });
+
+  it('una categoría que sí tiene tipo no aparece', async () => {
+    await enDominio('seguros');
+    const u = await unreadable(s.deps.db, mine());
+    expect(u.domainsWithoutType.map((d) => d.slug)).not.toContain('seguros');
+  });
+
+  it('un tipo sin categoría cubre a todas, así que no queda ninguna huérfana', async () => {
+    await enDominio('salud');
+    // `domain_slug is null` significa "cualquiera", y entonces todo documento
+    // tiene al menos un candidato.
+    await s.deps.db.query(
+      `insert into fact_types (owner_id, slug, label, description, kind, cardinality,
+         domain_slug, fields, identity_field)
+       values ($1,'universal','Universal','Aplica a todo.','state','one',null,'[]'::jsonb,null)`,
+      [s.ownerId],
+    );
+    const u = await unreadable(s.deps.db, mine());
+    expect(u.domainsWithoutType).toEqual([]);
+  });
+
+  it('una memoria oculta no cuenta como ilegible', async () => {
+    await enDominio('salud');
+    await s.deps.db.query('update memories set hidden = true where owner_id = $1', [s.ownerId]);
+    expect((await unreadable(s.deps.db, mine())).total).toBe(0);
   });
 });

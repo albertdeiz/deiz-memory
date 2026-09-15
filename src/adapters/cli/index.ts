@@ -30,6 +30,7 @@ import {
   answer, indexMemory, pendingIndex, proposeDomains, resolveMemoryId, show, unindexed, LANES,
   seedDomains, seedFactTypes, extractFacts, listFacts, listFactTypes, contextOf, renderValue, warningFor,
   proposeFactTypes, acceptFactType, type TypeProposal,
+  unreadable,
   exportOwner, checkExport, importInto, readBackupConfig, setBackupDestination,
   recordBackupRun, recordBackupVerified, secretsNeededBy, setMirrorPath,
   mirrorOwner, planMirror,
@@ -250,6 +251,31 @@ program
         });
       } catch {
         checks.push({ check: 'dueño', ok: false, detail: 'no se pudo consultar', required: true });
+      }
+
+      // What no type can read, which is the other silent failure: a perfectly
+      // legible document produces no facts if it landed in the wrong category,
+      // and nothing says so — there are simply no facts.
+      try {
+        const owners = await listOwners(db);
+        const owner = owners[0];
+        if (owner) {
+          const u = await unreadable(db, { ownerId: owner.id });
+          const partes = [
+            ...(u.withoutDomain > 0 ? [`${u.withoutDomain} sin categoría`] : []),
+            ...u.domainsWithoutType.map((d) => `${d.memories} en ${d.label} (sin tipo)`),
+          ];
+          checks.push({
+            check: 'datos duros',
+            ok: u.total === 0,
+            required: false,
+            detail: u.total === 0
+              ? 'todo documento con texto cae bajo algún tipo'
+              : `${partes.join(' · ')} — nada los lee. dm facts propose`,
+          });
+        }
+      } catch {
+        checks.push({ check: 'datos duros', ok: false, detail: 'no se pudo consultar', required: false });
       }
 
       // The backup, which is the one check whose failure is silent and permanent.

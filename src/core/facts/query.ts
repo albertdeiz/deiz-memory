@@ -197,3 +197,64 @@ export async function askFacts(
     return fb - fa;
   });
 }
+
+export interface Unreadable {
+  /** Con texto pero sin categoría: ningún tipo puede aplicar nunca. */
+  withoutDomain: number;
+  /** En una categoría a la que no apunta ningún tipo activo. */
+  domainsWithoutType: { slug: string; label: string; memories: number }[];
+  total: number;
+}
+
+/**
+ * Documentos que ningún tipo sabe leer, y por qué.
+ *
+ * El acoplamiento es de diseño: `typesForDomain` filtra por
+ * `domain_slug is null or domain_slug = $2`, así que un tipo se prueba solo
+ * contra su categoría. La consecuencia es la que hay que ver: **un documento
+ * perfectamente legible no produce ningún hecho si cayó en la categoría
+ * equivocada**, y hoy eso falla en silencio — no hay hechos y nada dice por qué.
+ *
+ * Pasó de verdad: dos pasajes de bus que el clasificador mandó a `finanzas`
+ * —con razón, un pasaje es un comprobante— dejaron de producir hechos porque su
+ * tipo declaraba `vehiculo`. Nada falló; simplemente no había nada.
+ *
+ * Las dos causas se cuentan aparte porque se arreglan distinto: una se corrige
+ * clasificando, la otra creando un tipo (`dm facts propose`).
+ */
+export async function unreadable(db: Db, actor: Actor): Promise<Unreadable> {
+  const { rows: sinDominio } = await db.query<{ n: string }>(
+    `select count(*)::text as n from memories m
+      where m.owner_id = $1 and not m.hidden and m.domain_id is null
+        and m.normalized_text is not null`,
+    [actor.ownerId],
+  );
+
+  // Un tipo con `domain_slug is null` aplica a todo, así que si existe uno no
+  // hay categoría huérfana: cualquier documento tiene al menos ese candidato.
+  const { rows: dominios } = await db.query<{ slug: string; label: string; n: string }>(
+    `select d.slug, d.label, count(m.id)::text as n
+       from domains d
+       join memories m on m.domain_id = d.id and not m.hidden
+                      and m.normalized_text is not null
+      where d.owner_id = $1 and d.active
+        and not exists (
+          select 1 from fact_types t
+           where t.owner_id = $1 and t.active
+             and (t.domain_slug is null or t.domain_slug = d.slug))
+      group by d.slug, d.label
+      order by count(m.id) desc`,
+    [actor.ownerId],
+  );
+
+  const withoutDomain = Number(sinDominio[0]?.n ?? 0);
+  const domainsWithoutType = dominios.map((r) => ({
+    slug: r.slug, label: r.label, memories: Number(r.n),
+  }));
+
+  return {
+    withoutDomain,
+    domainsWithoutType,
+    total: withoutDomain + domainsWithoutType.reduce((a, d) => a + d.memories, 0),
+  };
+}

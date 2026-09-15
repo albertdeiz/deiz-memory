@@ -307,6 +307,29 @@ adivina dos veces — marcar una cartola mensual como `estado` haría que agosto
 julio. Por eso aceptar pide confirmación nombrando lo que se crearía (regla dura 7), y
 crear el tipo y releer el corpus con él son dos decisiones separadas.
 
+#### Un tipo se prueba solo contra su categoría, y eso se paga
+
+`domain_slug` ata la extracción a que el clasificador acierte: `typesForDomain`
+filtra por `domain_slug is null or domain_slug = <la de la memoria>`, así que **un
+documento perfectamente legible no produce ningún hecho si cayó en la categoría
+equivocada**. Y una memoria sin categoría no produce ninguno nunca, porque en SQL
+`domain_slug = null` no es verdadero para nadie — solo la alcanzan los tipos que declaran
+`domain_slug: null`, que significa "cualquiera".
+
+Pasó de verdad: dos pasajes de bus que el clasificador mandó a `finanzas` —con razón, un
+pasaje es un comprobante y esa descripción los nombra— dejaron de producir hechos porque
+su tipo decía `vehiculo`. **Nada falló. Simplemente no había nada**, que es la peor forma
+de no tener un dato.
+
+Y hay un filo más: si una memoria **pierde** su categoría y se re-extrae, sus hechos se
+**borran**. Es deliberado —el registro define qué aplica, y dejar un hecho de un tipo que
+ya no aplica contradiría al registro— pero conviene saberlo antes que después.
+
+**El acoplamiento se queda; lo que se arregla es el silencio.** `dm doctor` cuenta lo que
+ningún tipo sabe leer, separando las dos causas porque se arreglan distinto: sin categoría
+se corrige clasificando, y una categoría sin tipo se corrige creando uno
+(`dm facts propose`).
+
 #### Lo que NO es un Fact
 
 Esa cartola trae **53 líneas de transacción**. Eso no es un `payload`: es una tabla, y
@@ -693,7 +716,7 @@ dominios dinámicos con clasificación local, preguntas en lenguaje natural con 
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
 `tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
 riesgo irreversible abierto, el **espejo legible** (§14.4), los **tipos emergentes** y
-los tipos **`many`**, que leen los dos pasajes de un mismo PDF (§4). **428 tests.**
+los tipos **`many`**, que leen los dos pasajes de un mismo PDF (§4). **434 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.

@@ -716,7 +716,7 @@ dominios dinámicos con clasificación local, preguntas en lenguaje natural con 
 verificada, y **datos tipados** (§4) para dos tipos semilla — `poliza_auto` (estado) y
 `tarjeta_credito` (período). Y el **backup cifrado off-site** (§14.3), que era el único
 riesgo irreversible abierto, el **espejo legible** (§14.4), los **tipos emergentes** y
-los tipos **`many`**, que leen los dos pasajes de un mismo PDF (§4). **434 tests.**
+los tipos **`many`**, que leen los dos pasajes de un mismo PDF (§4). **433 tests.**
 
 **El sistema se vació entero el 3 de septiembre de 2026** para empezar a poblarlo de
 cero. No hay corpus histórico.
